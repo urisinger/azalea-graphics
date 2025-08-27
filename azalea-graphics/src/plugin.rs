@@ -1,7 +1,7 @@
 use std::{num::NonZero, sync::Arc};
 
 use azalea::{
-    app::{App, AppExit, Plugin}, block_update::handle_block_update_event, chunks::{handle_receive_chunk_event, ReceiveChunkEvent}, core::position::ChunkPos, ecs::{
+    app::{App, AppExit, Plugin, Update}, block_update::handle_block_update_event, chunks::{handle_receive_chunk_event, ReceiveChunkEvent}, core::position::ChunkPos, ecs::{
         event::{EventReader, EventWriter},
         schedule::IntoScheduleConfigs,
         system::{Query, Res},
@@ -28,7 +28,7 @@ impl Plugin for RendererPlugin {
             handle: self.handle.clone(),
         });
         app.add_systems(
-            GameTick,
+            Update,
             forward_chunk_updates.after(handle_receive_chunk_event).after(handle_block_update_event),
         );
         app.add_systems(GameTick, poll_renderer_events);
