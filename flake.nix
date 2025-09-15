@@ -36,7 +36,8 @@
         fenix.packages.${system}.default.toolchain
 
         # Build tools
-        pkgs.pkg-config pkgs.python3
+        pkgs.pkg-config
+        (pkgs.python3.withPackages (ps: with ps; [ requests ]))
 
         # X11 + Vulkan runtime helpers
         pkgs.libxkbcommon
