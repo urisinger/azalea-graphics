@@ -1,6 +1,6 @@
 use std::{env, thread};
 
-use azalea::prelude::*;
+use azalea::{ClientInformation, prelude::*};
 use azalea_graphics::{
     app::{App, RendererHandle},
     plugin::RendererPlugin,
@@ -14,6 +14,7 @@ async fn run_azalea(render_handle: RendererHandle, server_address: String) {
         .add_plugins(RendererPlugin {
             handle: render_handle,
         })
+        .set_handler(handle)
         .start(account, server_address)
         .await
         .unwrap();
@@ -45,4 +46,21 @@ fn main() {
     app.run();
 
     let _ = azalea_thread.join();
+}
+
+#[derive(Component, Default, Clone)]
+struct State;
+
+async fn handle(bot: Client, event: azalea::Event, state: State) -> anyhow::Result<()> {
+    match event {
+        azalea::Event::Init => {
+            bot.set_client_information(ClientInformation {
+                view_distance: 32,
+                ..Default::default()
+            })
+            .await
+        }
+        _ => {}
+    };
+    Ok(())
 }

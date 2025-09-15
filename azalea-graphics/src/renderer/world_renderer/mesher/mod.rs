@@ -1,4 +1,4 @@
-use std::{sync::Arc, thread, time::Instant};
+use std::{sync::Arc, thread};
 
 use azalea::{blocks::BlockState, core::position::ChunkSectionPos, registry::Block};
 use crossbeam::channel::{Receiver, Sender, unbounded};
@@ -30,23 +30,29 @@ pub struct Mesher {
 }
 
 impl Mesher {
-    pub fn new(assets: Arc<Assets>) -> Self {
+    pub fn new(assets: Arc<Assets>, num_threads: usize) -> Self {
         let (work_tx, work_rx) = unbounded::<LocalSection>();
         let (result_tx, result_rx) = unbounded::<MeshResult>();
 
-        thread::spawn(move || {
-            while let Ok(local_section) = work_rx.recv() {
-                let start = Instant::now();
-                let mesh = mesh_section(&local_section, &assets);
-                result_tx.send(mesh).unwrap();
+        for id in 0..num_threads {
+            let work_rx = work_rx.clone();
+            let result_tx = result_tx.clone();
+            let assets = assets.clone();
 
-                let dt = start.elapsed();
+            thread::spawn(move || {
+                while let Ok(local_section) = work_rx.recv() {
+                    let start = std::time::Instant::now();
+                    let mesh = mesh_section(&local_section, &assets);
+                    result_tx.send(mesh).unwrap();
 
-                let ms = dt.as_nanos() as f32 / 1_000_000.0;
-
-                println!("meshing took: {}ms", ms);
-            }
-        });
+                    let dt = start.elapsed();
+                    println!(
+                        "[worker {id}] meshing took: {:.3} ms",
+                        dt.as_secs_f64() * 1000.0
+                    );
+                }
+            });
+        }
 
         Self { work_tx, result_rx }
     }
@@ -59,7 +65,6 @@ impl Mesher {
         self.result_rx.try_recv().ok()
     }
 }
-
 pub struct MeshResult {
     pub blocks: MeshData,
     pub water: MeshData,

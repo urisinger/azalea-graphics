@@ -1,4 +1,4 @@
-use ash::{Device, vk};
+use ash::{vk};
 use vk_mem::{Alloc, Allocation, MemoryUsage};
 
 use crate::renderer::vulkan::{buffer::create_buffer, context::VkContext};

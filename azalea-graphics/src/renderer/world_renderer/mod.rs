@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem::offset_of, sync::Arc};
+use std::{cmp::Ordering, collections::HashMap, mem::offset_of, sync::Arc};
 
 use ash::{Device, vk};
 use azalea::core::position::ChunkSectionPos;
@@ -16,11 +16,22 @@ use crate::renderer::{
     world_renderer::{
         animation::AnimationManager,
         mesher::{MeshResult, Mesher},
+        pipelines::{
+            create_water_pipeline, create_world_pipeline, create_world_pipeline_layout,
+            create_world_wireframe_pipeline,
+        },
     },
 };
 
 mod animation;
 pub mod mesher;
+mod pipelines;
+
+const TRIANGLE_VERT: &[u8] = include_bytes!(env!("BLOCK_VERT"));
+const TRIANGLE_FRAG: &[u8] = include_bytes!(env!("BLOCK_FRAG"));
+
+const WATER_VERT: &[u8] = include_bytes!(env!("WATER_VERT"));
+const WATER_FRAG: &[u8] = include_bytes!(env!("WATER_FRAG"));
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -30,12 +41,6 @@ pub struct BlockVertex {
     pub uv: [f32; 2],
     pub tint: [f32; 3],
 }
-
-const TRIANGLE_VERT: &[u8] = include_bytes!(env!("BLOCK_VERT"));
-const TRIANGLE_FRAG: &[u8] = include_bytes!(env!("BLOCK_FRAG"));
-
-const WATER_VERT: &[u8] = include_bytes!(env!("WATER_VERT"));
-const WATER_FRAG: &[u8] = include_bytes!(env!("WATER_FRAG"));
 
 impl BlockVertex {
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -47,28 +52,24 @@ impl BlockVertex {
 
     fn attribute_descriptions() -> &'static [vk::VertexInputAttributeDescription] {
         &[
-            // position
             vk::VertexInputAttributeDescription {
                 binding: 0,
                 location: 0,
                 format: vk::Format::R32G32B32_SFLOAT,
                 offset: offset_of!(BlockVertex, position) as u32,
             },
-            // ao
             vk::VertexInputAttributeDescription {
                 binding: 0,
                 location: 1,
                 format: vk::Format::R32_SFLOAT,
                 offset: offset_of!(BlockVertex, ao) as u32,
             },
-            // uv
             vk::VertexInputAttributeDescription {
                 binding: 0,
                 location: 2,
                 format: vk::Format::R32G32_SFLOAT,
                 offset: offset_of!(BlockVertex, uv) as u32,
             },
-            // tint
             vk::VertexInputAttributeDescription {
                 binding: 0,
                 location: 3,
@@ -105,7 +106,7 @@ pub struct WorldRenderer {
     // Texture resources
     blocks_texture: Texture,
 
-    staging_buffers: [Option<Buffer>; MAX_FRAMES_IN_FLIGHT],
+    staging_buffers: [Vec<Buffer>; MAX_FRAMES_IN_FLIGHT],
 
     // Cached extent for recreation
     extent: vk::Extent2D,
@@ -178,7 +179,7 @@ impl WorldRenderer {
             create_water_pipeline(ctx, render_pass, pipeline_layout, WATER_VERT, WATER_FRAG);
 
         Self {
-            mesher: Mesher::new(assets.clone()),
+            mesher: Mesher::new(assets.clone(), 5),
             animation_manager: AnimationManager::from_textures(&assets.textures),
             staging_buffers: Default::default(),
             block_meshes: HashMap::new(),
@@ -207,32 +208,6 @@ impl WorldRenderer {
         self.mesher.submit(section);
     }
 
-    pub fn process_meshing_results(&mut self, ctx: &VkContext) {
-        while let Some(MeshResult { blocks, water }) = self.mesher.poll() {
-            if !blocks.vertices.is_empty() {
-                let mut staging = Mesh::new_staging(ctx, &blocks.vertices, &blocks.indices);
-
-                let mesh = staging.upload(ctx);
-                staging.destroy(ctx);
-
-                if let Some(mut old_mesh) = self.block_meshes.insert(blocks.section_pos, mesh) {
-                    old_mesh.destroy(ctx);
-                }
-            }
-
-            if !water.vertices.is_empty() {
-                let mut staging = Mesh::new_staging(ctx, &water.vertices, &water.indices);
-
-                let mesh = staging.upload(ctx);
-                staging.destroy(ctx);
-
-                if let Some(mut old_mesh) = self.water_meshes.insert(water.section_pos, mesh) {
-                    old_mesh.destroy(ctx);
-                }
-            }
-        }
-    }
-
     pub fn draw(
         &mut self,
         ctx: &VkContext,
@@ -240,9 +215,8 @@ impl WorldRenderer {
         view_proj: glam::Mat4,
         wireframe_mode: bool,
         camera_pos: glam::Vec3,
-        frame_index: usize
+        frame_index: usize,
     ) {
-
         let device = ctx.device();
         let push = PushConstants { view_proj };
 
@@ -316,24 +290,16 @@ impl WorldRenderer {
         }
 
         let mut water_meshes: Vec<_> = self.water_meshes.iter().collect();
-        water_meshes.sort_by(|(pos_a, _), (pos_b, _)| {
-            let center_a = glam::Vec3::new(
-                pos_a.x as f32 * 16.0 + 8.0,
-                pos_a.y as f32 * 16.0 + 8.0,
-                pos_a.z as f32 * 16.0 + 8.0,
-            );
-            let center_b = glam::Vec3::new(
-                pos_b.x as f32 * 16.0 + 8.0,
-                pos_b.y as f32 * 16.0 + 8.0,
-                pos_b.z as f32 * 16.0 + 8.0,
-            );
+        water_meshes.sort_by(|(a, _), (b, _)| {
+            let dist = |pos: &ChunkSectionPos| {
+                camera_pos.distance_squared(glam::Vec3::new(
+                    pos.x as f32 * 16.0 + 8.0,
+                    pos.y as f32 * 16.0 + 8.0,
+                    pos.z as f32 * 16.0 + 8.0,
+                ))
+            };
 
-            let dist_a = camera_pos.distance_squared(center_a);
-            let dist_b = camera_pos.distance_squared(center_b);
-
-            dist_b
-                .partial_cmp(&dist_a)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            dist(a).partial_cmp(&dist(b)).unwrap_or(Ordering::Equal)
         });
 
         for (_, mesh) in water_meshes {
@@ -394,142 +360,154 @@ impl WorldRenderer {
         }
     }
 
-pub fn upload_dirty_textures(
-    &mut self,
-    ctx: &VkContext,
-    cmd: vk::CommandBuffer,
-    frame_index: usize,
-) {
-    let dirty = self.animation_manager.dirty_textures(&self.assets.textures);
-    if dirty.is_empty() {
-        return;
-    }
+    pub fn process_meshing_results(
+        &mut self,
+        ctx: &VkContext,
+        cmd: vk::CommandBuffer,
+        frame_index: usize,
+    ) {
+        while let Some(MeshResult { blocks, water }) = self.mesher.poll() {
+            if !blocks.vertices.is_empty() {
+                let staging = Mesh::new_staging(ctx, &blocks.vertices, &blocks.indices);
 
-    let mut buffer_data = Vec::new();
-    let mut regions = Vec::new();
+                let mesh = staging.upload(ctx, cmd);
+                self.staging_buffers[frame_index].push(staging.buffer);
 
-    for (name, tex, (fw, fh), frame_idx) in dirty {
-        if let Some(placed) = self.assets.block_atlas.sprites.get(name) {
-            let (fx, fy) = tex
-                .animation
-                .as_ref()
-                .unwrap()
-                .get_frame(frame_idx, tex.size());
+                if let Some(mut old_mesh) = self.block_meshes.insert(blocks.section_pos, mesh) {
+                    old_mesh.destroy(ctx);
+                }
+            }
 
-            let frame_img = tex.data.view(fx, fy, fw, fh).to_image();
-            let bytes = frame_img.as_raw();
+            if !water.vertices.is_empty() {
+                let staging = Mesh::new_staging(ctx, &water.vertices, &water.indices);
 
-            let offset = buffer_data.len() as vk::DeviceSize;
-            buffer_data.extend_from_slice(bytes);
+                let mesh = staging.upload(ctx, cmd);
+                self.staging_buffers[frame_index].push(staging.buffer);
 
-            regions.push(
-                vk::BufferImageCopy::default()
-                    .buffer_offset(offset)
-                    .buffer_row_length(0)
-                    .buffer_image_height(0)
-                    .image_subresource(
-                        vk::ImageSubresourceLayers::default()
-                            .aspect_mask(vk::ImageAspectFlags::COLOR)
-                            .mip_level(0)
-                            .base_array_layer(0)
-                            .layer_count(1),
-                    )
-                    .image_offset(vk::Offset3D {
-                        x: placed.x as i32,
-                        y: placed.y as i32,
-                        z: 0,
-                    })
-                    .image_extent(vk::Extent3D {
-                        width: fw,
-                        height: fh,
-                        depth: 1,
-                    }),
-            );
+                if let Some(mut old_mesh) = self.water_meshes.insert(water.section_pos, mesh) {
+                    old_mesh.destroy(ctx);
+                }
+            }
         }
     }
 
-    let needed_size = buffer_data.len() as vk::DeviceSize;
-
-    let staging = if let Some(ref mut buf) = self.staging_buffers[frame_index] {
-        if buf.size >= needed_size {
-            buf.upload_data(ctx, 0, &buffer_data);
-            buf
-        } else {
-            buf.destroy(ctx);
-            let mut new_buf = Buffer::new(
-                ctx,
-                needed_size,
-                vk::BufferUsageFlags::TRANSFER_SRC,
-                MemoryUsage::AutoPreferHost,
-                true,
-            );
-            new_buf.upload_data(ctx, 0, &buffer_data);
-            self.staging_buffers[frame_index] = Some(new_buf);
-            self.staging_buffers[frame_index].as_mut().unwrap()
+    pub fn upload_dirty_textures(
+        &mut self,
+        ctx: &VkContext,
+        cmd: vk::CommandBuffer,
+        frame_index: usize,
+    ) {
+        let dirty = self.animation_manager.dirty_textures(&self.assets.textures);
+        if dirty.is_empty() {
+            return;
         }
-    } else {
-        let mut new_buf = Buffer::new(
+
+        let mut buffer_data = Vec::new();
+        let mut regions = Vec::new();
+
+        for (name, tex, (fw, fh), frame_idx) in dirty {
+            if let Some(placed) = self.assets.block_atlas.sprites.get(name) {
+                let (fx, fy) = tex
+                    .animation
+                    .as_ref()
+                    .unwrap()
+                    .get_frame(frame_idx, tex.size());
+
+                let frame_img = tex.data.view(fx, fy, fw, fh).to_image();
+                let bytes = frame_img.as_raw();
+
+                let offset = buffer_data.len() as vk::DeviceSize;
+                buffer_data.extend_from_slice(bytes);
+
+                regions.push(
+                    vk::BufferImageCopy::default()
+                        .buffer_offset(offset)
+                        .buffer_row_length(0)
+                        .buffer_image_height(0)
+                        .image_subresource(
+                            vk::ImageSubresourceLayers::default()
+                                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                .mip_level(0)
+                                .base_array_layer(0)
+                                .layer_count(1),
+                        )
+                        .image_offset(vk::Offset3D {
+                            x: placed.x as i32,
+                            y: placed.y as i32,
+                            z: 0,
+                        })
+                        .image_extent(vk::Extent3D {
+                            width: fw,
+                            height: fh,
+                            depth: 1,
+                        }),
+                );
+            }
+        }
+
+        let needed_size = buffer_data.len() as vk::DeviceSize;
+
+        let mut staging = Buffer::new(
             ctx,
             needed_size,
             vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryUsage::AutoPreferHost,
+            MemoryUsage::Auto,
             true,
         );
-        new_buf.upload_data(ctx, 0, &buffer_data);
-        self.staging_buffers[frame_index] = Some(new_buf);
-        self.staging_buffers[frame_index].as_mut().unwrap()
-    };
+        staging.upload_data(ctx, 0, &buffer_data);
 
-    unsafe {
-        let subresource = vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
+        unsafe {
+            let subresource = vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            };
 
-        ctx.device().cmd_pipeline_barrier(
-            cmd,
-            vk::PipelineStageFlags::FRAGMENT_SHADER,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[vk::ImageMemoryBarrier::default()
-                .src_access_mask(vk::AccessFlags::SHADER_READ)
-                .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                .old_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .image(self.blocks_texture.image)
-                .subresource_range(subresource)],
-        );
+            ctx.device().cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[vk::ImageMemoryBarrier::default()
+                    .src_access_mask(vk::AccessFlags::SHADER_READ)
+                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                    .old_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                    .image(self.blocks_texture.image)
+                    .subresource_range(subresource)],
+            );
 
-        ctx.device().cmd_copy_buffer_to_image(
-            cmd,
-            staging.buffer,
-            self.blocks_texture.image,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            &regions,
-        );
+            ctx.device().cmd_copy_buffer_to_image(
+                cmd,
+                staging.buffer,
+                self.blocks_texture.image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            );
 
-        ctx.device().cmd_pipeline_barrier(
-            cmd,
-            vk::PipelineStageFlags::TRANSFER,
-            vk::PipelineStageFlags::FRAGMENT_SHADER,
-            vk::DependencyFlags::empty(),
-            &[],
-            &[],
-            &[vk::ImageMemoryBarrier::default()
-                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image(self.blocks_texture.image)
-                .subresource_range(subresource)],
-        );
+            ctx.device().cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[vk::ImageMemoryBarrier::default()
+                    .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                    .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                    .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                    .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                    .image(self.blocks_texture.image)
+                    .subresource_range(subresource)],
+            );
+        }
+
+        self.staging_buffers[frame_index].push(staging);
     }
-}
 
     pub fn render(
         &mut self,
@@ -543,6 +521,11 @@ pub fn upload_dirty_textures(
         frame_index: usize,
     ) {
 
+        for buffer in &mut self.staging_buffers[frame_index]{
+            buffer.destroy(ctx);
+        }
+        self.staging_buffers[frame_index].clear();
+        self.process_meshing_results(ctx, cmd, frame_index);
         self.upload_dirty_textures(ctx, cmd, frame_index);
         self.begin_render_pass(ctx.device(), cmd, image_index, extent);
 
@@ -571,12 +554,10 @@ pub fn upload_dirty_textures(
     pub fn recreate_swapchain(&mut self, ctx: &VkContext, swapchain: &Swapchain) {
         let device = ctx.device();
 
-        // Destroy old framebuffers
         for framebuffer in self.framebuffers.drain(..) {
             unsafe { device.destroy_framebuffer(framebuffer, None) };
         }
 
-        // Destroy old depth resources
         for (image, mut alloc, view) in self.depth_images.drain(..) {
             unsafe {
                 device.destroy_image_view(view, None);
@@ -584,10 +565,8 @@ pub fn upload_dirty_textures(
             }
         }
 
-        // Recreate depth resources
         self.depth_images = create_world_depth_resources(ctx, swapchain);
 
-        // Recreate framebuffers
         self.framebuffers =
             create_world_framebuffers(ctx, swapchain, self.render_pass, &self.depth_images);
 
@@ -619,8 +598,8 @@ pub fn upload_dirty_textures(
         self.blocks_texture.destroy(ctx);
 
         unsafe {
-            for buffer in &mut self.staging_buffers{
-                if let Some(buffer) = buffer{
+            for buffers in &mut self.staging_buffers {
+                for buffer in buffers {
                     buffer.destroy(ctx);
                 }
             }
@@ -635,281 +614,6 @@ pub fn upload_dirty_textures(
             device.destroy_descriptor_set_layout(self.descriptor_set_layout, None);
         }
     }
-}
-
-// World rendering pipeline and pass creation functions
-
-fn create_shader_module(device: &Device, code: &[u8]) -> vk::ShaderModule {
-    let code_aligned = ash::util::read_spv(&mut std::io::Cursor::new(code)).unwrap();
-    let info = vk::ShaderModuleCreateInfo::default().code(&code_aligned);
-    unsafe { device.create_shader_module(&info, None).unwrap() }
-}
-
-pub fn create_world_pipeline_layout(
-    device: &Device,
-    descriptor_set_layout: vk::DescriptorSetLayout,
-) -> vk::PipelineLayout {
-    let layouts = [descriptor_set_layout];
-    let push_constant_range = vk::PushConstantRange::default()
-        .stage_flags(vk::ShaderStageFlags::VERTEX)
-        .offset(0)
-        .size(std::mem::size_of::<PushConstants>() as u32);
-
-    let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-        .set_layouts(&layouts)
-        .push_constant_ranges(std::slice::from_ref(&push_constant_range));
-
-    unsafe {
-        device
-            .create_pipeline_layout(&pipeline_layout_info, None)
-            .unwrap()
-    }
-}
-
-fn create_world_pipeline_with_mode(
-    ctx: &VkContext,
-    render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
-    vert_spv: &[u8],
-    frag_spv: &[u8],
-    polygon_mode: vk::PolygonMode,
-) -> vk::Pipeline {
-    let device = ctx.device();
-
-    let vert_module = create_shader_module(device, vert_spv);
-    let frag_module = create_shader_module(device, frag_spv);
-
-    let entry_point = std::ffi::CString::new("main").unwrap();
-
-    let shader_stages = [
-        vk::PipelineShaderStageCreateInfo::default()
-            .stage(vk::ShaderStageFlags::VERTEX)
-            .module(vert_module)
-            .name(&entry_point),
-        vk::PipelineShaderStageCreateInfo::default()
-            .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(frag_module)
-            .name(&entry_point),
-    ];
-
-    let binding_desc = [BlockVertex::binding_description()];
-    let attribute_desc = BlockVertex::attribute_descriptions();
-
-    let vertex_input = vk::PipelineVertexInputStateCreateInfo::default()
-        .vertex_binding_descriptions(&binding_desc)
-        .vertex_attribute_descriptions(&attribute_desc);
-    let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
-        .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-        .primitive_restart_enable(false);
-
-    let viewport_state = vk::PipelineViewportStateCreateInfo::default()
-        .viewport_count(1)
-        .scissor_count(1);
-
-    let rasterizer = vk::PipelineRasterizationStateCreateInfo::default()
-        .polygon_mode(polygon_mode)
-        .cull_mode(vk::CullModeFlags::BACK)
-        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
-        .line_width(1.0);
-
-    let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
-        .rasterization_samples(vk::SampleCountFlags::TYPE_1);
-
-    let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-        .color_write_mask(
-            vk::ColorComponentFlags::R
-                | vk::ColorComponentFlags::G
-                | vk::ColorComponentFlags::B
-                | vk::ColorComponentFlags::A,
-        )
-        .blend_enable(false);
-
-    let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
-        .depth_test_enable(true)
-        .depth_write_enable(true)
-        .depth_compare_op(vk::CompareOp::LESS)
-        .depth_bounds_test_enable(false)
-        .stencil_test_enable(false);
-
-    let attachments = [color_blend_attachment];
-    let color_blending = vk::PipelineColorBlendStateCreateInfo::default().attachments(&attachments);
-
-    let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-    let dynamic_state =
-        vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
-
-    let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
-        .stages(&shader_stages)
-        .vertex_input_state(&vertex_input)
-        .input_assembly_state(&input_assembly)
-        .viewport_state(&viewport_state)
-        .rasterization_state(&rasterizer)
-        .multisample_state(&multisampling)
-        .depth_stencil_state(&depth_stencil)
-        .color_blend_state(&color_blending)
-        .dynamic_state(&dynamic_state)
-        .layout(pipeline_layout)
-        .render_pass(render_pass)
-        .subpass(0);
-
-    let pipelines = unsafe {
-        device
-            .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-            .expect("Failed to create graphics pipeline")
-    };
-    let pipeline = pipelines[0];
-
-    unsafe {
-        device.destroy_shader_module(vert_module, None);
-        device.destroy_shader_module(frag_module, None);
-    }
-
-    pipeline
-}
-
-pub fn create_world_pipeline(
-    ctx: &VkContext,
-    render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
-    vert_spv: &[u8],
-    frag_spv: &[u8],
-) -> vk::Pipeline {
-    create_world_pipeline_with_mode(
-        ctx,
-        render_pass,
-        pipeline_layout,
-        vert_spv,
-        frag_spv,
-        vk::PolygonMode::FILL,
-    )
-}
-
-pub fn create_world_wireframe_pipeline(
-    ctx: &VkContext,
-    render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
-    vert_spv: &[u8],
-    frag_spv: &[u8],
-) -> Option<vk::Pipeline> {
-    if ctx.features().fill_mode_non_solid {
-        Some(create_world_pipeline_with_mode(
-            ctx,
-            render_pass,
-            pipeline_layout,
-            vert_spv,
-            frag_spv,
-            vk::PolygonMode::LINE,
-        ))
-    } else {
-        None
-    }
-}
-
-pub fn create_water_pipeline(
-    ctx: &VkContext,
-    render_pass: vk::RenderPass,
-    pipeline_layout: vk::PipelineLayout,
-    vert_spv: &[u8],
-    frag_spv: &[u8],
-) -> vk::Pipeline {
-    let device = ctx.device();
-
-    let vert_module = create_shader_module(device, vert_spv);
-    let frag_module = create_shader_module(device, frag_spv);
-
-    let entry_point = std::ffi::CString::new("main").unwrap();
-
-    let shader_stages = [
-        vk::PipelineShaderStageCreateInfo::default()
-            .stage(vk::ShaderStageFlags::VERTEX)
-            .module(vert_module)
-            .name(&entry_point),
-        vk::PipelineShaderStageCreateInfo::default()
-            .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(frag_module)
-            .name(&entry_point),
-    ];
-
-    let binding_desc = [BlockVertex::binding_description()];
-    let attribute_desc = BlockVertex::attribute_descriptions();
-
-    let vertex_input = vk::PipelineVertexInputStateCreateInfo::default()
-        .vertex_binding_descriptions(&binding_desc)
-        .vertex_attribute_descriptions(&attribute_desc);
-    let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
-        .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
-        .primitive_restart_enable(false);
-
-    let viewport_state = vk::PipelineViewportStateCreateInfo::default()
-        .viewport_count(1)
-        .scissor_count(1);
-
-    let rasterizer = vk::PipelineRasterizationStateCreateInfo::default()
-        .polygon_mode(vk::PolygonMode::FILL)
-        .cull_mode(vk::CullModeFlags::BACK)
-        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
-        .line_width(1.0);
-
-    let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
-        .rasterization_samples(vk::SampleCountFlags::TYPE_1);
-
-    // Enable alpha blending for water transparency
-    let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-        .color_write_mask(
-            vk::ColorComponentFlags::R
-                | vk::ColorComponentFlags::G
-                | vk::ColorComponentFlags::B
-                | vk::ColorComponentFlags::A,
-        )
-        .blend_enable(true)
-        .src_color_blend_factor(vk::BlendFactor::SRC_ALPHA)
-        .dst_color_blend_factor(vk::BlendFactor::ONE_MINUS_SRC_ALPHA)
-        .color_blend_op(vk::BlendOp::ADD)
-        .src_alpha_blend_factor(vk::BlendFactor::ONE)
-        .dst_alpha_blend_factor(vk::BlendFactor::ZERO)
-        .alpha_blend_op(vk::BlendOp::ADD);
-
-    let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
-        .depth_test_enable(true)
-        .depth_write_enable(false) // Don't write to depth buffer for transparency
-        .depth_compare_op(vk::CompareOp::LESS)
-        .depth_bounds_test_enable(false)
-        .stencil_test_enable(false);
-
-    let attachments = [color_blend_attachment];
-    let color_blending = vk::PipelineColorBlendStateCreateInfo::default().attachments(&attachments);
-
-    let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-    let dynamic_state =
-        vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
-
-    let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
-        .stages(&shader_stages)
-        .vertex_input_state(&vertex_input)
-        .input_assembly_state(&input_assembly)
-        .viewport_state(&viewport_state)
-        .rasterization_state(&rasterizer)
-        .multisample_state(&multisampling)
-        .depth_stencil_state(&depth_stencil)
-        .color_blend_state(&color_blending)
-        .dynamic_state(&dynamic_state)
-        .layout(pipeline_layout)
-        .render_pass(render_pass)
-        .subpass(0);
-
-    let pipelines = unsafe {
-        device
-            .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-            .expect("Failed to create water pipeline")
-    };
-    let pipeline = pipelines[0];
-
-    unsafe {
-        device.destroy_shader_module(vert_module, None);
-        device.destroy_shader_module(frag_module, None);
-    }
-
-    pipeline
 }
 
 pub fn create_world_render_pass(ctx: &VkContext, swapchain: &Swapchain) -> vk::RenderPass {

@@ -139,7 +139,6 @@ impl Renderer {
 
     pub fn update(&mut self, dt: Duration) {
         self.camera_controller.update_camera(&mut self.camera, dt);
-        self.world.process_meshing_results(&self.context);
 
         self.tick_accumulator += dt;
         while self.tick_accumulator >= self.tick_interval {

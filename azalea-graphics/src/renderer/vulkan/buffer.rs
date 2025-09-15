@@ -1,10 +1,9 @@
-
 use ash::vk;
-use vk_mem::{Alloc, Allocation, AllocationCreateFlags, AllocationCreateInfo, Allocator, MemoryUsage};
-
-use crate::renderer::vulkan::{
-    context::VkContext,
+use vk_mem::{
+    Alloc, Allocation, AllocationCreateFlags, AllocationCreateInfo, Allocator, MemoryUsage,
 };
+
+use crate::renderer::vulkan::context::VkContext;
 
 pub struct Buffer {
     pub buffer: vk::Buffer,
@@ -22,13 +21,18 @@ impl Buffer {
         mapped: bool,
     ) -> Self {
         let (buffer, allocation) = create_buffer(ctx.allocator(), size, usage, memory, mapped);
-        Self { buffer, allocation, size }
+        Self {
+            buffer,
+            allocation,
+            size,
+        }
     }
 
     /// Destroy the buffer
     pub fn destroy(&mut self, ctx: &VkContext) {
         unsafe {
-            ctx.allocator().destroy_buffer(self.buffer, &mut self.allocation);
+            ctx.allocator()
+                .destroy_buffer(self.buffer, &mut self.allocation);
         }
     }
 
@@ -38,9 +42,10 @@ impl Buffer {
         let size = (std::mem::size_of::<T>() * data.len()) as vk::DeviceSize;
         assert!(offset + size <= self.size);
 
-
         unsafe {
-            let ptr = allocator.map_memory(&mut self.allocation).expect("map memory");
+            let ptr = allocator
+                .map_memory(&mut self.allocation)
+                .expect("map memory");
             std::ptr::copy_nonoverlapping(
                 data.as_ptr() as *const u8,
                 ptr.add(offset as usize),
@@ -51,25 +56,20 @@ impl Buffer {
     }
 
     /// Copy contents into another buffer (device-local upload)
-    pub fn copy_to(&self, ctx: &VkContext, dst: &Buffer) {
+    pub fn copy_to(&self, ctx: &VkContext, dst: &Buffer, cmd: vk::CommandBuffer) {
         assert!(self.size <= dst.size);
-        copy_buffer(ctx, self.buffer, dst.buffer, self.size);
+        unsafe {
+            ctx.device().cmd_copy_buffer(
+                cmd,
+                self.buffer,
+                dst.buffer,
+                &[vk::BufferCopy::default()
+                    .src_offset(0)
+                    .dst_offset(0)
+                    .size(self.size)],
+            );
+        }
     }
-}
-
-pub fn copy_buffer(ctx: &VkContext, src: vk::Buffer, dst: vk::Buffer, size: vk::DeviceSize) {
-    let cmd = ctx.begin_one_time_commands();
-
-    let copy_region = vk::BufferCopy::default()
-        .src_offset(0)
-        .dst_offset(0)
-        .size(size);
-
-    unsafe {
-        ctx.device().cmd_copy_buffer(cmd, src, dst, &[copy_region]);
-    }
-
-    ctx.end_one_time_commands(cmd);
 }
 
 pub fn create_buffer(
@@ -102,5 +102,3 @@ pub fn create_buffer(
 
     (buffer, allocation)
 }
-
-

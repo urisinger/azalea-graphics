@@ -71,7 +71,7 @@ impl<V> Mesh<V> {
     }
 
     /// Upload staging mesh into GPU-local memory
-    pub fn upload(&self, ctx: &VkContext) -> Mesh<V> {
+    pub fn upload(&self, ctx: &VkContext, cmd: vk::CommandBuffer) -> Mesh<V> {
         let gpu_buffer = Buffer::new(
             ctx,
             self.buffer.size,
@@ -82,7 +82,7 @@ impl<V> Mesh<V> {
             false,
         );
 
-        self.buffer.copy_to(ctx, &gpu_buffer);
+        self.buffer.copy_to(ctx, &gpu_buffer, cmd);
 
         Mesh {
             buffer: gpu_buffer,
