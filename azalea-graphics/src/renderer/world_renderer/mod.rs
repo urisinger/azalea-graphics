@@ -4,7 +4,7 @@ use ash::{
     Device,
     vk::{self, PolygonMode},
 };
-use azalea::core::position::{ChunkSectionPos};
+use azalea::core::position::ChunkSectionPos;
 use image::GenericImageView;
 use vk_mem::{Alloc, Allocation, AllocationCreateInfo, MemoryUsage};
 
@@ -246,9 +246,14 @@ impl WorldRenderer {
 
     pub fn update(&mut self, update: WorldUpdate) {
         match update {
-            WorldUpdate::ChunkAdded(spos) => {
+            WorldUpdate::ChunkAdded(pos) => {
                 if let Some(mesher) = &self.mesher {
-                    mesher.submit_chunk(spos);
+                    mesher.submit_chunk(pos);
+                }
+            }
+            WorldUpdate::SectionChange(spos) => {
+                if let Some(mesher) = &self.mesher {
+                    mesher.submit_section(spos);
                 }
             }
             WorldUpdate::WorldAdded(world) => {
@@ -661,6 +666,9 @@ impl WorldRenderer {
             device.destroy_pipeline(self.pipeline, None);
             if let Some(wireframe_pipeline) = self.wireframe_pipeline.take() {
                 device.destroy_pipeline(wireframe_pipeline, None);
+            }
+            if let Some(water_wireframe_pipeline) = self.water_wireframe_pipeline.take() {
+                device.destroy_pipeline(water_wireframe_pipeline, None);
             }
             device.destroy_pipeline(self.water_pipeline, None);
             device.destroy_pipeline_layout(self.pipeline_layout, None);

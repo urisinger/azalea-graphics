@@ -136,10 +136,12 @@ impl CameraController {
     }
 
     pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) {
-        self.scroll = -match delta {
-            MouseScrollDelta::LineDelta(_, scroll) => scroll * 10.0,
+        let scroll_delta = match delta {
+            MouseScrollDelta::LineDelta(_, scroll) => *scroll,
             MouseScrollDelta::PixelDelta(PhysicalPosition { y, .. }) => *y as f32,
         };
+
+        self.speed = (self.speed + scroll_delta * self.sensitivity).clamp(0.1, 100.0);
     }
 
     pub fn update_camera(&mut self, camera: &mut Camera, dt: Duration) {
@@ -152,11 +154,6 @@ impl CameraController {
         camera.position += forward * (self.amount_forward - self.amount_backward) * self.speed * dt;
         camera.position += right * (self.amount_right - self.amount_left) * self.speed * dt;
         camera.position.y += (self.amount_up - self.amount_down) * self.speed * dt;
-
-        let (pitch_sin, pitch_cos) = camera.pitch.sin_cos();
-        let scrollward = Vec3::new(pitch_cos * yaw_cos, pitch_sin, pitch_cos * yaw_sin).normalize();
-        camera.position += scrollward * self.scroll * self.speed * self.sensitivity * dt;
-        self.scroll = 0.0;
 
         camera.yaw += self.rotate_horizontal * self.sensitivity * dt;
         camera.pitch -= self.rotate_vertical * self.sensitivity * dt;

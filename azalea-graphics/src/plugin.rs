@@ -1,13 +1,13 @@
-use std::{num::NonZero};
+use std::num::NonZero;
 
 use azalea::{
     app::{App, AppExit, Plugin, Update},
-    block_update::handle_block_update_event,
+    block_update::{handle_block_update_event, QueuedServerBlockUpdates},
     chunks::{handle_receive_chunk_event, ReceiveChunkEvent},
-    core::position::ChunkPos,
+    core::position::{ChunkPos, ChunkSectionPos},
     ecs::{
         event::{EventReader, EventWriter},
-        query::{Changed},
+        query::Changed,
         schedule::IntoScheduleConfigs,
         system::{Query, Res},
     },
@@ -39,7 +39,25 @@ impl Plugin for RendererPlugin {
                 .after(handle_block_update_event),
         );
         app.add_systems(Update, add_world.before(forward_chunk_updates));
+        app.add_systems(Update, handle_block_updates.before(handle_block_update_event));
         app.add_systems(Update, poll_renderer_events);
+    }
+}
+
+pub fn handle_block_updates(
+    query: Query<(
+        &QueuedServerBlockUpdates,
+        &InstanceHolder,
+    )>,
+
+    renderer: Res<RendererResource>,
+) {
+    for (queued, instance_holder) in query.iter() {
+        let world = instance_holder.instance.read();
+        for (pos, block_state) in &queued.list {
+            let pos = pos.with_y(pos.y - world.chunks.min_y);
+            renderer.handle.send_section(ChunkSectionPos::from(pos));
+        }
     }
 }
 

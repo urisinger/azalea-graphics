@@ -1,6 +1,8 @@
 use std::{sync::Arc, time::Instant};
 
-use azalea::core::position::ChunkPos;
+use azalea::{
+    core::position::{ChunkPos, ChunkSectionPos},
+};
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use parking_lot::RwLock;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -16,6 +18,7 @@ use crate::renderer::Renderer;
 
 pub enum WorldUpdate {
     ChunkAdded(ChunkPos),
+    SectionChange(ChunkSectionPos),
     WorldAdded(Arc<RwLock<azalea::world::Instance>>),
 }
 
@@ -32,6 +35,10 @@ pub struct RendererHandle {
 impl RendererHandle {
     pub fn send_chunk(&self, pos: ChunkPos) {
         self.tx.send(WorldUpdate::ChunkAdded(pos)).unwrap()
+    }
+
+    pub fn send_section(&self, pos: ChunkSectionPos) {
+        self.tx.send(WorldUpdate::SectionChange(pos)).unwrap()
     }
 
     pub fn add_world(&self, world: Arc<RwLock<azalea::world::Instance>>) {
