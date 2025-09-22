@@ -22,3 +22,6 @@ perf.data.old
 heaptrack.*
 *.mm_profdata
 chrome_profiler.json
+
+# Nix development environment
+.direnv/
