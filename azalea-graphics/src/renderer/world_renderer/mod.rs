@@ -1,6 +1,9 @@
 use std::{cmp::Ordering, collections::HashMap, mem::offset_of, sync::Arc};
 
-use ash::{Device, vk};
+use ash::{
+    Device,
+    vk::{self, PolygonMode},
+};
 use azalea::core::position::ChunkSectionPos;
 use image::GenericImageView;
 use vk_mem::{Alloc, Allocation, AllocationCreateInfo, MemoryUsage};
@@ -16,15 +19,12 @@ use crate::renderer::{
     world_renderer::{
         animation::AnimationManager,
         mesher::{MeshResult, Mesher},
-        pipelines::{
-            create_water_pipeline, create_world_pipeline, create_world_pipeline_layout,
-            create_world_wireframe_pipeline,
-        },
+        pipelines::{PipelineConfig, create_world_pipeline, create_world_pipeline_layout},
     },
 };
 
 mod animation;
-pub mod mesher;
+mod mesher;
 mod pipelines;
 
 const TRIANGLE_VERT: &[u8] = include_bytes!(env!("BLOCK_VERT"));
@@ -93,6 +93,7 @@ pub struct WorldRenderer {
     pipeline: vk::Pipeline,
     wireframe_pipeline: Option<vk::Pipeline>,
     water_pipeline: vk::Pipeline,
+    water_wireframe_pipeline: Option<vk::Pipeline>,
     descriptor_set_layout: vk::DescriptorSetLayout,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set: vk::DescriptorSet,
@@ -163,20 +164,56 @@ impl WorldRenderer {
             pipeline_layout,
             TRIANGLE_VERT,
             TRIANGLE_FRAG,
+            PipelineConfig {
+                polygon_mode: PolygonMode::FILL,
+                enable_blend: false,
+                depth_write: true,
+            },
         );
         let wireframe_pipeline = if options.wireframe_enabled {
-            create_world_wireframe_pipeline(
+            Some(create_world_pipeline(
                 ctx,
                 render_pass,
                 pipeline_layout,
                 TRIANGLE_VERT,
                 TRIANGLE_FRAG,
-            )
+                PipelineConfig {
+                    polygon_mode: PolygonMode::LINE,
+                    enable_blend: false,
+                    depth_write: true,
+                },
+            ))
         } else {
             None
         };
-        let water_pipeline =
-            create_water_pipeline(ctx, render_pass, pipeline_layout, WATER_VERT, WATER_FRAG);
+        let water_pipeline = create_world_pipeline(
+            ctx,
+            render_pass,
+            pipeline_layout,
+            WATER_VERT,
+            WATER_FRAG,
+            PipelineConfig {
+                polygon_mode: PolygonMode::FILL,
+                enable_blend: true,
+                depth_write: false,
+            },
+        );
+        let water_wireframe_pipeline = if options.wireframe_enabled {
+            Some(create_world_pipeline(
+                ctx,
+                render_pass,
+                pipeline_layout,
+                WATER_VERT,
+                WATER_FRAG,
+                PipelineConfig {
+                    polygon_mode: PolygonMode::LINE,
+                    enable_blend: true,
+                    depth_write: false,
+                },
+            ))
+        } else {
+            None
+        };
 
         Self {
             mesher: Mesher::new(assets.clone(), 5),
@@ -189,6 +226,7 @@ impl WorldRenderer {
             pipeline,
             wireframe_pipeline,
             water_pipeline,
+            water_wireframe_pipeline,
             descriptor_set_layout,
             descriptor_pool,
             descriptor_set,
@@ -265,8 +303,14 @@ impl WorldRenderer {
             }
         }
 
+        let water_pipeline = if wireframe_mode {
+            self.water_wireframe_pipeline.unwrap_or(self.water_pipeline)
+        } else {
+            self.water_pipeline
+        };
+
         unsafe {
-            device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.water_pipeline);
+            device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, water_pipeline);
 
             device.cmd_push_constants(
                 cmd,
@@ -520,8 +564,7 @@ impl WorldRenderer {
         camera_pos: glam::Vec3,
         frame_index: usize,
     ) {
-
-        for buffer in &mut self.staging_buffers[frame_index]{
+        for buffer in &mut self.staging_buffers[frame_index] {
             buffer.destroy(ctx);
         }
         self.staging_buffers[frame_index].clear();
