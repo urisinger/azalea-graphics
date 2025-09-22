@@ -1,7 +1,8 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use azalea::core::position::ChunkPos;
 use crossbeam::channel::{Receiver, Sender, unbounded};
+use parking_lot::RwLock;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::{
     application::ApplicationHandler,
@@ -11,13 +12,12 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::{
-    plugin::BiomeCache,
-    renderer::{
-        Renderer,
-        chunk::{LocalChunk, LocalSection},
-    },
-};
+use crate::renderer::Renderer;
+
+pub enum WorldUpdate {
+    ChunkAdded(ChunkPos),
+    WorldAdded(Arc<RwLock<azalea::world::Instance>>),
+}
 
 pub enum RendererEvent {
     Closed,
@@ -25,22 +25,23 @@ pub enum RendererEvent {
 
 #[derive(Clone)]
 pub struct RendererHandle {
-    pub tx: Sender<LocalSection>,
+    pub tx: Sender<WorldUpdate>,
     pub rx: Receiver<RendererEvent>,
 }
 
 impl RendererHandle {
-    pub fn send_chunk(&self, pos: ChunkPos, chunk: LocalChunk, biome_cache: BiomeCache) {
-        for mut section in chunk.local_sections(pos) {
-            section.biome_cache = biome_cache.clone();
-            self.tx.send(section).unwrap();
-        }
+    pub fn send_chunk(&self, pos: ChunkPos) {
+        self.tx.send(WorldUpdate::ChunkAdded(pos)).unwrap()
+    }
+
+    pub fn add_world(&self, world: Arc<RwLock<azalea::world::Instance>>) {
+        self.tx.send(WorldUpdate::WorldAdded(world)).unwrap()
     }
 }
 
 pub struct App {
     window: Option<Window>,
-    cmd_rx: Receiver<LocalSection>,
+    cmd_rx: Receiver<WorldUpdate>,
     evt_tx: Sender<RendererEvent>,
 
     renderer: Option<Renderer>,
@@ -101,13 +102,11 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
-        // Handle egui events first
         let mut egui_consumed = false;
         if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
             egui_consumed = renderer.handle_egui_event(window, &event);
         }
 
-        // Only handle non-egui events if egui didn't consume them
         if !egui_consumed {
             match event {
                 WindowEvent::CloseRequested => {
@@ -192,9 +191,9 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
-        while let Ok(section) = self.cmd_rx.try_recv() {
+        while let Ok(spos) = self.cmd_rx.try_recv() {
             if let Some(renderer) = &mut self.renderer {
-                renderer.update_section(section);
+                renderer.update_world(spos);
             }
         }
 

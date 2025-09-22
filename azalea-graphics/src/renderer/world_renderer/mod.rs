@@ -4,22 +4,24 @@ use ash::{
     Device,
     vk::{self, PolygonMode},
 };
-use azalea::core::position::ChunkSectionPos;
+use azalea::core::position::{ChunkSectionPos};
 use image::GenericImageView;
 use vk_mem::{Alloc, Allocation, AllocationCreateInfo, MemoryUsage};
 
-use crate::renderer::{
-    assets::{Assets, processed::atlas::TextureEntry},
-    chunk::LocalSection,
-    mesh::Mesh,
-    vulkan::{
-        buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT, swapchain::Swapchain,
-        texture::Texture,
-    },
-    world_renderer::{
-        animation::AnimationManager,
-        mesher::{MeshResult, Mesher},
-        pipelines::{PipelineConfig, create_world_pipeline, create_world_pipeline_layout},
+use crate::{
+    app::WorldUpdate,
+    renderer::{
+        assets::{Assets, processed::atlas::TextureEntry},
+        mesh::Mesh,
+        vulkan::{
+            buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT,
+            swapchain::Swapchain, texture::Texture,
+        },
+        world_renderer::{
+            animation::AnimationManager,
+            mesher::{MeshResult, Mesher},
+            pipelines::{PipelineConfig, create_world_pipeline, create_world_pipeline_layout},
+        },
     },
 };
 
@@ -81,7 +83,7 @@ impl BlockVertex {
 }
 
 pub struct WorldRenderer {
-    pub mesher: Mesher,
+    pub mesher: Option<Mesher>,
 
     animation_manager: AnimationManager,
     pub block_meshes: HashMap<ChunkSectionPos, Mesh<BlockVertex>>,
@@ -216,7 +218,7 @@ impl WorldRenderer {
         };
 
         Self {
-            mesher: Mesher::new(assets.clone(), 5),
+            mesher: None,
             animation_manager: AnimationManager::from_textures(&assets.textures),
             staging_buffers: Default::default(),
             block_meshes: HashMap::new(),
@@ -242,8 +244,17 @@ impl WorldRenderer {
         self.animation_manager.tick(&self.assets.textures);
     }
 
-    pub fn update_section(&self, section: LocalSection) {
-        self.mesher.submit(section);
+    pub fn update(&mut self, update: WorldUpdate) {
+        match update {
+            WorldUpdate::ChunkAdded(spos) => {
+                if let Some(mesher) = &self.mesher {
+                    mesher.submit_chunk(spos);
+                }
+            }
+            WorldUpdate::WorldAdded(world) => {
+                self.mesher = Some(Mesher::new(self.assets.clone(), world, 5));
+            }
+        }
     }
 
     pub fn draw(
@@ -410,7 +421,7 @@ impl WorldRenderer {
         cmd: vk::CommandBuffer,
         frame_index: usize,
     ) {
-        while let Some(MeshResult { blocks, water }) = self.mesher.poll() {
+        while let Some(MeshResult { blocks, water }) = self.mesher.as_ref().and_then(|m| m.poll()) {
             if !blocks.vertices.is_empty() {
                 let staging = Mesh::new_staging(ctx, &blocks.vertices, &blocks.indices);
 

@@ -15,9 +15,10 @@ use winit::{
     window::Window,
 };
 
+use crate::app::WorldUpdate;
+
 use self::{
     camera::{Camera, CameraController, Projection},
-    chunk::LocalSection,
     ui::EguiVulkan,
     world_renderer::{WorldRenderer, WorldRendererOptions},
 };
@@ -133,8 +134,8 @@ impl Renderer {
         });
     }
 
-    pub fn update_section(&self, section: LocalSection) {
-        self.world.update_section(section);
+    pub fn update_world(&mut self, update: WorldUpdate) {
+        self.world.update(update);
     }
 
     pub fn update(&mut self, dt: Duration) {

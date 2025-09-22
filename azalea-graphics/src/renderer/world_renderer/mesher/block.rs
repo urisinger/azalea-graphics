@@ -46,6 +46,7 @@ pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
                     let tint = builder.block_colors.get_color(
                         block,
                         builder.section,
+                        builder.biome_cache,
                         local,
                         model_face.tintindex,
                         builder.assets,

@@ -1,12 +1,22 @@
-use std::{sync::Arc, thread};
+use std::{collections::HashSet, io::Cursor, sync::Arc, thread};
 
-use azalea::{blocks::BlockState, core::position::ChunkSectionPos, registry::Block};
+use azalea::{
+    blocks::BlockState,
+    core::{
+        position::{ChunkPos, ChunkSectionPos},
+        registry_holder::{BiomeData, RegistryHolder},
+    },
+    registry::{Biome, Block, DataRegistry},
+};
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use glam::IVec3;
+use log::error;
+use parking_lot::{RawMutex, RwLock, lock_api::Mutex};
+use simdnbt::Deserialize;
 
 use crate::renderer::{
     assets::Assets,
-    chunk::LocalSection,
+    chunk::{LocalChunk, LocalSection},
     world_renderer::{
         BlockVertex,
         mesher::{block::mesh_block, water::mesh_water},
@@ -25,46 +35,121 @@ pub struct MeshData {
 }
 
 pub struct Mesher {
-    work_tx: Sender<LocalSection>,
+    work_tx: Sender<ChunkSectionPos>,
     result_rx: Receiver<MeshResult>,
+
+    world: Arc<RwLock<azalea::world::Instance>>,
+    dirty: Arc<Mutex<RawMutex, HashSet<ChunkSectionPos>>>,
 }
 
 impl Mesher {
-    pub fn new(assets: Arc<Assets>, num_threads: usize) -> Self {
-        let (work_tx, work_rx) = unbounded::<LocalSection>();
+    pub fn new(
+        assets: Arc<Assets>,
+        world: Arc<RwLock<azalea::world::Instance>>,
+        num_threads: usize,
+    ) -> Self {
+        let (work_tx, work_rx) = unbounded::<ChunkSectionPos>();
         let (result_tx, result_rx) = unbounded::<MeshResult>();
+        let dirty = Arc::new(Mutex::new(HashSet::new()));
+        let biome_cache = Arc::new(BiomeCache::from_registries(&world.read().registries));
 
         for id in 0..num_threads {
             let work_rx = work_rx.clone();
             let result_tx = result_tx.clone();
             let assets = assets.clone();
+            let dirty = dirty.clone();
+            let world = world.clone();
+            let biome_cache = biome_cache.clone();
 
             thread::spawn(move || {
-                while let Ok(local_section) = work_rx.recv() {
-                    let start = std::time::Instant::now();
-                    let mesh = mesh_section(&local_section, &assets);
-                    result_tx.send(mesh).unwrap();
+                while let Ok(spos) = work_rx.recv() {
+                    dirty.lock().remove(&spos);
+                    if let Some(local) = build_local_section(&world, spos) {
+                        let start = std::time::Instant::now();
+                        let mesh = mesh_section(&local, &biome_cache, &assets);
+                        result_tx.send(mesh).unwrap();
 
-                    let dt = start.elapsed();
-                    println!(
-                        "[worker {id}] meshing took: {:.3} ms",
-                        dt.as_secs_f64() * 1000.0
-                    );
+                        let dt = start.elapsed();
+                        println!(
+                            "[worker {id}] meshing {:?} took: {:.3} ms",
+                            spos,
+                            dt.as_secs_f64() * 1000.0
+                        );
+                    }
                 }
             });
         }
 
-        Self { work_tx, result_rx }
+        Self {
+            work_tx,
+            result_rx,
+            world,
+            dirty,
+        }
     }
 
-    pub fn submit(&self, local_section: LocalSection) {
-        self.work_tx.send(local_section).unwrap();
+    pub fn submit_section(&self, spos: ChunkSectionPos) {
+        let mut dirty = self.dirty.lock();
+        if dirty.insert(spos) {
+            self.work_tx.send(spos).unwrap();
+        }
+    }
+
+    pub fn submit_chunk(&self, pos: ChunkPos) {
+        let world = self.world.read();
+        if let Some(chunk) = world.chunks.get(&pos) {
+            let chunk = chunk.read();
+            for (i, section) in chunk.sections.iter().enumerate() {
+                if section.block_count > 0 {
+                    let spos = ChunkSectionPos::new(pos.x, i as i32, pos.z);
+                    self.submit_section(spos);
+                }
+            }
+        }
     }
 
     pub fn poll(&self) -> Option<MeshResult> {
         self.result_rx.try_recv().ok()
     }
 }
+
+fn build_local_section(
+    world: &Arc<RwLock<azalea::world::Instance>>,
+    spos: ChunkSectionPos,
+) -> Option<LocalSection> {
+    let world_guard = world.read();
+
+    let center = world_guard
+        .chunks
+        .get(&ChunkPos::new(spos.x, spos.z))?
+        .clone();
+
+    let neighbors = [
+        world_guard.chunks.get(&ChunkPos::new(spos.x, spos.z - 1)), // North
+        world_guard.chunks.get(&ChunkPos::new(spos.x, spos.z + 1)), // South
+        world_guard.chunks.get(&ChunkPos::new(spos.x + 1, spos.z)), // East
+        world_guard.chunks.get(&ChunkPos::new(spos.x - 1, spos.z)), // West
+        world_guard
+            .chunks
+            .get(&ChunkPos::new(spos.x + 1, spos.z - 1)), // NE
+        world_guard
+            .chunks
+            .get(&ChunkPos::new(spos.x - 1, spos.z - 1)), // NW
+        world_guard
+            .chunks
+            .get(&ChunkPos::new(spos.x + 1, spos.z + 1)), // SE
+        world_guard
+            .chunks
+            .get(&ChunkPos::new(spos.x - 1, spos.z + 1)), // SW
+    ];
+
+    drop(world_guard);
+
+    let local_chunk = LocalChunk { center, neighbors };
+
+    Some(local_chunk.borrow_chunks().build_local_section(spos))
+}
+
 pub struct MeshResult {
     pub blocks: MeshData,
     pub water: MeshData,
@@ -74,6 +159,8 @@ pub struct MeshBuilder<'a> {
     pub assets: &'a Assets,
     pub block_colors: &'a block_colors::BlockColors,
     pub section: &'a LocalSection,
+
+    pub biome_cache: &'a BiomeCache,
 
     block_vertices: Vec<BlockVertex>,
     block_indices: Vec<u32>,
@@ -128,13 +215,60 @@ impl<'a> MeshBuilder<'a> {
     }
 }
 
-pub fn mesh_section(section: &LocalSection, assets: &Assets) -> MeshResult {
+#[derive(Clone, Debug)]
+pub struct BiomeCache {
+    pub biomes: Vec<BiomeData>,
+}
+
+impl BiomeCache {
+    fn from_registries(registries: &RegistryHolder) -> Self {
+        let mut biomes = Vec::new();
+
+        if let Some(biome_registry) = registries
+            .map
+            .get(&azalea::ResourceLocation::new(Biome::NAME))
+        {
+            for (_key, value) in biome_registry {
+                let mut nbt_bytes = Vec::new();
+                value.write(&mut nbt_bytes);
+
+                let nbt_borrow_compound =
+                    match simdnbt::borrow::read_compound(&mut Cursor::new(&nbt_bytes)) {
+                        Ok(compound) => compound,
+                        Err(e) => {
+                            error!("Failed to read NBT compound for biome: {}", e);
+                            continue;
+                        }
+                    };
+
+                let biome_data = match BiomeData::from_compound((&nbt_borrow_compound).into()) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        error!("Failed to parse BiomeData: {}, {value:?}", e);
+                        continue;
+                    }
+                };
+
+                biomes.push(biome_data);
+            }
+        }
+
+        BiomeCache { biomes }
+    }
+}
+
+pub fn mesh_section(
+    section: &LocalSection,
+    biome_cache: &BiomeCache,
+    assets: &Assets,
+) -> MeshResult {
     let block_colors = block_colors::BlockColors::create_default();
 
     let mut builder = MeshBuilder {
         assets,
         block_colors: &block_colors,
         section,
+        biome_cache,
         block_vertices: Vec::with_capacity(1000),
         block_indices: Vec::with_capacity(1000),
         water_vertices: Vec::with_capacity(500),

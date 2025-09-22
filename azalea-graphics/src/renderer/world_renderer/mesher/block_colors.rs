@@ -6,15 +6,12 @@ use azalea::{
 };
 use glam::IVec3;
 
-use crate::{
-    plugin::BiomeCache,
-    renderer::{assets::Assets, chunk::LocalSection},
-};
+use crate::renderer::{assets::Assets, chunk::LocalSection, world_renderer::mesher::BiomeCache};
 
 /// Function signature for block color providers
 /// Takes block_state, section (with biome_cache), local_pos, tint_index, and
 /// mesh_assets
-pub type BlockColorFn = fn(BlockState, &LocalSection, IVec3, i32, &Assets) -> [f32; 3];
+pub type BlockColorFn = fn(BlockState, &LocalSection, &BiomeCache, IVec3, i32, &Assets) -> [f32; 3];
 
 /// Block color registry similar to Minecraft's BlockColors
 pub struct BlockColors {
@@ -96,6 +93,8 @@ impl BlockColors {
         &self,
         block_state: BlockState,
         section: &LocalSection,
+
+        biome_cache: &BiomeCache,
         local_pos: IVec3,
         tint_index: i32,
         assets: &Assets,
@@ -103,7 +102,14 @@ impl BlockColors {
         let block = Block::from(block_state);
 
         if let Some(&color_fn) = self.color_providers.get(&block) {
-            color_fn(block_state, section, local_pos, tint_index, assets)
+            color_fn(
+                block_state,
+                section,
+                biome_cache,
+                local_pos,
+                tint_index,
+                assets,
+            )
         } else {
             // Default white color for blocks without special coloring
             [1.0; 3]
@@ -115,6 +121,7 @@ impl BlockColors {
 fn grass_color_provider(
     _block_state: BlockState,
     section: &LocalSection,
+    biome_cache: &BiomeCache,
     local_pos: IVec3,
     tint_index: i32,
     assets: &Assets,
@@ -124,13 +131,14 @@ fn grass_color_provider(
     }
 
     let biome = get_biome_at_local_pos(section, local_pos);
-    BiomeColors::get_grass_color_with_modifier(&section.biome_cache, biome, local_pos, assets)
+    BiomeColors::get_grass_color_with_modifier(biome_cache, biome, local_pos, assets)
 }
 
 /// Double plant grass color provider (handles upper/lower half sampling)
 fn double_plant_grass_color_provider(
     block_state: BlockState,
     section: &LocalSection,
+    biome_cache: &BiomeCache,
     local_pos: IVec3,
     tint_index: i32,
     assets: &Assets,
@@ -151,13 +159,14 @@ fn double_plant_grass_color_provider(
     }
 
     let biome = get_biome_at_local_pos(section, sample_pos);
-    BiomeColors::get_grass_color_with_modifier(&section.biome_cache, biome, sample_pos, assets)
+    BiomeColors::get_grass_color_with_modifier(biome_cache, biome, sample_pos, assets)
 }
 
 /// Foliage color provider
 fn foliage_color_provider(
     _block_state: BlockState,
     section: &LocalSection,
+    biome_cache: &BiomeCache,
     local_pos: IVec3,
     tint_index: i32,
     assets: &Assets,
@@ -167,13 +176,14 @@ fn foliage_color_provider(
     }
 
     let biome = get_biome_at_local_pos(section, local_pos);
-    BiomeColors::get_average_foliage_color(&section.biome_cache, biome, assets)
+    BiomeColors::get_average_foliage_color(biome_cache, biome, assets)
 }
 
 /// Birch foliage color provider (fixed color)
 fn birch_foliage_color_provider(
     _block_state: BlockState,
     _section: &LocalSection,
+    _biome_cache: &BiomeCache,
     _local_pos: IVec3,
     tint_index: i32,
     _assets: &Assets,
@@ -189,6 +199,7 @@ fn birch_foliage_color_provider(
 fn spruce_foliage_color_provider(
     _block_state: BlockState,
     _section: &LocalSection,
+    _biome_cache: &BiomeCache,
     _local_pos: IVec3,
     tint_index: i32,
     _assets: &Assets,
@@ -204,6 +215,7 @@ fn spruce_foliage_color_provider(
 fn water_color_provider(
     _block_state: BlockState,
     section: &LocalSection,
+    biome_cache: &BiomeCache,
     local_pos: IVec3,
     tint_index: i32,
     _assets: &Assets,
@@ -213,13 +225,14 @@ fn water_color_provider(
     }
 
     let biome = get_biome_at_local_pos(section, local_pos);
-    BiomeColors::get_average_water_color(&section.biome_cache, biome)
+    BiomeColors::get_average_water_color(biome_cache, biome)
 }
 
 /// Redstone wire color provider (power-based)
 fn redstone_wire_color_provider(
     block_state: BlockState,
     _section: &LocalSection,
+    _biome_cache: &BiomeCache,
     _local_pos: IVec3,
     _tint_index: i32,
     _assets: &Assets,
@@ -238,6 +251,7 @@ fn redstone_wire_color_provider(
 fn pumpkin_stem_color_provider(
     block_state: BlockState,
     _section: &LocalSection,
+    _biome_cache: &BiomeCache,
     _local_pos: IVec3,
     _tint_index: i32,
     _assets: &Assets,
@@ -255,6 +269,7 @@ fn pumpkin_stem_color_provider(
 fn melon_stem_color_provider(
     block_state: BlockState,
     _section: &LocalSection,
+    _biome_cache: &BiomeCache,
     _local_pos: IVec3,
     _tint_index: i32,
     _assets: &Assets,
@@ -273,6 +288,7 @@ fn melon_stem_color_provider(
 fn attached_stem_color_provider(
     _block_state: BlockState,
     _section: &LocalSection,
+    _biome_cache: &BiomeCache,
     _local_pos: IVec3,
     tint_index: i32,
     _assets: &Assets,
@@ -289,6 +305,7 @@ fn attached_stem_color_provider(
 fn lily_pad_color_provider(
     _block_state: BlockState,
     section: &LocalSection,
+    _biome_cache: &BiomeCache,
     local_pos: IVec3,
     tint_index: i32,
     _assets: &Assets,
@@ -322,11 +339,7 @@ fn get_biome_grass_color(biome: Biome, biome_cache: &BiomeCache, assets: &Assets
 }
 
 /// Get foliage color from biome data following Java logic
-fn get_biome_foliage_color(
-    biome: Biome,
-    biome_cache: &BiomeCache,
-    assets: &Assets,
-) -> [f32; 3] {
+fn get_biome_foliage_color(biome: Biome, biome_cache: &BiomeCache, assets: &Assets) -> [f32; 3] {
     let biome_index = biome.protocol_id() as usize;
 
     if let Some(biome_data) = biome_cache.biomes.get(biome_index) {
@@ -374,11 +387,7 @@ fn get_grass_color_from_texture(temperature: f64, downfall: f64, assets: &Assets
 
 /// Sample foliage color from texture (Java: FoliageColor.get(temperature,
 /// downfall))
-fn get_foliage_color_from_texture(
-    temperature: f64,
-    downfall: f64,
-    assets: &Assets,
-) -> [f32; 3] {
+fn get_foliage_color_from_texture(temperature: f64, downfall: f64, assets: &Assets) -> [f32; 3] {
     // Try to sample from the actual foliage colormap texture
     if let Some(color) = assets.sample_foliage_colormap(temperature, downfall) {
         return color;

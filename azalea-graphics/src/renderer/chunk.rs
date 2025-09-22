@@ -8,13 +8,10 @@ use azalea::{
 };
 use parking_lot::RwLock;
 
-use crate::plugin::BiomeCache;
-
 pub struct LocalSection {
     pub blocks: Box<[[[Option<BlockState>; 18]; 18]; 18]>,
     pub biomes: Box<[[[Biome; 4]; 4]; 4]>,
     pub spos: ChunkSectionPos,
-    pub biome_cache: BiomeCache,
 }
 
 const NORTH: usize = 0;
@@ -110,7 +107,6 @@ impl<'a> BorrowedChunks<'a> {
             blocks,
             biomes,
             spos,
-            biome_cache: BiomeCache { biomes: Vec::new() },
         }
     }
 
