@@ -1,3 +1,6 @@
+pub(crate) mod buffers;
+pub(crate) mod compute;
+
 pub fn aabb_visible(view_proj: glam::Mat4, min: glam::Vec3, max: glam::Vec3) -> bool {
     let corners = [
         glam::vec3(min.x, min.y, min.z),
@@ -32,5 +35,3 @@ pub fn aabb_visible(view_proj: glam::Mat4, min: glam::Vec3, max: glam::Vec3) -> 
 
     !all_outside
 }
-
-

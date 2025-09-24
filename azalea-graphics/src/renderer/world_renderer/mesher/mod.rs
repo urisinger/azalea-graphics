@@ -38,7 +38,7 @@ pub struct Mesher {
     work_tx: Sender<ChunkSectionPos>,
     result_rx: Receiver<MeshResult>,
 
-    world: Arc<RwLock<azalea::world::Instance>>,
+    pub world: Arc<RwLock<azalea::world::Instance>>,
     dirty: Arc<Mutex<RawMutex, HashSet<ChunkSectionPos>>>,
 }
 
@@ -70,11 +70,6 @@ impl Mesher {
                         result_tx.send(mesh).unwrap();
 
                         let dt = start.elapsed();
-                        println!(
-                            "[worker {id}] meshing {:?} took: {:.3} ms",
-                            spos,
-                            dt.as_secs_f64() * 1000.0
-                        );
                     }
                 }
             });
@@ -96,16 +91,7 @@ impl Mesher {
     }
 
     pub fn submit_chunk(&self, pos: ChunkPos) {
-        let world = self.world.read();
-        if let Some(chunk) = world.chunks.get(&pos) {
-            let chunk = chunk.read();
-            for (i, section) in chunk.sections.iter().enumerate() {
-                if section.block_count > 0 {
-                    let spos = ChunkSectionPos::new(pos.x, i as i32, pos.z);
-                    self.submit_section(spos);
-                }
-            }
-        }
+
     }
 
     pub fn poll(&self) -> Option<MeshResult> {

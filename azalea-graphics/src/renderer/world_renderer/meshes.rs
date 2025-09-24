@@ -1,15 +1,14 @@
 use std::collections::HashMap;
 
+use ash::vk;
 use azalea::core::position::ChunkSectionPos;
 
-use crate::renderer::{
-    mesh::Mesh,
-    vulkan::{context::VkContext},
+use super::{
+    mesher::{MeshResult, Mesher},
+    staging::StagingArena,
+    types::BlockVertex,
 };
-
-use super::types::BlockVertex;
-use super::staging::StagingArena;
-use super::mesher::{Mesher, MeshResult};
+use crate::renderer::{mesh::Mesh, vulkan::context::VkContext};
 
 pub struct MeshStore {
     pub blocks: HashMap<ChunkSectionPos, Mesh<BlockVertex>>,
@@ -26,11 +25,19 @@ impl Default for MeshStore {
 }
 
 impl MeshStore {
-    pub fn insert_block(&mut self, key: ChunkSectionPos, mesh: Mesh<BlockVertex>) -> Option<Mesh<BlockVertex>> {
+    pub fn insert_block(
+        &mut self,
+        key: ChunkSectionPos,
+        mesh: Mesh<BlockVertex>,
+    ) -> Option<Mesh<BlockVertex>> {
         self.blocks.insert(key, mesh)
     }
 
-    pub fn insert_water(&mut self, key: ChunkSectionPos, mesh: Mesh<BlockVertex>) -> Option<Mesh<BlockVertex>> {
+    pub fn insert_water(
+        &mut self,
+        key: ChunkSectionPos,
+        mesh: Mesh<BlockVertex>,
+    ) -> Option<Mesh<BlockVertex>> {
         self.water.insert(key, mesh)
     }
 
@@ -51,11 +58,15 @@ impl MeshStore {
         mesher: &Option<Mesher>,
         staging: &mut StagingArena,
     ) {
+        let mut touched_buffers: Vec<vk::Buffer> = Vec::new();
+
         while let Some(MeshResult { blocks, water }) = mesher.as_ref().and_then(|m| m.poll()) {
             if !blocks.vertices.is_empty() {
                 let staging_mesh = Mesh::new_staging(ctx, &blocks.vertices, &blocks.indices);
                 let mesh = staging_mesh.upload(ctx, cmd);
                 staging.push(frame_index, staging_mesh.buffer);
+
+                touched_buffers.push(mesh.buffer.buffer);
 
                 if let Some(mut old_mesh) = self.insert_block(blocks.section_pos, mesh) {
                     old_mesh.destroy(ctx);
@@ -67,12 +78,42 @@ impl MeshStore {
                 let mesh = staging_mesh.upload(ctx, cmd);
                 staging.push(frame_index, staging_mesh.buffer);
 
+                touched_buffers.push(mesh.buffer.buffer);
+
                 if let Some(mut old_mesh) = self.insert_water(water.section_pos, mesh) {
                     old_mesh.destroy(ctx);
                 }
             }
         }
+
+        if !touched_buffers.is_empty() {
+            let barriers: Vec<vk::BufferMemoryBarrier> = touched_buffers
+                .iter()
+                .map(|&buf| {
+                    vk::BufferMemoryBarrier::default()
+                        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                        .dst_access_mask(
+                            vk::AccessFlags::VERTEX_ATTRIBUTE_READ | vk::AccessFlags::INDEX_READ,
+                        )
+                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .buffer(buf)
+                        .offset(0)
+                        .size(vk::WHOLE_SIZE)
+                })
+                .collect();
+
+            unsafe {
+                ctx.device().cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::VERTEX_INPUT,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &barriers,
+                    &[],
+                );
+            }
+        }
     }
 }
-
-

@@ -4,19 +4,30 @@ use ash::vk;
 use azalea::core::position::ChunkSectionPos;
 use glam::Vec3;
 use image::GenericImageView;
-use vk_mem::{MemoryUsage};
+use vk_mem::MemoryUsage;
 
 use crate::{
     app::WorldUpdate,
     renderer::{
         assets::{Assets, processed::atlas::TextureEntry},
-        vulkan::{buffer::Buffer, context::VkContext, swapchain::Swapchain, texture::Texture},
-        world_renderer::{animation::AnimationManager, mesher::Mesher},
+        vulkan::{
+            buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT,
+            swapchain::Swapchain, texture::Texture,
+        },
+        world_renderer::{
+            animation::AnimationManager,
+            mesher::Mesher,
+            visibility::{
+                buffers::VisibilityBuffers,
+                compute::{VisibilityCompute, VisibilityPushPC},
+            },
+        },
     },
 };
 
 mod animation;
 mod descriptors;
+mod hiz;
 mod mesher;
 mod meshes;
 mod pipelines;
@@ -45,6 +56,10 @@ pub struct WorldRenderer {
 
     animation_manager: AnimationManager,
     pub mesh_store: MeshStore,
+
+    hiz_compute: hiz::HiZCompute,
+    visibility_compute: VisibilityCompute,
+    visibility_buffers: Option<VisibilityBuffers>,
 
     pipelines: Pipelines,
     descriptors: Descriptors,
@@ -93,9 +108,22 @@ impl WorldRenderer {
             },
         );
 
+        let hiz_compute = hiz::HiZCompute::new(
+            ctx,
+            &render_targets.depth_pyramids,
+            &render_targets.depth_images,
+        );
+
+        let visibility_compute = VisibilityCompute::new(ctx, &render_targets.depth_pyramids, 32, 1);
+
         Self {
             mesher: None,
             animation_manager: AnimationManager::from_textures(&assets.textures),
+            hiz_compute,
+
+            visibility_compute,
+            visibility_buffers: None,
+
             staging: Default::default(),
             mesh_store: Default::default(),
             pipelines,
@@ -110,19 +138,83 @@ impl WorldRenderer {
         self.animation_manager.tick(&self.assets.textures);
     }
 
-    pub fn update(&mut self, update: WorldUpdate) {
+    pub fn update(
+        &mut self,
+        ctx: &VkContext,
+        frame_index: usize,
+        camera_pos: glam::Vec3,
+        update: WorldUpdate,
+    ) {
         match update {
-            WorldUpdate::ChunkAdded(pos) => {
+            WorldUpdate::ChunkAdded(chunk_pos) => {
                 if let Some(mesher) = &self.mesher {
-                    mesher.submit_chunk(pos);
+                    if let Some(vis) = &mut self.visibility_buffers {
+                        let world = mesher.world.read();
+                        if let Some(chunk) = world.chunks.get(&chunk_pos) {
+                            let chunk = chunk.clone();
+                            drop(world);
+                            let chunk = chunk.read();
+                            for (i, section) in chunk.sections.iter().enumerate() {
+                                if section.block_count > 0 {
+                                    let spos =
+                                        ChunkSectionPos::new(chunk_pos.x, i as i32, chunk_pos.z);
+                                    let snapshot = vis.snapshot(ctx, frame_index);
+
+                                    let sx = spos.x as i32;
+                                    let sy = spos.y as i32;
+                                    let sz = spos.z as i32;
+
+                                    let cx = (camera_pos.x / 16.0).floor() as i32;
+                                    let cy = (camera_pos.y / 16.0).floor() as i32;
+                                    let cz = (camera_pos.z / 16.0).floor() as i32;
+
+                                    let dx = sx - cx;
+                                    let dy = sy - cy;
+                                    let dz = sz - cz;
+
+                                    if snapshot.is_visible(dx, dy, dz) {
+                                        mesher.submit_section(spos);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             WorldUpdate::SectionChange(spos) => {
                 if let Some(mesher) = &self.mesher {
-                    mesher.submit_section(spos);
+                    if let Some(vis) = &mut self.visibility_buffers {
+                        let snapshot = vis.snapshot(ctx, frame_index);
+
+                        let sx = spos.x as i32;
+                        let sy = spos.y as i32;
+                        let sz = spos.z as i32;
+
+                        let cx = (camera_pos.x / 16.0).floor() as i32;
+                        let cy = (camera_pos.y / 16.0).floor() as i32;
+                        let cz = (camera_pos.z / 16.0).floor() as i32;
+
+                        let dx = sx - cx;
+                        let dy = sy - cy;
+                        let dz = sz - cz;
+
+                        if snapshot.is_visible(dx, dy, dz) {
+                            mesher.submit_section(spos);
+                        }
+                    }
                 }
             }
             WorldUpdate::WorldAdded(world) => {
+                let vb = VisibilityBuffers::new(ctx, 32, world.read().chunks.height as i32);
+                for f in 0..MAX_FRAMES_IN_FLIGHT {
+                    self.visibility_compute
+                        .rewrite_frame_set(ctx.device(), f, &vb.outputs[f]);
+                }
+                if let Some(mut vb) = self.visibility_buffers.take() {
+                    vb.destroy(ctx);
+                }
+                self.visibility_buffers = Some(vb);
+
                 self.mesher = Some(Mesher::new(self.assets.clone(), world, 5));
             }
         }
@@ -163,9 +255,39 @@ impl WorldRenderer {
         );
 
         self.render_targets.end(ctx.device(), cmd);
+
+        self.hiz_compute.dispatch_all_levels(
+            ctx,
+            cmd,
+            frame_index,
+            &self.render_targets.depth_pyramids[frame_index],
+            &self.render_targets.depth_images[frame_index],
+            extent.width,
+            extent.height,
+        );
+
+        if let Some(vb) = &mut self.visibility_buffers {
+            const CHUNK: f32 = 16.0;
+            let r = 32 as f32;
+
+            let cam_chunk_x = (camera_pos.x / CHUNK).floor() as i32;
+            let cam_chunk_z = (camera_pos.z / CHUNK).floor() as i32;
+            let grid_min_x = (cam_chunk_x - 32) as f32 * CHUNK;
+            let grid_min_z = (cam_chunk_z - 32) as f32 * CHUNK;
+
+            let pc = VisibilityPushPC {
+                view_proj: view_proj.to_cols_array_2d(),
+                grid_origin_ws: [grid_min_x, 0.0, grid_min_z, 0.0],
+                radius: 32,
+                height: vb.height,
+                _pad: [0, 0],
+            };
+
+            self.visibility_compute
+                .dispatch(ctx, cmd, image_index as usize, frame_index, vb, &pc);
+            vb.invalidate(frame_index);
+        }
     }
-
-
 
     pub fn draw(
         &mut self,
@@ -406,6 +528,13 @@ impl WorldRenderer {
 
     pub fn recreate_swapchain(&mut self, ctx: &VkContext, swapchain: &Swapchain) {
         self.render_targets.recreate(ctx, swapchain);
+        self.hiz_compute.recreate(
+            ctx,
+            &self.render_targets.depth_pyramids,
+            &self.render_targets.depth_images,
+        );
+        self.visibility_compute
+            .recreate_image_sets(ctx, &self.render_targets.depth_pyramids);
     }
 
     pub fn destroy(&mut self, ctx: &VkContext) {
@@ -413,8 +542,14 @@ impl WorldRenderer {
 
         self.mesh_store.drain_and_destroy(ctx);
         self.staging.destroy_all(ctx);
+
+        self.hiz_compute.destroy(ctx);
         self.render_targets.destroy(ctx);
         self.blocks_texture.destroy(ctx);
+        if let Some(mut vb) = self.visibility_buffers.take() {
+            vb.destroy(ctx);
+        }
+        self.visibility_compute.destroy(ctx);
 
         self.pipelines.destroy(device);
         self.descriptors.destroy(device);

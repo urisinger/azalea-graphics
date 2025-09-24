@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use ash::vk::{self};
+use crossbeam::channel::Receiver;
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vulkan::{
     context::VkContext,
@@ -15,13 +16,12 @@ use winit::{
     window::Window,
 };
 
-use crate::app::WorldUpdate;
-
 use self::{
     camera::{Camera, CameraController, Projection},
     ui::EguiVulkan,
     world_renderer::{WorldRenderer, WorldRendererOptions},
 };
+use crate::app::WorldUpdate;
 
 mod camera;
 pub(crate) mod chunk;
@@ -84,7 +84,7 @@ impl Renderer {
 
         let sync = FrameSync::new(context.device(), swapchain.images.len());
 
-        let camera = Camera::new(glam::vec3(0.0, 150.0, 2.0), -90.0, 0.0);
+        let camera = Camera::new(glam::vec3(0.0, 150.0, 2.0), 0.0, 0.0);
         let projection = Projection::new(size.width, size.height, 90.0, 0.1, 10000.0);
         let camera_controller = CameraController::new(4.0, 1.0);
 
@@ -134,8 +134,8 @@ impl Renderer {
         });
     }
 
-    pub fn update_world(&mut self, update: WorldUpdate) {
-        self.world.update(update);
+    pub fn update_world(&mut self, update: WorldUpdate, frame_index: usize) {
+        self.world.update(&self.context, frame_index, self.camera.position, update);
     }
 
     pub fn update(&mut self, dt: Duration) {
@@ -174,11 +174,17 @@ impl Renderer {
         self.wireframe_mode
     }
 
-    pub fn draw_frame(&mut self) {
+    pub fn draw_frame(&mut self, cmd_rx: &Receiver<WorldUpdate>) {
         let device = self.context.device();
         let frame = self.sync.next_frame();
 
         self.sync.wait_for_fence(device, frame);
+
+        while let Ok(spos) = cmd_rx.try_recv() {
+            self.update_world(spos, frame);
+        }
+
+        let device = self.context.device();
 
         let image_index = match self.swapchain.acquire_next_image(&self.sync, frame) {
             Ok(idx) => idx,

@@ -145,7 +145,7 @@ impl ApplicationHandler for App {
                         }
 
                         renderer.maybe_recreate();
-                        renderer.draw_frame();
+                        renderer.draw_frame(&self.cmd_rx);
                         renderer.maybe_recreate();
                     }
                 }
@@ -198,12 +198,6 @@ impl ApplicationHandler for App {
     }
 
     fn about_to_wait(&mut self, _el: &ActiveEventLoop) {
-        while let Ok(spos) = self.cmd_rx.try_recv() {
-            if let Some(renderer) = &mut self.renderer {
-                renderer.update_world(spos);
-            }
-        }
-
         if let Some(window) = &self.window {
             window.request_redraw();
         }

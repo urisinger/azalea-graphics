@@ -3,3 +3,4 @@ pub(crate) mod frame_sync;
 pub(crate) mod swapchain;
 pub(crate) mod texture;
 pub(crate) mod buffer;
+pub(crate) mod image;
