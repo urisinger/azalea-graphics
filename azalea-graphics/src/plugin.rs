@@ -49,7 +49,6 @@ pub fn handle_block_updates(
         &QueuedServerBlockUpdates,
         &InstanceHolder,
     )>,
-
     renderer: Res<RendererResource>,
 ) {
     for (queued, instance_holder) in query.iter() {

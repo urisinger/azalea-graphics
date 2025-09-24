@@ -1,5 +1,5 @@
 use ash::{vk, Device};
-use crate::renderer::{vulkan::context::VkContext, world_renderer::{BlockVertex, PushConstants}};
+use crate::renderer::{vulkan::context::VkContext, world_renderer::{types::BlockVertex, types::PushConstants}};
 
 fn create_shader_module(device: &Device, code: &[u8]) -> vk::ShaderModule {
     let code_aligned = ash::util::read_spv(&mut std::io::Cursor::new(code)).unwrap();
@@ -138,4 +138,88 @@ pub fn create_world_pipeline(
     }
 
     pipeline
+}
+
+pub struct Pipelines {
+    pub layout: vk::PipelineLayout,
+    pub block: vk::Pipeline,
+    pub block_wire: Option<vk::Pipeline>,
+    pub water: vk::Pipeline,
+    pub water_wire: Option<vk::Pipeline>,
+}
+
+pub struct PipelineOptions {
+    pub wireframe_enabled: bool,
+}
+
+impl Pipelines {
+    pub fn new(
+        ctx: &VkContext,
+        render_pass: vk::RenderPass,
+        descriptor_set_layout: vk::DescriptorSetLayout,
+        block_vert_spv: &[u8],
+        block_frag_spv: &[u8],
+        water_vert_spv: &[u8],
+        water_frag_spv: &[u8],
+        opts: PipelineOptions,
+    ) -> Self {
+        let layout = create_world_pipeline_layout(ctx.device(), descriptor_set_layout);
+
+        let block = create_world_pipeline(
+            ctx,
+            render_pass,
+            layout,
+            block_vert_spv,
+            block_frag_spv,
+            super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::FILL, enable_blend: false, depth_write: true },
+        );
+        let block_wire = if opts.wireframe_enabled {
+            Some(create_world_pipeline(
+                ctx,
+                render_pass,
+                layout,
+                block_vert_spv,
+                block_frag_spv,
+                super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::LINE, enable_blend: false, depth_write: true },
+            ))
+        } else { None };
+
+        let water = create_world_pipeline(
+            ctx,
+            render_pass,
+            layout,
+            water_vert_spv,
+            water_frag_spv,
+            super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::FILL, enable_blend: true, depth_write: false },
+        );
+        let water_wire = if opts.wireframe_enabled {
+            Some(create_world_pipeline(
+                ctx,
+                render_pass,
+                layout,
+                water_vert_spv,
+                water_frag_spv,
+                super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::LINE, enable_blend: true, depth_write: false },
+            ))
+        } else { None };
+
+        Self { layout, block, block_wire, water, water_wire }
+    }
+
+    pub fn block_pipeline(&self, wireframe_mode: bool) -> vk::Pipeline {
+        if wireframe_mode { self.block_wire.unwrap_or(self.block) } else { self.block }
+    }
+    pub fn water_pipeline(&self, wireframe_mode: bool) -> vk::Pipeline {
+        if wireframe_mode { self.water_wire.unwrap_or(self.water) } else { self.water }
+    }
+
+    pub fn destroy(&mut self, device: &Device) {
+        unsafe {
+            if let Some(p) = self.block_wire.take() { device.destroy_pipeline(p, None); }
+            if let Some(p) = self.water_wire.take() { device.destroy_pipeline(p, None); }
+            device.destroy_pipeline(self.block, None);
+            device.destroy_pipeline(self.water, None);
+            device.destroy_pipeline_layout(self.layout, None);
+        }
+    }
 }
