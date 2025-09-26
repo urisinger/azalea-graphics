@@ -32,6 +32,7 @@ thiserror.workspace = true
 regex.workspace = true
 simdnbt.workspace = true
 anyhow.workspace = true
+bytemuck = "1.23.2"
 
 
 [dev-dependencies]

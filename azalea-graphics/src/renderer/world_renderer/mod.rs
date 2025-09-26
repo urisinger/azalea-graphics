@@ -15,16 +15,15 @@ use crate::{
             swapchain::Swapchain, texture::Texture,
         },
         world_renderer::{
+            aabb_renderer::AabbRenderer,
             animation::AnimationManager,
             mesher::Mesher,
-            visibility::{
-                buffers::VisibilityBuffers,
-                compute::{VisibilityCompute, VisibilityPushPC},
-            },
+            visibility::{buffers::VisibilityBuffers, compute::VisibilityCompute},
         },
     },
 };
 
+mod aabb_renderer;
 mod animation;
 mod descriptors;
 mod hiz;
@@ -35,7 +34,6 @@ mod render_targets;
 mod staging;
 mod types;
 mod visibility;
-mod world_pass;
 
 const TRIANGLE_VERT: &[u8] = include_bytes!(env!("BLOCK_VERT"));
 const TRIANGLE_FRAG: &[u8] = include_bytes!(env!("BLOCK_FRAG"));
@@ -48,8 +46,7 @@ use meshes::MeshStore;
 use pipelines::{PipelineOptions, Pipelines};
 use render_targets::RenderTargets;
 use staging::StagingArena;
-use types::{BlockVertex, PushConstants};
-use world_pass::draw_world;
+use types::{BlockVertex, PushConstants, VisibilityPushConstants};
 
 pub struct WorldRenderer {
     pub mesher: Option<Mesher>,
@@ -60,6 +57,7 @@ pub struct WorldRenderer {
     hiz_compute: hiz::HiZCompute,
     visibility_compute: VisibilityCompute,
     visibility_buffers: Option<VisibilityBuffers>,
+    aabb_renderer: AabbRenderer,
 
     pipelines: Pipelines,
     descriptors: Descriptors,
@@ -115,6 +113,7 @@ impl WorldRenderer {
         );
 
         let visibility_compute = VisibilityCompute::new(ctx, &render_targets.depth_pyramids, 32, 1);
+        let aabb_renderer = AabbRenderer::new(ctx, render_targets.render_pass);
 
         Self {
             mesher: None,
@@ -123,6 +122,7 @@ impl WorldRenderer {
 
             visibility_compute,
             visibility_buffers: None,
+            aabb_renderer,
 
             staging: Default::default(),
             mesh_store: Default::default(),
@@ -154,6 +154,7 @@ impl WorldRenderer {
                             let chunk = chunk.clone();
                             drop(world);
                             let chunk = chunk.read();
+
                             for (i, section) in chunk.sections.iter().enumerate() {
                                 if section.block_count > 0 {
                                     let spos =
@@ -165,11 +166,10 @@ impl WorldRenderer {
                                     let sz = spos.z as i32;
 
                                     let cx = (camera_pos.x / 16.0).floor() as i32;
-                                    let cy = (camera_pos.y / 16.0).floor() as i32;
                                     let cz = (camera_pos.z / 16.0).floor() as i32;
 
                                     let dx = sx - cx;
-                                    let dy = sy - cy;
+                                    let dy = sy - (mesher.world.read().chunks.min_y / 16);
                                     let dz = sz - cz;
 
                                     if snapshot.is_visible(dx, dy, dz) {
@@ -187,13 +187,15 @@ impl WorldRenderer {
                         let snapshot = vis.snapshot(ctx, frame_index);
 
                         let sx = spos.x as i32;
-                        let sy = spos.y as i32;
+                        let sy = spos.y as i32 - mesher.world.read().chunks.min_y;
                         let sz = spos.z as i32;
 
+                        // Camera position in chunk coordinates
                         let cx = (camera_pos.x / 16.0).floor() as i32;
                         let cy = (camera_pos.y / 16.0).floor() as i32;
                         let cz = (camera_pos.z / 16.0).floor() as i32;
 
+                        // Calculate relative position from camera chunk
                         let dx = sx - cx;
                         let dy = sy - cy;
                         let dz = sz - cz;
@@ -205,14 +207,26 @@ impl WorldRenderer {
                 }
             }
             WorldUpdate::WorldAdded(world) => {
-                let vb = VisibilityBuffers::new(ctx, 32, world.read().chunks.height as i32);
+                if let Some(mut vb) = self.visibility_buffers.take() {
+                    vb.destroy(ctx);
+                }
+
+                let world_read = world.read();
+                let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
+                println!("{max_height}, {}", max_height / 16);
+                drop(world_read);
+
+                let vb = VisibilityBuffers::new(ctx, 32, (max_height) / 16);
+
                 for f in 0..MAX_FRAMES_IN_FLIGHT {
                     self.visibility_compute
                         .rewrite_frame_set(ctx.device(), f, &vb.outputs[f]);
                 }
-                if let Some(mut vb) = self.visibility_buffers.take() {
-                    vb.destroy(ctx);
-                }
+
+                // Update AABB renderer descriptor sets with the new visibility buffers
+                self.aabb_renderer
+                    .recreate_descriptor_sets(ctx.device(), &vb.outputs);
+
                 self.visibility_buffers = Some(vb);
 
                 self.mesher = Some(Mesher::new(self.assets.clone(), world, 5));
@@ -231,6 +245,11 @@ impl WorldRenderer {
         camera_pos: glam::Vec3,
         frame_index: usize,
     ) {
+        // Label the main command buffer
+        ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
+
+        // Staging and mesh processing
+        ctx.cmd_begin_debug_label(cmd, "Staging & Mesh Processing");
         self.staging.clear_frame(ctx, frame_index);
         self.mesh_store.process_mesher_results(
             ctx,
@@ -240,53 +259,105 @@ impl WorldRenderer {
             &mut self.staging,
         );
         self.upload_dirty_textures(ctx, cmd, frame_index);
+        ctx.cmd_end_debug_label(cmd);
+
+        // Main render pass
+        ctx.cmd_begin_debug_label(cmd, "Main Render Pass");
         self.render_targets
             .begin(ctx.device(), cmd, image_index, extent);
 
-        draw_world(
-            ctx.device(),
-            cmd,
-            &self.pipelines,
-            self.descriptors.set,
-            &self.mesh_store,
-            view_proj,
-            wireframe_mode,
-            camera_pos,
-        );
+        let visibility_push_constants = if let Some(vb) = &mut self.visibility_buffers {
+            const CHUNK: f32 = 16.0;
+
+            // Center the grid on the camera position
+            let cam_chunk_x = (camera_pos.x / CHUNK).floor() as i32;
+            let cam_chunk_z = (camera_pos.z / CHUNK).floor() as i32;
+            // Grid corner is camera chunk minus radius to center the grid
+            let grid_min_x = (cam_chunk_x) as f32 * CHUNK;
+            let grid_min_z = (cam_chunk_z) as f32 * CHUNK;
+            let grid_origin_ws = [
+                grid_min_x,
+                (self
+                    .mesher
+                    .as_ref()
+                    .map(|m| m.world.read().chunks.min_y)
+                    .unwrap_or(0)
+                    / 16) as f32
+                    * CHUNK,
+                grid_min_z,
+                0.0,
+            ];
+
+            let pc = VisibilityPushConstants {
+                view_proj: view_proj.to_cols_array_2d(),
+                grid_origin_ws,
+                radius: 32,
+                height: vb.height,
+                _padding: [0, 0],
+            };
+
+            self.draw(
+                ctx,
+                cmd,
+                view_proj,
+                wireframe_mode,
+                camera_pos,
+                frame_index,
+                &pc,
+            );
+            Some(pc)
+        } else {
+            None
+        };
 
         self.render_targets.end(ctx.device(), cmd);
+        ctx.cmd_end_debug_label(cmd);
 
+        ctx.cmd_begin_debug_label(cmd, "HiZ Pyramid Generation");
         self.hiz_compute.dispatch_all_levels(
             ctx,
             cmd,
-            frame_index,
-            &self.render_targets.depth_pyramids[frame_index],
-            &self.render_targets.depth_images[frame_index],
+            image_index,
+            &self.render_targets.depth_pyramids[image_index as usize],
+            &self.render_targets.depth_images[image_index as usize],
             extent.width,
             extent.height,
         );
+        ctx.cmd_end_debug_label(cmd);
 
         if let Some(vb) = &mut self.visibility_buffers {
-            const CHUNK: f32 = 16.0;
-            let r = 32 as f32;
-
-            let cam_chunk_x = (camera_pos.x / CHUNK).floor() as i32;
-            let cam_chunk_z = (camera_pos.z / CHUNK).floor() as i32;
-            let grid_min_x = (cam_chunk_x - 32) as f32 * CHUNK;
-            let grid_min_z = (cam_chunk_z - 32) as f32 * CHUNK;
-
-            let pc = VisibilityPushPC {
-                view_proj: view_proj.to_cols_array_2d(),
-                grid_origin_ws: [grid_min_x, 0.0, grid_min_z, 0.0],
-                radius: 32,
-                height: vb.height,
-                _pad: [0, 0],
-            };
-
-            self.visibility_compute
-                .dispatch(ctx, cmd, image_index as usize, frame_index, vb, &pc);
+            ctx.cmd_begin_debug_label(cmd, "Visibility Compute");
+            self.visibility_compute.dispatch(
+                ctx,
+                cmd,
+                image_index as usize,
+                frame_index,
+                vb,
+                &visibility_push_constants.unwrap(),
+            );
             vb.invalidate(frame_index);
-        }
+
+            unsafe {
+                ctx.device().cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::VERTEX_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[vk::BufferMemoryBarrier::default()
+                        .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                        .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                        .buffer(vb.outputs[frame_index].buffer)
+                        .offset(0)
+                        .size(vk::WHOLE_SIZE)],
+                    &[],
+                );
+            }
+
+            ctx.cmd_end_debug_label(cmd);
+        };
+
+        ctx.cmd_end_debug_label(cmd);
     }
 
     pub fn draw(
@@ -297,10 +368,13 @@ impl WorldRenderer {
         wireframe_mode: bool,
         camera_pos: glam::Vec3,
         frame_index: usize,
+        visibility_push_constants: &VisibilityPushConstants,
     ) {
         let device = ctx.device();
         let push = PushConstants { view_proj };
 
+        // Draw blocks
+        ctx.cmd_begin_debug_label(cmd, "Draw Blocks");
         let current_pipeline = self.pipelines.block_pipeline(wireframe_mode);
 
         unsafe {
@@ -352,7 +426,10 @@ impl WorldRenderer {
                 device.cmd_draw_indexed(cmd, mesh.index_count, 1, 0, 0, 0);
             }
         }
+        ctx.cmd_end_debug_label(cmd);
 
+        // Draw water
+        ctx.cmd_begin_debug_label(cmd, "Draw Water");
         let water_pipeline = self.pipelines.water_pipeline(wireframe_mode);
 
         unsafe {
@@ -406,6 +483,12 @@ impl WorldRenderer {
                 device.cmd_draw_indexed(cmd, mesh.index_count, 1, 0, 0, 0);
             }
         }
+        ctx.cmd_end_debug_label(cmd);
+
+        // Draw AABBs
+        ctx.cmd_begin_debug_label(cmd, "Draw AABBs");
+        self.render_aabbs(ctx, cmd, visibility_push_constants, frame_index);
+        ctx.cmd_end_debug_label(cmd);
     }
 
     pub fn upload_dirty_textures(
@@ -526,6 +609,25 @@ impl WorldRenderer {
         self.staging.push(frame_index, staging);
     }
 
+    pub fn render_aabbs(
+        &self,
+        ctx: &VkContext,
+        cmd: vk::CommandBuffer,
+        push_constants: &VisibilityPushConstants,
+        frame_index: usize,
+    ) {
+        let side = (push_constants.radius * 2 + 1) as u32;
+        let instance_count = side * side * push_constants.height as u32;
+
+        self.aabb_renderer.draw(
+            ctx.device(),
+            cmd,
+            push_constants,
+            instance_count,
+            frame_index,
+        );
+    }
+
     pub fn recreate_swapchain(&mut self, ctx: &VkContext, swapchain: &Swapchain) {
         self.render_targets.recreate(ctx, swapchain);
         self.hiz_compute.recreate(
@@ -550,6 +652,7 @@ impl WorldRenderer {
             vb.destroy(ctx);
         }
         self.visibility_compute.destroy(ctx);
+        self.aabb_renderer.destroy(device);
 
         self.pipelines.destroy(device);
         self.descriptors.destroy(device);

@@ -25,6 +25,7 @@ impl VisibilitySnapshot {
             return None;
         }
 
+
         let x = (dx + self.radius) as usize;
         let z = (dz + self.radius) as usize;
         let y = dy as usize;
@@ -34,8 +35,17 @@ impl VisibilitySnapshot {
 
     pub fn is_visible(&self, dx: i32, dy: i32, dz: i32) -> bool {
         self.index(dx, dy, dz)
-            .map(|i| self.data[i] != 0)
-            .unwrap_or(false)
+            .map(|i| {
+                if self.data[i] != 0 {
+                   true 
+                } else {
+                    false
+                }
+            })
+            .unwrap_or_else(|| {
+                println!("{dx} {dy} {dz}");
+                false
+            })
     }
 }
 
@@ -137,7 +147,9 @@ impl VisibilityBuffers {
         let allocator = ctx.allocator();
         let mut data = vec![0u32; self.entry_count];
         unsafe {
-            let ptr = allocator.map_memory(&mut self.readbacks[frame_idx].allocation).unwrap();
+            let ptr = allocator
+                .map_memory(&mut self.readbacks[frame_idx].allocation)
+                .unwrap();
             std::ptr::copy_nonoverlapping(ptr as *const u32, data.as_mut_ptr(), self.entry_count);
             allocator.unmap_memory(&mut self.readbacks[frame_idx].allocation);
         }

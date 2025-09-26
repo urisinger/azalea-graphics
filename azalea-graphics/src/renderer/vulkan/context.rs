@@ -8,7 +8,7 @@ use ash::{
     Device, Entry, Instance,
     ext::debug_utils,
     khr::{surface, swapchain as khr_swapchain},
-    vk,
+    vk::{self, Handle},
 };
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vk_mem::{Allocator, AllocatorCreateInfo};
@@ -24,10 +24,16 @@ pub struct DeviceFeatures {
     pub fill_mode_non_solid: bool,
 }
 
+pub struct Debug {
+    utils: debug_utils::Instance,
+    utils_device: debug_utils::Device,
+    messenger: vk::DebugUtilsMessengerEXT,
+}
+
 pub struct VkContext {
     _entry: Entry,
     instance: Instance,
-    debug_messenger: Option<(debug_utils::Instance, vk::DebugUtilsMessengerEXT)>,
+    debug: Option<Debug>,
     surface: surface::Instance,
     surface_khr: vk::SurfaceKHR,
 
@@ -51,7 +57,16 @@ impl VkContext {
             ash_window::create_surface(&entry, &instance, display.as_raw(), window.as_raw(), None)
                 .expect("Failed to create surface.")
         };
-        let debug_messenger = setup_debug_messenger(&entry, &instance);
+
+        // Instance-level messenger first
+        let debug_utils = if ENABLE_VALIDATION_LAYERS {
+            Some(debug_utils::Instance::new(&entry, &instance))
+        } else {
+            None
+        };
+        let debug_messenger = debug_utils
+            .as_ref()
+            .map(|utils| setup_debug_messenger(utils));
 
         let (physical_device, queue_families) =
             Self::pick_physical_device(&instance, &surface, surface_khr);
@@ -77,10 +92,22 @@ impl VkContext {
         }
         .expect("Failed to create command pool.");
 
+        // Only build full Debug struct if enabled
+        let debug = if let (Some(utils), Some(messenger)) = (debug_utils, debug_messenger) {
+            let utils_device = debug_utils::Device::new(&instance, &device);
+            Some(Debug {
+                utils,
+                messenger,
+                utils_device,
+            })
+        } else {
+            None
+        };
+
         Self {
             _entry: entry,
             instance,
-            debug_messenger,
+            debug,
             surface,
             surface_khr,
             physical_device,
@@ -124,6 +151,62 @@ impl VkContext {
     pub fn features(&self) -> DeviceFeatures {
         self.features
     }
+
+    pub fn label_object<H>(&self, object: H, name: impl AsRef<str>)
+    where
+        H: Handle,
+    {
+        // Only try if debug_messenger is active
+        if let Some(debug) = &self.debug {
+            let cname = CString::new(name.as_ref()).expect("object name contained a null byte");
+
+            let info = vk::DebugUtilsObjectNameInfoEXT::default()
+                .object_handle(object)
+                .object_name(&cname);
+
+            unsafe {
+                debug
+                    .utils_device
+                    .set_debug_utils_object_name(&info)
+                    .unwrap();
+            }
+        }
+    }
+
+    pub fn cmd_begin_debug_label(&self, cmd: vk::CommandBuffer, name: impl AsRef<str>) {
+        if let Some(debug) = &self.debug {
+            let cname = CString::new(name.as_ref()).expect("label name contained a null byte");
+            let info = vk::DebugUtilsLabelEXT::default()
+                .label_name(&cname)
+                .color([0.0, 0.0, 0.0, 1.0]); // Default color
+
+            unsafe {
+                debug.utils_device.cmd_begin_debug_utils_label(cmd, &info);
+            }
+        }
+    }
+
+    pub fn cmd_end_debug_label(&self, cmd: vk::CommandBuffer) {
+        if let Some(debug) = &self.debug {
+            unsafe {
+                debug.utils_device.cmd_end_debug_utils_label(cmd);
+            }
+        }
+    }
+
+    pub fn cmd_insert_debug_label(&self, cmd: vk::CommandBuffer, name: impl AsRef<str>) {
+        if let Some(debug) = &self.debug {
+            let cname = CString::new(name.as_ref()).expect("label name contained a null byte");
+            let info = vk::DebugUtilsLabelEXT::default()
+                .label_name(&cname)
+                .color([0.0, 0.0, 0.0, 1.0]); // Default color
+
+            unsafe {
+                debug.utils_device.cmd_insert_debug_utils_label(cmd, &info);
+            }
+        }
+    }
+
 
     pub fn begin_one_time_commands(&self) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo::default()
@@ -260,10 +343,8 @@ impl VkContext {
             })
             .collect();
 
-        // --- Query device features ---
         let base_features = unsafe { instance.get_physical_device_features(physical) };
 
-        // Check fillModeNonSolid support (optional for wireframe)
         let fill_mode_non_solid = base_features.fill_mode_non_solid == vk::TRUE;
         if fill_mode_non_solid {
             log::info!("fillModeNonSolid supported, wireframe mode available");
@@ -275,7 +356,6 @@ impl VkContext {
             fill_mode_non_solid,
         };
 
-        // Enable the features we need
         let mut enabled_features = vk::PhysicalDeviceFeatures::default();
         if fill_mode_non_solid {
             enabled_features.fill_mode_non_solid = vk::TRUE;
@@ -293,6 +373,7 @@ impl VkContext {
                 .create_device(physical, &create_info, None)
                 .expect("Failed to create logical device.")
         };
+
         let graphics_queue = unsafe { device.get_device_queue(families.graphics_index, 0) };
         let present_queue = unsafe { device.get_device_queue(families.present_index, 0) };
 
@@ -307,8 +388,10 @@ impl Drop for VkContext {
             ManuallyDrop::drop(&mut self.allocator);
             self.device.destroy_device(None);
             self.surface.destroy_surface(self.surface_khr, None);
-            if let Some((utils, messenger)) = self.debug_messenger.take() {
-                utils.destroy_debug_utils_messenger(messenger, None);
+            if let Some(debug) = self.debug.take() {
+                debug
+                    .utils
+                    .destroy_debug_utils_messenger(debug.messenger, None);
             }
             self.instance.destroy_instance(None);
         }
@@ -340,8 +423,6 @@ unsafe extern "system" fn vulkan_debug_callback(
     vk::FALSE
 }
 
-/// Get the pointers to the validation layers names.
-/// Also return the corresponding `CString` to avoid dangling pointers.
 pub fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const c_char>) {
     let layer_names = REQUIRED_LAYERS
         .iter()
@@ -354,12 +435,6 @@ pub fn get_layer_names_and_pointers() -> (Vec<CString>, Vec<*const c_char>) {
     (layer_names, layer_names_ptrs)
 }
 
-/// Check if the required validation set in `REQUIRED_LAYERS`
-/// are supported by the Vulkan instance.
-///
-/// # Panics
-///
-/// Panic if at least one on the layer is not supported.
 pub fn check_validation_layer_support(entry: &Entry) {
     let supported_layers = unsafe { entry.enumerate_instance_layer_properties().unwrap() };
     for required in REQUIRED_LAYERS.iter() {
@@ -375,15 +450,7 @@ pub fn check_validation_layer_support(entry: &Entry) {
     }
 }
 
-/// Setup the debug message if validation layers are enabled.
-pub fn setup_debug_messenger(
-    entry: &Entry,
-    instance: &Instance,
-) -> Option<(debug_utils::Instance, vk::DebugUtilsMessengerEXT)> {
-    if !ENABLE_VALIDATION_LAYERS {
-        return None;
-    }
-
+pub fn setup_debug_messenger(debug_utils: &debug_utils::Instance) -> vk::DebugUtilsMessengerEXT {
     let create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
         .flags(vk::DebugUtilsMessengerCreateFlagsEXT::empty())
         .message_severity(
@@ -397,12 +464,10 @@ pub fn setup_debug_messenger(
                 | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE,
         )
         .pfn_user_callback(Some(vulkan_debug_callback));
-    let debug_utils = debug_utils::Instance::new(entry, instance);
-    let debug_utils_messenger = unsafe {
+
+    unsafe {
         debug_utils
             .create_debug_utils_messenger(&create_info, None)
             .unwrap()
-    };
-
-    Some((debug_utils, debug_utils_messenger))
+    }
 }

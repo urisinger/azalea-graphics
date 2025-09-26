@@ -95,8 +95,6 @@ impl MeshStore {
                         .dst_access_mask(
                             vk::AccessFlags::VERTEX_ATTRIBUTE_READ | vk::AccessFlags::INDEX_READ,
                         )
-                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                         .buffer(buf)
                         .offset(0)
                         .size(vk::WHOLE_SIZE)

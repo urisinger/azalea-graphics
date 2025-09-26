@@ -1,20 +1,9 @@
 use ash::{Device, vk};
-use bytemuck::{NoUninit, Zeroable};
 
 use crate::renderer::{
     vulkan::{buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT},
-    world_renderer::{hiz::HiZPyramid, visibility::buffers::VisibilityBuffers},
+    world_renderer::{hiz::HiZPyramid, types::VisibilityPushConstants, visibility::buffers::VisibilityBuffers},
 };
-
-#[repr(C, align(16))]
-#[derive(Clone, Copy, Default, Zeroable, NoUninit)]
-pub struct VisibilityPushPC {
-    pub view_proj: [[f32; 4]; 4], // 64 bytes
-    pub grid_origin_ws: [f32; 4], // xyz + pad (16 bytes)
-    pub radius: i32,              // 4
-    pub height: i32,              // 4
-    pub _pad: [i32; 2],           // pad to 16B multiple (8)
-}
 
 pub struct VisibilityCompute {
     pub layout_frame: vk::DescriptorSetLayout,
@@ -37,7 +26,6 @@ impl VisibilityCompute {
         let d = ctx.device();
         let images = pyramids.len();
 
-        // set=0 (per-frame): b0 SSBO (visibility output)
         let frame_bindings = [vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
@@ -65,7 +53,7 @@ impl VisibilityCompute {
             .unwrap()
         };
 
-        // pipeline (push constants = VisibilityPushPC)
+        // pipeline (push constants = VisibilityPushConstants)
         let module = unsafe {
             let code = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(env!(
                 "VISIBILITY_COMP"
@@ -80,10 +68,11 @@ impl VisibilityCompute {
             .module(module)
             .name(&entry);
 
+        println!("{}", std::mem::size_of::<VisibilityPushConstants>() as u32);
         let pc_range = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::COMPUTE)
             .offset(0)
-            .size(std::mem::size_of::<VisibilityPushPC>() as u32);
+            .size(std::mem::size_of::<VisibilityPushConstants>() as u32);
 
         let set_layouts = [layout_frame, layout_image];
         let pipeline_layout = unsafe {
@@ -198,7 +187,7 @@ impl VisibilityCompute {
         image_index: usize,
         frame_index: usize,
         vis_buffers: &VisibilityBuffers,
-        pc: &VisibilityPushPC,
+        pc: &VisibilityPushConstants,
     ) {
         let d = ctx.device();
         let side = (vis_buffers.radius * 2 + 1) as u32;
@@ -235,15 +224,12 @@ impl VisibilityCompute {
                 &[vk::BufferMemoryBarrier::default()
                     .src_access_mask(vk::AccessFlags::SHADER_WRITE)
                     .dst_access_mask(vk::AccessFlags::TRANSFER_READ)
-                    .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
-                    .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
                     .buffer(vis_buffers.outputs[frame_index].buffer)
                     .offset(0)
                     .size(vis_buffers.byte_size)],
                 &[],
             );
 
-            // Copy GPU output → CPU readback
             d.cmd_copy_buffer(
                 cmd,
                 vis_buffers.outputs[frame_index].buffer,
@@ -256,7 +242,6 @@ impl VisibilityCompute {
         }
     }
 
-    /// Rewrite only the per-frame output buffer (after resize/recreate).
     pub fn rewrite_frame_set(&self, device: &Device, frame_index: usize, output_buffer: &Buffer) {
         let out = vk::DescriptorBufferInfo {
             buffer: output_buffer.buffer,

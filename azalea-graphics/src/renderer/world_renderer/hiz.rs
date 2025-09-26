@@ -61,6 +61,7 @@ impl HiZPyramid {
                 .unwrap()
         };
 
+        ctx.label_object(image, "HiZ Image");
         let sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::NEAREST)
             .min_filter(vk::Filter::NEAREST)
@@ -335,7 +336,7 @@ impl HiZCompute {
         &self,
         ctx: &VkContext,
         cmd: vk::CommandBuffer,
-        frame: usize,
+        image_idx: u32,
         pyramid: &HiZPyramid,
         depth_image: &AllocatedImage,
         base_width: u32,
@@ -360,14 +361,13 @@ impl HiZCompute {
         unsafe {
             device.cmd_pipeline_barrier(
                 cmd,
-                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::BY_REGION,
                 &[],
                 &[],
                 &[vk::ImageMemoryBarrier::default()
-                    .src_access_mask(vk::AccessFlags::empty())
-                    .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE)
+                    .dst_access_mask(vk::AccessFlags::SHADER_WRITE)
                     .old_layout(vk::ImageLayout::UNDEFINED)
                     .new_layout(vk::ImageLayout::GENERAL)
                     .image(pyramid.image)
@@ -382,7 +382,7 @@ impl HiZCompute {
                 vk::PipelineBindPoint::COMPUTE,
                 self.pipeline_layout,
                 0,
-                &[self.sets[frame][0]],
+                &[self.sets[image_idx as usize][0]],
                 &[],
             );
             let gx = (base_width + 7) / 8;
@@ -421,46 +421,44 @@ impl HiZCompute {
 
         let mut w = (base_width / 2).max(1);
         let mut h = (base_height / 2).max(1);
+
         for level in 1..pyramid.mip_levels {
+            let prev = level - 1;
+            let prev_range = vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: prev,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            };
+
             unsafe {
+                device.cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::COMPUTE_SHADER, // prev write happened in compute
+                    vk::PipelineStageFlags::COMPUTE_SHADER, // this read happens in compute
+                    vk::DependencyFlags::BY_REGION,
+                    &[],
+                    &[],
+                    &[vk::ImageMemoryBarrier::default()
+                        .src_access_mask(vk::AccessFlags::SHADER_WRITE) // prev wrote
+                        .dst_access_mask(vk::AccessFlags::SHADER_READ) // now we read it
+                        .old_layout(vk::ImageLayout::GENERAL)
+                        .new_layout(vk::ImageLayout::GENERAL)
+                        .image(pyramid.image)
+                        .subresource_range(prev_range)],
+                );
                 device.cmd_bind_descriptor_sets(
                     cmd,
                     vk::PipelineBindPoint::COMPUTE,
                     self.pipeline_layout,
                     0,
-                    &[self.sets[frame][level as usize]],
+                    &[self.sets[image_idx as usize][level as usize]],
                     &[],
                 );
                 let gx = (w + 7) / 8;
                 let gy = (h + 7) / 8;
                 device.cmd_dispatch(cmd, gx.max(1), gy.max(1), 1);
-            }
-
-            if level + 1 < pyramid.mip_levels {
-                let just_written = vk::ImageSubresourceRange {
-                    aspect_mask: vk::ImageAspectFlags::COLOR,
-                    base_mip_level: level,
-                    level_count: 1,
-                    base_array_layer: 0,
-                    layer_count: 1,
-                };
-                unsafe {
-                    device.cmd_pipeline_barrier(
-                        cmd,
-                        vk::PipelineStageFlags::COMPUTE_SHADER,
-                        vk::PipelineStageFlags::COMPUTE_SHADER,
-                        vk::DependencyFlags::BY_REGION,
-                        &[],
-                        &[],
-                        &[vk::ImageMemoryBarrier::default()
-                            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
-                            .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                            .old_layout(vk::ImageLayout::GENERAL)
-                            .new_layout(vk::ImageLayout::GENERAL)
-                            .image(pyramid.image)
-                            .subresource_range(just_written)],
-                    );
-                }
             }
 
             w = (w / 2).max(1);

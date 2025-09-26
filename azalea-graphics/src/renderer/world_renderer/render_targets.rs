@@ -177,6 +177,14 @@ pub fn create_world_render_pass(ctx: &VkContext, swapchain: &Swapchain) -> vk::R
             .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
             .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE),
         vk::SubpassDependency::default()
+            .src_subpass(vk::SUBPASS_EXTERNAL)
+            .dst_subpass(0)
+            .src_stage_mask(vk::PipelineStageFlags::COMPUTE_SHADER)
+            .src_access_mask(vk::AccessFlags::SHADER_READ)
+            .dst_stage_mask(
+                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+            .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE),
+        vk::SubpassDependency::default()
             .src_subpass(0)
             .dst_subpass(vk::SUBPASS_EXTERNAL)
             .src_stage_mask(
