@@ -79,6 +79,21 @@ impl Default for WorldRendererOptions {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct WorldRendererState {
+    pub wireframe_mode: bool,
+    pub render_aabbs: bool,
+}
+
+impl Default for WorldRendererState{
+    fn default() -> Self{
+        Self{
+            wireframe_mode: false,
+            render_aabbs: false,
+        }
+    }
+}
+
 impl WorldRenderer {
     pub fn new(
         assets: Arc<Assets>,
@@ -241,9 +256,9 @@ impl WorldRenderer {
         image_index: u32,
         extent: vk::Extent2D,
         view_proj: glam::Mat4,
-        wireframe_mode: bool,
         camera_pos: glam::Vec3,
         frame_index: usize,
+        state: WorldRendererState,
     ) {
         // Label the main command buffer
         ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
@@ -265,6 +280,14 @@ impl WorldRenderer {
         ctx.cmd_begin_debug_label(cmd, "Main Render Pass");
         self.render_targets
             .begin(ctx.device(), cmd, image_index, extent);
+        self.draw(
+            ctx,
+            cmd,
+            view_proj,
+            camera_pos,
+            frame_index,
+            state.wireframe_mode,
+        );
 
         let visibility_push_constants = if let Some(vb) = &mut self.visibility_buffers {
             const CHUNK: f32 = 16.0;
@@ -295,16 +318,12 @@ impl WorldRenderer {
                 height: vb.height,
                 _padding: [0, 0],
             };
+            if state.render_aabbs {
+                ctx.cmd_begin_debug_label(cmd, "Draw AABBs");
+                self.render_aabbs(ctx, cmd, &pc, frame_index);
+                ctx.cmd_end_debug_label(cmd);
+            }
 
-            self.draw(
-                ctx,
-                cmd,
-                view_proj,
-                wireframe_mode,
-                camera_pos,
-                frame_index,
-                &pc,
-            );
             Some(pc)
         } else {
             None
@@ -365,10 +384,9 @@ impl WorldRenderer {
         ctx: &VkContext,
         cmd: vk::CommandBuffer,
         view_proj: glam::Mat4,
-        wireframe_mode: bool,
         camera_pos: glam::Vec3,
         frame_index: usize,
-        visibility_push_constants: &VisibilityPushConstants,
+        wireframe_mode: bool,
     ) {
         let device = ctx.device();
         let push = PushConstants { view_proj };
@@ -483,11 +501,6 @@ impl WorldRenderer {
                 device.cmd_draw_indexed(cmd, mesh.index_count, 1, 0, 0, 0);
             }
         }
-        ctx.cmd_end_debug_label(cmd);
-
-        // Draw AABBs
-        ctx.cmd_begin_debug_label(cmd, "Draw AABBs");
-        self.render_aabbs(ctx, cmd, visibility_push_constants, frame_index);
         ctx.cmd_end_debug_label(cmd);
     }
 

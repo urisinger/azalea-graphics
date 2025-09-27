@@ -592,6 +592,7 @@ dependencies = [
  "ash",
  "ash-window",
  "azalea",
+ "bytemuck",
  "crossbeam",
  "egui",
  "egui-winit",

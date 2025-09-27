@@ -21,7 +21,7 @@ use self::{
     ui::EguiVulkan,
     world_renderer::{WorldRenderer, WorldRendererOptions},
 };
-use crate::app::WorldUpdate;
+use crate::{app::WorldUpdate, renderer::world_renderer::WorldRendererState};
 
 mod camera;
 pub(crate) mod chunk;
@@ -39,8 +39,7 @@ pub struct Renderer {
     width: u32,
     height: u32,
 
-    wireframe_mode: bool,
-
+    renderer_state: WorldRendererState,
     command_pool: vk::CommandPool,
     command_buffers: [vk::CommandBuffer; MAX_FRAMES_IN_FLIGHT],
 
@@ -96,8 +95,7 @@ impl Renderer {
             should_recreate: false,
             width: size.width,
             height: size.height,
-
-            wireframe_mode: false,
+            renderer_state: Default::default(),
 
             command_pool,
             command_buffers,
@@ -115,6 +113,10 @@ impl Renderer {
         })
     }
 
+    pub fn toggle_wireframe(&mut self){
+        self.renderer_state.wireframe_mode = !self.renderer_state.wireframe_mode;
+    }
+
     /// Run the built-in debug UI.
     pub fn run_debug_ui(&mut self, window: &Window, frame_time_ms: f64) {
         let wireframe_available = self.context.features().fill_mode_non_solid;
@@ -128,14 +130,26 @@ impl Renderer {
 
                 ui.add_enabled(
                     wireframe_available,
-                    egui::Checkbox::new(&mut self.wireframe_mode, "Wireframe mode (F3)"),
+                    egui::Checkbox::new(
+                        &mut self.renderer_state.wireframe_mode,
+                        "Wireframe mode (F3)",
+                    ),
+                );
+
+                ui.add_enabled(
+                    wireframe_available,
+                    egui::Checkbox::new(
+                        &mut self.renderer_state.render_aabbs,
+                        "Wireframe mode (F3)",
+                    ),
                 );
             });
         });
     }
 
     pub fn update_world(&mut self, update: WorldUpdate, frame_index: usize) {
-        self.world.update(&self.context, frame_index, self.camera.position, update);
+        self.world
+            .update(&self.context, frame_index, self.camera.position, update);
     }
 
     pub fn update(&mut self, dt: Duration) {
@@ -158,20 +172,6 @@ impl Renderer {
 
     pub fn handle_mouse(&mut self, dx: f64, dy: f64) {
         self.camera_controller.handle_mouse(dx, dy);
-    }
-
-    pub fn toggle_wireframe(&mut self) {
-        // For now, always allow toggling - the world renderer will handle whether
-        // wireframe is available
-        self.wireframe_mode = !self.wireframe_mode;
-    }
-
-    pub fn set_wireframe(&mut self, enabled: bool) {
-        self.wireframe_mode = enabled;
-    }
-
-    pub fn is_wireframe(&self) -> bool {
-        self.wireframe_mode
     }
 
     pub fn draw_frame(&mut self, cmd_rx: &Receiver<WorldUpdate>) {
@@ -211,9 +211,9 @@ impl Renderer {
             image_index,
             self.swapchain.extent,
             self.projection.calc_proj() * self.camera.calc_view(),
-            self.wireframe_mode,
             self.camera.position,
             frame,
+            self.renderer_state,
         );
 
         if let Err(e) = self.render_egui(cmd, image_index, frame) {
