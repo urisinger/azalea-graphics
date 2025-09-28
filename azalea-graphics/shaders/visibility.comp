@@ -139,7 +139,7 @@ void main()
     int levels = textureQueryLevels(hizPyramid);
     bool occluded = false;
 
-    for (int level = 0; level >= 0; --level) {
+    for (int level = levels - 1; level >= 0; --level) {
         ivec2 texSize = textureSize(hizPyramid, level);
 
         vec2 minPixF = minUV * vec2(texSize);
