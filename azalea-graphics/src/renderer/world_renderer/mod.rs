@@ -52,7 +52,7 @@ pub struct WorldRenderer {
     pub mesher: Option<Mesher>,
 
     animation_manager: AnimationManager,
-    pub mesh_store: MeshStore,
+    mesh_store: MeshStore,
 
     hiz_compute: hiz::HiZCompute,
     visibility_compute: VisibilityCompute,
@@ -67,25 +67,25 @@ pub struct WorldRenderer {
     assets: Arc<Assets>,
 }
 
-pub struct WorldRendererOptions {
-    pub wireframe_enabled: bool,
+pub struct WorldRendererFeatures {
+    pub fill_mode_non_solid: bool,
 }
 
-impl Default for WorldRendererOptions {
+impl Default for WorldRendererFeatures {
     fn default() -> Self {
         Self {
-            wireframe_enabled: false,
+            fill_mode_non_solid: false,
         }
     }
 }
 
 #[derive(Clone, Copy)]
-pub struct WorldRendererState {
+pub struct WorldRendererConfig {
     pub wireframe_mode: bool,
     pub render_aabbs: bool,
 }
 
-impl Default for WorldRendererState {
+impl Default for WorldRendererConfig {
     fn default() -> Self {
         Self {
             wireframe_mode: false,
@@ -99,7 +99,7 @@ impl WorldRenderer {
         assets: Arc<Assets>,
         ctx: &VkContext,
         swapchain: &Swapchain,
-        options: WorldRendererOptions,
+        options: WorldRendererFeatures,
     ) -> Self {
         let atlas_image = animation::create_initial_atlas(&assets.block_atlas, &assets.textures);
         let blocks_texture = Texture::new(ctx, atlas_image);
@@ -117,7 +117,7 @@ impl WorldRenderer {
             WATER_VERT,
             WATER_FRAG,
             PipelineOptions {
-                wireframe_enabled: options.wireframe_enabled,
+                wireframe_enabled: options.fill_mode_non_solid,
             },
         );
 
@@ -215,7 +215,7 @@ impl WorldRenderer {
         view_proj: glam::Mat4,
         camera_pos: glam::Vec3,
         frame_index: usize,
-        state: WorldRendererState,
+        state: WorldRendererConfig,
     ) {
         ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
 

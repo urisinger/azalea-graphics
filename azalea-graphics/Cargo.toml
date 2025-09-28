@@ -41,5 +41,4 @@ env_logger = "0.11"
 anyhow = "1"
 
 [build-dependencies]
-shaderc = "0.8"
-
+cargo-gpu = {git = "https://github.com/rust-gpu/cargo-gpu", rev = "9561c1641a8cdd8fb59b65dde1c3d150337b7d11"}

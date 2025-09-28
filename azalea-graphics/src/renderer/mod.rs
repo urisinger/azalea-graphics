@@ -19,9 +19,9 @@ use winit::{
 use self::{
     camera::{Camera, CameraController, Projection},
     ui::EguiVulkan,
-    world_renderer::{WorldRenderer, WorldRendererOptions},
+    world_renderer::{WorldRenderer, WorldRendererFeatures},
 };
-use crate::{app::WorldUpdate, renderer::world_renderer::WorldRendererState};
+use crate::{app::WorldUpdate, renderer::world_renderer::WorldRendererConfig};
 
 mod camera;
 pub(crate) mod chunk;
@@ -39,7 +39,7 @@ pub struct Renderer {
     width: u32,
     height: u32,
 
-    renderer_state: WorldRendererState,
+    renderer_state: WorldRendererConfig,
     command_pool: vk::CommandPool,
     command_buffers: [vk::CommandBuffer; MAX_FRAMES_IN_FLIGHT],
 
@@ -69,13 +69,11 @@ impl Renderer {
 
         let assets = assets::load_assets(&context, "assets/minecraft");
 
-        let wireframe_enabled = context.features().fill_mode_non_solid;
-
-        let world = WorldRenderer::new(
+       let world = WorldRenderer::new(
             Arc::new(assets),
             &context,
             &swapchain,
-            WorldRendererOptions { wireframe_enabled },
+            WorldRendererFeatures { fill_mode_non_solid: context.features().fill_mode_non_solid },
         );
 
         let command_pool = create_command_pool(&context);

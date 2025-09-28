@@ -16,7 +16,8 @@ members = [
     "azalea-protocol",
     "azalea-registry",
     "azalea-world",
-    "azalea-graphics"
+    "azalea-graphics",
+    "azalea-graphics/shaders"
 ]
 resolver = "2"
 
