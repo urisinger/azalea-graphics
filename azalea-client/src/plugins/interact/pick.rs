@@ -1,5 +1,5 @@
 use azalea_core::{
-    aabb::AABB,
+    aabb::Aabb,
     direction::Direction,
     hit_result::{BlockHitResult, EntityHitResult, HitResult},
     position::Vec3,
@@ -7,12 +7,15 @@ use azalea_core::{
 use azalea_entity::{
     Attributes, Dead, LocalEntity, LookDirection, Physics, Position,
     dimensions::EntityDimensions,
-    metadata::{ArmorStandMarker, Marker},
+    metadata::{
+        AbstractArrow, AbstractBoat, AbstractLiving, AbstractMinecart, ArmorStand,
+        ArmorStandMarker, EndCrystal, FallingBlock, InGround, Interaction, ShulkerBullet, Tnt,
+    },
     view_vector,
 };
 use azalea_physics::{
     clip::{BlockShapeType, ClipContext, FluidPickType},
-    collision::entity_collisions::{PhysicsQuery, get_entities},
+    collision::entity_collisions::{AabbQuery, get_entities},
 };
 use azalea_world::{Instance, InstanceContainer, InstanceName};
 use bevy_ecs::prelude::*;
@@ -41,8 +44,8 @@ pub fn update_hit_result_component(
         With<LocalEntity>,
     >,
     instance_container: Res<InstanceContainer>,
-    physics_query: PhysicsQuery,
-    pickable_query: PickableEntityQuery,
+    aabb_query: AabbQuery,
+    pickable_query: MaybePickableEntityQuery,
 ) {
     for (
         entity,
@@ -73,7 +76,7 @@ pub fn update_hit_result_component(
             world: &world,
             entity_pick_range,
             block_pick_range,
-            physics_query: &physics_query,
+            aabb_query: &aabb_query,
             pickable_query: &pickable_query,
         });
         if let Some(mut hit_result_ref) = hit_result_ref {
@@ -86,23 +89,39 @@ pub fn update_hit_result_component(
     }
 }
 
-pub type PickableEntityQuery<'world, 'state, 'a> = Query<
+pub type MaybePickableEntityQuery<'world, 'state, 'a> = Query<
     'world,
     'state,
-    Option<&'a ArmorStandMarker>,
-    (Without<Dead>, Without<Marker>, Without<LocalEntity>),
+    (Option<&'a ArmorStandMarker>, Option<&'a InGround>),
+    // search "isPickable" in the decompiled minecraft code
+    (
+        Or<(
+            // TODO: ender dragon parts are pickable but the ender dragon itself isn't. this needs
+            // more investigation.
+            (With<Tnt>, Without<Dead>),
+            (With<FallingBlock>, Without<Dead>),
+            (With<AbstractMinecart>, Without<Dead>),
+            (With<AbstractBoat>, Without<Dead>),
+            With<ArmorStand>,
+            With<EndCrystal>,
+            With<Interaction>,
+            With<ShulkerBullet>,
+            (With<AbstractLiving>, Without<Dead>),
+            With<AbstractArrow>,
+        )>,
+    ),
 >;
 
 pub struct PickOpts<'world, 'state, 'a, 'b, 'c> {
     source_entity: Entity,
     look_direction: LookDirection,
     eye_position: Vec3,
-    aabb: &'a AABB,
+    aabb: &'a Aabb,
     world: &'a Instance,
     entity_pick_range: f64,
     block_pick_range: f64,
-    physics_query: &'a PhysicsQuery<'world, 'state, 'b>,
-    pickable_query: &'a PickableEntityQuery<'world, 'state, 'c>,
+    aabb_query: &'a AabbQuery<'world, 'state, 'b>,
+    pickable_query: &'a MaybePickableEntityQuery<'world, 'state, 'c>,
 }
 
 /// Get the block or entity that a player would be looking at if their eyes were
@@ -143,18 +162,17 @@ pub fn pick(opts: PickOpts<'_, '_, '_, '_, '_>) -> HitResult {
         .inflate_all(inflate_by);
 
     let is_pickable = |entity: Entity| {
-        // TODO: ender dragon and projectiles have extra logic here. also, we shouldn't
-        // be able to pick spectators.
-        if let Ok(armor_stand_marker) = opts.pickable_query.get(entity) {
-            if let Some(armor_stand_marker) = armor_stand_marker
-                && armor_stand_marker.0
-            {
-                false
-            } else {
-                true
-            }
+        if entity == opts.source_entity {
+            return false;
+        }
+
+        // TODO: ender dragon has extra logic here. also, we shouldn't be able to pick
+        // spectators.
+        if let Ok((armor_stand_marker, arrow_in_ground)) = opts.pickable_query.get(entity) {
+            !(armor_stand_marker == Some(&ArmorStandMarker(true))
+                || arrow_in_ground == Some(&InGround(true)))
         } else {
-            true
+            false
         }
     };
     let entity_hit_result = pick_entity(PickEntityOpts {
@@ -165,7 +183,7 @@ pub fn pick(opts: PickOpts<'_, '_, '_, '_, '_>) -> HitResult {
         pick_range_squared: max_range_squared,
         predicate: &is_pickable,
         aabb: &pick_aabb,
-        physics_query: opts.physics_query,
+        aabb_query: opts.aabb_query,
     });
 
     if let Some(entity_hit_result) = entity_hit_result
@@ -201,6 +219,8 @@ fn filter_hit_result(hit_result: HitResult, eye_position: Vec3, range: f64) -> H
 /// Get the block that a player would be looking at if their eyes were at the
 /// given direction and position.
 ///
+/// This does not consider entities.
+///
 /// Also see [`pick`].
 pub fn pick_block(
     look_direction: LookDirection,
@@ -229,8 +249,8 @@ struct PickEntityOpts<'world, 'state, 'a, 'b> {
     world: &'a azalea_world::Instance,
     pick_range_squared: f64,
     predicate: &'a dyn Fn(Entity) -> bool,
-    aabb: &'a AABB,
-    physics_query: &'a PhysicsQuery<'world, 'state, 'b>,
+    aabb: &'a Aabb,
+    aabb_query: &'a AabbQuery<'world, 'state, 'b>,
 }
 
 // port of getEntityHitResult
@@ -243,7 +263,7 @@ fn pick_entity(opts: PickEntityOpts) -> Option<EntityHitResult> {
         Some(opts.source_entity),
         opts.aabb,
         opts.predicate,
-        opts.physics_query,
+        opts.aabb_query,
     ) {
         // TODO: if the entity is "REDIRECTABLE_PROJECTILE" then this should be 1.0.
         // azalea needs support for entity tags first for this to be possible. see

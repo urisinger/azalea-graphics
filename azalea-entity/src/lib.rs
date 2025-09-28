@@ -21,7 +21,7 @@ pub use attributes::Attributes;
 use azalea_block::{BlockState, fluid_state::FluidKind};
 use azalea_buf::AzBuf;
 use azalea_core::{
-    aabb::AABB,
+    aabb::Aabb,
     math,
     position::{BlockPos, ChunkPos, Vec3},
     resource_location::ResourceLocation,
@@ -127,7 +127,7 @@ pub fn on_pos(offset: f32, chunk_storage: &ChunkStorage, pos: Position) -> Block
 
 /// The Minecraft UUID of the entity. For players, this is their actual player
 /// UUID, and for other entities it's just random.
-#[derive(Component, Deref, DerefMut, Clone, Copy, Default)]
+#[derive(Component, Deref, DerefMut, Clone, Copy, Default, PartialEq)]
 pub struct EntityUuid(Uuid);
 impl EntityUuid {
     pub fn new(uuid: Uuid) -> Self {
@@ -355,7 +355,7 @@ pub struct Physics {
 
     /// The bounding box of the entity. This is more than just width and height,
     /// unlike dimensions.
-    pub bounding_box: AABB,
+    pub bounding_box: Aabb,
 
     pub has_impulse: bool,
 

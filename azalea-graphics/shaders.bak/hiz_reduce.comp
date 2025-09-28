@@ -1,0 +1,31 @@
+
+#version 450
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout (set = 0, binding = 0) uniform sampler2D uSrc;
+layout (set = 0, binding = 1, r32f) writeonly uniform image2D uDst;
+
+float combine(float a, float b) { return max(a, b); }
+
+void main() {
+    ivec2 outSize = imageSize(uDst);
+    ivec2 o = ivec2(gl_GlobalInvocationID.xy);
+    if (o.x >= outSize.x || o.y >= outSize.y) return;
+
+    ivec2 srcSize = textureSize(uSrc, 0);
+    ivec2 base = o * 2;
+
+    ivec2 p00 = clamp(base + ivec2(0,0), ivec2(0), srcSize - ivec2(1));
+    ivec2 p10 = clamp(base + ivec2(1,0), ivec2(0), srcSize - ivec2(1));
+    ivec2 p01 = clamp(base + ivec2(0,1), ivec2(0), srcSize - ivec2(1));
+    ivec2 p11 = clamp(base + ivec2(1,1), ivec2(0), srcSize - ivec2(1));
+
+    float d0 = texelFetch(uSrc, p00, 0).r;
+    float d1 = texelFetch(uSrc, p10, 0).r;
+    float d2 = texelFetch(uSrc, p01, 0).r;
+    float d3 = texelFetch(uSrc, p11, 0).r;
+
+    float d = combine( combine(d0, d1), combine(d2, d3) );
+    imageStore(uDst, o, vec4(d, 0.0, 0.0, 0.0));
+}
+
