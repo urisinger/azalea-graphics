@@ -83,7 +83,7 @@ impl Renderer {
 
         let sync = FrameSync::new(context.device(), swapchain.images.len());
 
-        let camera = Camera::new(glam::vec3(0.0, 150.0, 2.0), 0.0, 0.0);
+        let camera = Camera::new(glam::vec3(0.0, 250.0, 2.0), 0.0, 90.0);
         let projection = Projection::new(size.width, size.height, 90.0, 0.1, 10000.0);
         let camera_controller = CameraController::new(4.0, 1.0);
 
@@ -113,8 +113,12 @@ impl Renderer {
         })
     }
 
-    pub fn toggle_wireframe(&mut self){
+    pub fn toggle_wireframe(&mut self) {
         self.renderer_state.wireframe_mode = !self.renderer_state.wireframe_mode;
+    }
+
+    pub fn toggle_aabbs(&mut self) {
+        self.renderer_state.render_aabbs = !self.renderer_state.render_aabbs;
     }
 
     /// Run the built-in debug UI.
@@ -138,18 +142,15 @@ impl Renderer {
 
                 ui.add_enabled(
                     wireframe_available,
-                    egui::Checkbox::new(
-                        &mut self.renderer_state.render_aabbs,
-                        "Wireframe mode (F3)",
-                    ),
+                    egui::Checkbox::new(&mut self.renderer_state.render_aabbs, "Render aabbs (F2)"),
                 );
             });
         });
     }
 
-    pub fn update_world(&mut self, update: WorldUpdate, frame_index: usize) {
+    pub fn update_world(&mut self, update: WorldUpdate) {
         self.world
-            .update(&self.context, frame_index, self.camera.position, update);
+            .update(&self.context, update);
     }
 
     pub fn update(&mut self, dt: Duration) {
@@ -175,14 +176,14 @@ impl Renderer {
     }
 
     pub fn draw_frame(&mut self, cmd_rx: &Receiver<WorldUpdate>) {
+        while let Ok(spos) = cmd_rx.try_recv() {
+            self.update_world(spos);
+        }
         let device = self.context.device();
         let frame = self.sync.next_frame();
 
         self.sync.wait_for_fence(device, frame);
-
-        while let Ok(spos) = cmd_rx.try_recv() {
-            self.update_world(spos, frame);
-        }
+        self.world.update_visibility(&self.context, frame, self.camera.position);
 
         let device = self.context.device();
 

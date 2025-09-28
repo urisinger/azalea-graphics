@@ -100,13 +100,11 @@ void main()
         vec3(bmax.x, bmax.y, bmax.z)
     );
 
-    // Step 1: Frustum cull
     if (aabbOutsideFrustum(corners, pc.viewProj)) {
         visible[index] = 0u;
         return;
     }
 
-    // Step 2: Project to screen space
     vec2 minUV = vec2( 1.0);
     vec2 maxUV = vec2( 0.0);
     float nearDepth = 1.0;
@@ -125,7 +123,7 @@ void main()
     }
 
     if (!anyValid) {
-        visible[index] = 1u; // skip occlusion if fully behind camera
+        visible[index] = 1u;
         return;
     }
 
@@ -141,7 +139,7 @@ void main()
     int levels = textureQueryLevels(hizPyramid);
     bool occluded = false;
 
-    for (int level = levels - 1; level >= 0; --level) {
+    for (int level = 0; level >= 0; --level) {
         ivec2 texSize = textureSize(hizPyramid, level);
 
         vec2 minPixF = minUV * vec2(texSize);

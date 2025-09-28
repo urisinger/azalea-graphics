@@ -1,6 +1,6 @@
-use std::{array::from_fn, sync::Arc};
-
+use std::array::from_fn;
 use ash::vk;
+use azalea::core::position::ChunkSectionPos;
 
 use crate::renderer::vulkan::{
     buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT,
@@ -10,6 +10,12 @@ pub struct VisibilitySnapshot {
     pub radius: i32,
     pub height: i32,
     pub data: Vec<u32>,
+
+    pub cx: i32,
+    pub cz: i32,
+    pub cy: i32,
+    pub min_y: i32,
+
 }
 
 impl VisibilitySnapshot {
@@ -25,7 +31,6 @@ impl VisibilitySnapshot {
             return None;
         }
 
-
         let x = (dx + self.radius) as usize;
         let z = (dz + self.radius) as usize;
         let y = dy as usize;
@@ -35,17 +40,15 @@ impl VisibilitySnapshot {
 
     pub fn is_visible(&self, dx: i32, dy: i32, dz: i32) -> bool {
         self.index(dx, dy, dz)
-            .map(|i| {
-                if self.data[i] != 0 {
-                   true 
-                } else {
-                    false
-                }
-            })
-            .unwrap_or_else(|| {
-                println!("{dx} {dy} {dz}");
-                false
-            })
+            .map(|i| self.data[i] != 0)
+            .unwrap_or(false)
+    }
+
+    pub fn section_is_visible(&self, spos: ChunkSectionPos) -> bool {
+        let dx = spos.x - self.cx;
+        let dy = spos.y - (self.min_y / 16);
+        let dz = spos.z - self.cz;
+        self.is_visible(dx, dy, dz)
     }
 }
 
@@ -56,8 +59,6 @@ pub struct VisibilityBuffers {
     pub height: i32,
     pub entry_count: usize,
     pub byte_size: vk::DeviceSize,
-
-    cached: [Option<Arc<VisibilitySnapshot>>; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl VisibilityBuffers {
@@ -95,7 +96,6 @@ impl VisibilityBuffers {
             height,
             entry_count,
             byte_size,
-            cached: Default::default(),
         }
     }
 
@@ -132,18 +132,21 @@ impl VisibilityBuffers {
         self.height = height;
         self.entry_count = entry_count;
         self.byte_size = byte_size;
-        self.invalidate_all();
     }
 
     pub fn copy_to_readback(&self, ctx: &VkContext, cmd: vk::CommandBuffer, frame_idx: usize) {
         self.outputs[frame_idx].copy_to(ctx, &self.readbacks[frame_idx], cmd);
     }
 
-    pub fn snapshot(&mut self, ctx: &VkContext, frame_idx: usize) -> Arc<VisibilitySnapshot> {
-        if let Some(cached) = &self.cached[frame_idx] {
-            return Arc::clone(cached);
-        }
-
+    pub fn snapshot(
+        &mut self,
+        ctx: &VkContext,
+        frame_idx: usize,
+        cx: i32,
+        cy: i32,
+        cz: i32,
+        min_y: i32,
+    ) -> VisibilitySnapshot {
         let allocator = ctx.allocator();
         let mut data = vec![0u32; self.entry_count];
         unsafe {
@@ -153,22 +156,14 @@ impl VisibilityBuffers {
             std::ptr::copy_nonoverlapping(ptr as *const u32, data.as_mut_ptr(), self.entry_count);
             allocator.unmap_memory(&mut self.readbacks[frame_idx].allocation);
         }
-        let snap = Arc::new(VisibilitySnapshot {
+        VisibilitySnapshot {
             radius: self.radius,
             height: self.height,
             data,
-        });
-        self.cached[frame_idx] = Some(Arc::clone(&snap));
-        snap
-    }
-
-    pub fn invalidate(&mut self, frame_idx: usize) {
-        self.cached[frame_idx] = None;
-    }
-
-    pub fn invalidate_all(&mut self) {
-        for i in 0..MAX_FRAMES_IN_FLIGHT {
-            self.cached[i] = None;
+            cx,
+            cy,
+            cz,
+            min_y,
         }
     }
 
@@ -179,6 +174,5 @@ impl VisibilityBuffers {
         for b in &mut self.readbacks {
             b.destroy(ctx);
         }
-        self.invalidate_all();
     }
 }

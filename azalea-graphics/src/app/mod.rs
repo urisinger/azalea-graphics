@@ -167,6 +167,9 @@ impl ApplicationHandler for App {
                                 KeyCode::F3 => {
                                     renderer.toggle_wireframe();
                                 }
+                                KeyCode::F2 => {
+                                    renderer.toggle_aabbs();
+                                }
                                 _ => {}
                             }
                         }

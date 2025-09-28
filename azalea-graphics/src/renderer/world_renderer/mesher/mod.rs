@@ -1,4 +1,10 @@
-use std::{collections::HashSet, io::Cursor, sync::Arc, thread};
+use std::{
+    cmp::{Ordering, Reverse},
+    collections::{BinaryHeap, HashSet},
+    io::Cursor,
+    sync::Arc,
+    thread,
+};
 
 use azalea::{
     blocks::BlockState,
@@ -20,6 +26,7 @@ use crate::renderer::{
     world_renderer::{
         BlockVertex,
         mesher::{block::mesh_block, water::mesh_water},
+        visibility::buffers::VisibilitySnapshot,
     },
 };
 
@@ -38,46 +45,150 @@ pub struct Mesher {
     work_tx: Sender<ChunkSectionPos>,
     result_rx: Receiver<MeshResult>,
 
+    visibility_tx: Sender<VisibilitySnapshot>,
+
     pub world: Arc<RwLock<azalea::world::Instance>>,
     dirty: Arc<Mutex<RawMutex, HashSet<ChunkSectionPos>>>,
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+struct Job {
+    prio: u32,
+    spos: ChunkSectionPos,
+}
+
+impl Ord for Job {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.prio.cmp(&self.prio)
+    }
+}
+
+impl PartialOrd for Job {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> u32 {
+    let dx = (spos.x - vis.cx) as i32;
+    let dy = (spos.y - vis.cy) as i32;
+    let dz = (spos.z - vis.cz) as i32;
+    (dx * dx + dz * dz + dy * dy) as u32
+}
+
 impl Mesher {
-    pub fn new(
-        assets: Arc<Assets>,
-        world: Arc<RwLock<azalea::world::Instance>>,
-        num_threads: usize,
-    ) -> Self {
+    pub fn new(assets: Arc<Assets>, world: Arc<RwLock<azalea::world::Instance>>) -> Self {
         let (work_tx, work_rx) = unbounded::<ChunkSectionPos>();
         let (result_tx, result_rx) = unbounded::<MeshResult>();
+        let (visibility_tx, visibility_rx) = unbounded::<VisibilitySnapshot>();
+
         let dirty = Arc::new(Mutex::new(HashSet::new()));
         let biome_cache = Arc::new(BiomeCache::from_registries(&world.read().registries));
 
-        for id in 0..num_threads {
-            let work_rx = work_rx.clone();
-            let result_tx = result_tx.clone();
-            let assets = assets.clone();
-            let dirty = dirty.clone();
-            let world = world.clone();
-            let biome_cache = biome_cache.clone();
+        let thread_world = Arc::clone(&world);
+        let thread_dirty = Arc::clone(&dirty);
+        let thread_assets = Arc::clone(&assets);
+        let thread_biome_cache = Arc::clone(&biome_cache);
 
-            thread::spawn(move || {
-                while let Ok(spos) = work_rx.recv() {
-                    dirty.lock().remove(&spos);
-                    if let Some(local) = build_local_section(&world, spos) {
-                        let start = std::time::Instant::now();
-                        let mesh = mesh_section(&local, &biome_cache, &assets);
+        std::thread::spawn(move || {
+            use std::collections::{BinaryHeap, HashSet};
+
+            let mut current_visibility: Option<VisibilitySnapshot> = None;
+            let mut queue: BinaryHeap<Job> = BinaryHeap::new();
+            let mut queued: HashSet<ChunkSectionPos> = HashSet::new();
+
+            fn push_job(
+                queue: &mut BinaryHeap<Job>,
+                queued: &mut HashSet<ChunkSectionPos>,
+                vis: Option<&VisibilitySnapshot>,
+                spos: ChunkSectionPos,
+            ) {
+                if !queued.insert(spos) {
+                    return;
+                }
+                let prio = vis.map(|v| prio_for(v, spos)).unwrap_or(u32::MAX);
+                queue.push(Job { prio, spos });
+            }
+
+            loop {
+                while let Some(job) = queue.pop() {
+                    queued.remove(&job.spos);
+
+                    if let Some(vis) = &current_visibility {
+                        if !vis.section_is_visible(job.spos) {
+                            continue;
+                        }
+                    }
+
+                    {
+                        let mut d = thread_dirty.lock();
+                        if !d.remove(&job.spos) {
+                            continue;
+                        }
+                    }
+
+                    if let Some(local) = build_local_section(&thread_world, job.spos) {
+                        let t0 = std::time::Instant::now();
+                        let mesh = mesh_section(&local, &thread_biome_cache, &thread_assets);
                         result_tx.send(mesh).unwrap();
-
-                        let dt = start.elapsed();
+                        log::debug!("Meshed {:?} in {:?}", job.spos, t0.elapsed());
+                    }
+                    if !work_rx.is_empty() || !visibility_rx.is_empty() {
+                        break;
                     }
                 }
-            });
-        }
+
+                crossbeam::channel::select! {
+                    recv(work_rx) -> msg => {
+                        if let Ok(spos) = msg {
+                            match &current_visibility {
+                                Some(vis) => {
+                                    if vis.section_is_visible(spos) {
+                                        push_job(&mut queue, &mut queued, Some(vis), spos);
+                                    }
+                                }
+                                None => {
+                                    push_job(&mut queue, &mut queued, None, spos);
+                                }
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+
+                    recv(visibility_rx) -> msg => {
+                        if let Ok(new_vis) = msg {
+                            if let Some(old_vis) = &current_visibility {
+                                for dy in 0..new_vis.height {
+                                    for dx in -new_vis.radius..=new_vis.radius {
+                                        for dz in -new_vis.radius..=new_vis.radius {
+                                            if new_vis.is_visible(dx,dy,dz) {
+                                                let x = new_vis.cx + dx;
+                                                let y = (new_vis.min_y / 16) + dy;
+                                                let z = new_vis.cz + dz;
+                                                let spos = ChunkSectionPos::new(x,y,z);
+
+                                                if thread_dirty.lock().contains(&spos) {
+                                                    push_job(&mut queue, &mut queued, Some(&new_vis), spos);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            current_visibility = Some(new_vis);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
 
         Self {
             work_tx,
             result_rx,
+            visibility_tx,
             world,
             dirty,
         }
@@ -91,11 +202,24 @@ impl Mesher {
     }
 
     pub fn submit_chunk(&self, pos: ChunkPos) {
-
+        let world = self.world.read();
+        if let Some(chunk) = world.chunks.get(&pos) {
+            let chunk = chunk.read();
+            for (i, section) in chunk.sections.iter().enumerate() {
+                if section.block_count > 0 {
+                    let spos = ChunkSectionPos::new(pos.x, i as i32, pos.z);
+                    self.submit_section(spos);
+                }
+            }
+        }
     }
 
     pub fn poll(&self) -> Option<MeshResult> {
         self.result_rx.try_recv().ok()
+    }
+
+    pub fn update_visibility(&self, snapshot: VisibilitySnapshot) {
+        self.visibility_tx.send(snapshot).unwrap();
     }
 }
 

@@ -85,9 +85,9 @@ pub struct WorldRendererState {
     pub render_aabbs: bool,
 }
 
-impl Default for WorldRendererState{
-    fn default() -> Self{
-        Self{
+impl Default for WorldRendererState {
+    fn default() -> Self {
+        Self {
             wireframe_mode: false,
             render_aabbs: false,
         }
@@ -153,71 +153,30 @@ impl WorldRenderer {
         self.animation_manager.tick(&self.assets.textures);
     }
 
-    pub fn update(
-        &mut self,
-        ctx: &VkContext,
-        frame_index: usize,
-        camera_pos: glam::Vec3,
-        update: WorldUpdate,
-    ) {
+    pub fn update_visibility(&mut self, ctx: &VkContext, frame_index: usize, camera_pos: Vec3) {
+        if let (Some(mesher), Some(vis_bufs)) = (&self.mesher, &mut self.visibility_buffers) {
+            let cx = (camera_pos.x / 16.0).floor() as i32;
+            let cy = (camera_pos.y / 16.0).floor() as i32;
+            let cz = (camera_pos.z / 16.0).floor() as i32;
+            let min_y = self.mesher.as_ref().unwrap().world.read().chunks.min_y;
+            let snapshot = vis_bufs.snapshot(ctx, frame_index, cx, cy, cz, min_y);
+
+            mesher.update_visibility(snapshot);
+        }
+    }
+
+    pub fn update(&mut self, ctx: &VkContext, update: WorldUpdate) {
         match update {
             WorldUpdate::ChunkAdded(chunk_pos) => {
                 if let Some(mesher) = &self.mesher {
-                    if let Some(vis) = &mut self.visibility_buffers {
-                        let world = mesher.world.read();
-                        if let Some(chunk) = world.chunks.get(&chunk_pos) {
-                            let chunk = chunk.clone();
-                            drop(world);
-                            let chunk = chunk.read();
-
-                            for (i, section) in chunk.sections.iter().enumerate() {
-                                if section.block_count > 0 {
-                                    let spos =
-                                        ChunkSectionPos::new(chunk_pos.x, i as i32, chunk_pos.z);
-                                    let snapshot = vis.snapshot(ctx, frame_index);
-
-                                    let sx = spos.x as i32;
-                                    let sy = spos.y as i32;
-                                    let sz = spos.z as i32;
-
-                                    let cx = (camera_pos.x / 16.0).floor() as i32;
-                                    let cz = (camera_pos.z / 16.0).floor() as i32;
-
-                                    let dx = sx - cx;
-                                    let dy = sy - (mesher.world.read().chunks.min_y / 16);
-                                    let dz = sz - cz;
-
-                                    if snapshot.is_visible(dx, dy, dz) {
-                                        mesher.submit_section(spos);
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    mesher.submit_chunk(chunk_pos);
+                    
                 }
             }
             WorldUpdate::SectionChange(spos) => {
                 if let Some(mesher) = &self.mesher {
                     if let Some(vis) = &mut self.visibility_buffers {
-                        let snapshot = vis.snapshot(ctx, frame_index);
-
-                        let sx = spos.x as i32;
-                        let sy = spos.y as i32 - mesher.world.read().chunks.min_y;
-                        let sz = spos.z as i32;
-
-                        // Camera position in chunk coordinates
-                        let cx = (camera_pos.x / 16.0).floor() as i32;
-                        let cy = (camera_pos.y / 16.0).floor() as i32;
-                        let cz = (camera_pos.z / 16.0).floor() as i32;
-
-                        // Calculate relative position from camera chunk
-                        let dx = sx - cx;
-                        let dy = sy - cy;
-                        let dz = sz - cz;
-
-                        if snapshot.is_visible(dx, dy, dz) {
-                            mesher.submit_section(spos);
-                        }
+                        mesher.submit_section(spos);
                     }
                 }
             }
@@ -228,7 +187,6 @@ impl WorldRenderer {
 
                 let world_read = world.read();
                 let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
-                println!("{max_height}, {}", max_height / 16);
                 drop(world_read);
 
                 let vb = VisibilityBuffers::new(ctx, 32, (max_height) / 16);
@@ -238,13 +196,12 @@ impl WorldRenderer {
                         .rewrite_frame_set(ctx.device(), f, &vb.outputs[f]);
                 }
 
-                // Update AABB renderer descriptor sets with the new visibility buffers
                 self.aabb_renderer
                     .recreate_descriptor_sets(ctx.device(), &vb.outputs);
 
                 self.visibility_buffers = Some(vb);
 
-                self.mesher = Some(Mesher::new(self.assets.clone(), world, 5));
+                self.mesher = Some(Mesher::new(self.assets.clone(), world));
             }
         }
     }
@@ -260,12 +217,11 @@ impl WorldRenderer {
         frame_index: usize,
         state: WorldRendererState,
     ) {
-        // Label the main command buffer
         ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
 
-        // Staging and mesh processing
-        ctx.cmd_begin_debug_label(cmd, "Staging & Mesh Processing");
         self.staging.clear_frame(ctx, frame_index);
+
+        ctx.cmd_begin_debug_label(cmd, "Update meshes");
         self.mesh_store.process_mesher_results(
             ctx,
             cmd,
@@ -273,10 +229,13 @@ impl WorldRenderer {
             &self.mesher,
             &mut self.staging,
         );
+
+        ctx.cmd_end_debug_label(cmd);
+
+        ctx.cmd_begin_debug_label(cmd, "Update dirty textures");
         self.upload_dirty_textures(ctx, cmd, frame_index);
         ctx.cmd_end_debug_label(cmd);
 
-        // Main render pass
         ctx.cmd_begin_debug_label(cmd, "Main Render Pass");
         self.render_targets
             .begin(ctx.device(), cmd, image_index, extent);
@@ -292,10 +251,8 @@ impl WorldRenderer {
         let visibility_push_constants = if let Some(vb) = &mut self.visibility_buffers {
             const CHUNK: f32 = 16.0;
 
-            // Center the grid on the camera position
             let cam_chunk_x = (camera_pos.x / CHUNK).floor() as i32;
             let cam_chunk_z = (camera_pos.z / CHUNK).floor() as i32;
-            // Grid corner is camera chunk minus radius to center the grid
             let grid_min_x = (cam_chunk_x) as f32 * CHUNK;
             let grid_min_z = (cam_chunk_z) as f32 * CHUNK;
             let grid_origin_ws = [
@@ -354,7 +311,6 @@ impl WorldRenderer {
                 vb,
                 &visibility_push_constants.unwrap(),
             );
-            vb.invalidate(frame_index);
 
             unsafe {
                 ctx.device().cmd_pipeline_barrier(
@@ -391,7 +347,6 @@ impl WorldRenderer {
         let device = ctx.device();
         let push = PushConstants { view_proj };
 
-        // Draw blocks
         ctx.cmd_begin_debug_label(cmd, "Draw Blocks");
         let current_pipeline = self.pipelines.block_pipeline(wireframe_mode);
 
@@ -446,7 +401,6 @@ impl WorldRenderer {
         }
         ctx.cmd_end_debug_label(cmd);
 
-        // Draw water
         ctx.cmd_begin_debug_label(cmd, "Draw Water");
         let water_pipeline = self.pipelines.water_pipeline(wireframe_mode);
 
