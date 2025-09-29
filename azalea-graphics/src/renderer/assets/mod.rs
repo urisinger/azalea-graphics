@@ -172,7 +172,7 @@ pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
                             states.is_empty()
                                 || states.split(',').all(|state| {
                                     state.split_once('=').map_or(false, |(prop_name, value)| {
-                                        dyn_block.get_property(prop_name) == Some(value.to_string())
+                                        dyn_block.get_property(prop_name) == Some(value)
                                     })
                                 })
                         })

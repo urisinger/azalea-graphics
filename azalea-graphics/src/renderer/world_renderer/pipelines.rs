@@ -1,9 +1,12 @@
-use ash::{vk, Device};
-use crate::renderer::{vulkan::context::VkContext, world_renderer::{types::BlockVertex, types::PushConstants}};
+use ash::{Device, vk};
 
-fn create_shader_module(device: &Device, code: &[u8]) -> vk::ShaderModule {
-    let code_aligned = ash::util::read_spv(&mut std::io::Cursor::new(code)).unwrap();
-    let info = vk::ShaderModuleCreateInfo::default().code(&code_aligned);
+use crate::renderer::{
+    vulkan::context::VkContext,
+    world_renderer::types::{BlockVertex, PushConstants},
+};
+
+fn create_shader_module(device: &Device, code: &[u32]) -> vk::ShaderModule {
+    let info = vk::ShaderModuleCreateInfo::default().code(&code);
     unsafe { device.create_shader_module(&info, None).unwrap() }
 }
 
@@ -21,9 +24,12 @@ pub fn create_world_pipeline_layout(
         .set_layouts(&layouts)
         .push_constant_ranges(std::slice::from_ref(&push_constant_range));
 
-    unsafe { device.create_pipeline_layout(&pipeline_layout_info, None).unwrap() }
+    unsafe {
+        device
+            .create_pipeline_layout(&pipeline_layout_info, None)
+            .unwrap()
+    }
 }
-
 
 pub struct PipelineConfig {
     pub polygon_mode: vk::PolygonMode,
@@ -35,26 +41,25 @@ pub fn create_world_pipeline(
     ctx: &VkContext,
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
-    vert_spv: &[u8],
-    frag_spv: &[u8],
+    module: vk::ShaderModule,
+    vert_entry: &str,
+    frag_entry: &str,
     config: PipelineConfig,
 ) -> vk::Pipeline {
     let device = ctx.device();
 
-    let vert_module = create_shader_module(device, vert_spv);
-    let frag_module = create_shader_module(device, frag_spv);
-
-    let entry_point = std::ffi::CString::new("main").unwrap();
+    let vert_entry = std::ffi::CString::new(vert_entry).unwrap();
+    let frag_entry = std::ffi::CString::new(frag_entry).unwrap();
 
     let shader_stages = [
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
-            .module(vert_module)
-            .name(&entry_point),
+            .module(module)
+            .name(&vert_entry),
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(frag_module)
-            .name(&entry_point),
+            .module(module)
+            .name(&frag_entry),
     ];
 
     let binding_desc = [BlockVertex::binding_description()];
@@ -133,11 +138,6 @@ pub fn create_world_pipeline(
     };
     let pipeline = pipelines[0];
 
-    unsafe {
-        device.destroy_shader_module(vert_module, None);
-        device.destroy_shader_module(frag_module, None);
-    }
-
     pipeline
 }
 
@@ -158,10 +158,7 @@ impl Pipelines {
         ctx: &VkContext,
         render_pass: vk::RenderPass,
         descriptor_set_layout: vk::DescriptorSetLayout,
-        block_vert_spv: &[u8],
-        block_frag_spv: &[u8],
-        water_vert_spv: &[u8],
-        water_frag_spv: &[u8],
+        module: vk::ShaderModule,
         opts: PipelineOptions,
     ) -> Self {
         let layout = create_world_pipeline_layout(ctx.device(), descriptor_set_layout);
@@ -170,54 +167,96 @@ impl Pipelines {
             ctx,
             render_pass,
             layout,
-            block_vert_spv,
-            block_frag_spv,
-            super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::FILL, enable_blend: false, depth_write: true },
+            module,
+            "terrain::block_vert",
+            "terrain::block_frag",
+            PipelineConfig {
+                polygon_mode: vk::PolygonMode::FILL,
+                enable_blend: false,
+                depth_write: true,
+            },
         );
         let block_wire = if opts.wireframe_enabled {
             Some(create_world_pipeline(
                 ctx,
                 render_pass,
                 layout,
-                block_vert_spv,
-                block_frag_spv,
-                super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::LINE, enable_blend: false, depth_write: true },
+                module,
+                "terrain::block_vert",
+                "terrain::block_frag",
+                PipelineConfig {
+                    polygon_mode: vk::PolygonMode::LINE,
+                    enable_blend: false,
+                    depth_write: true,
+                },
             ))
-        } else { None };
+        } else {
+            None
+        };
 
         let water = create_world_pipeline(
             ctx,
             render_pass,
             layout,
-            water_vert_spv,
-            water_frag_spv,
-            super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::FILL, enable_blend: true, depth_write: false },
+            module,
+            "terrain::water_vert",
+            "terrain::water_frag",
+            PipelineConfig {
+                polygon_mode: vk::PolygonMode::FILL,
+                enable_blend: true,
+                depth_write: false,
+            },
         );
         let water_wire = if opts.wireframe_enabled {
             Some(create_world_pipeline(
                 ctx,
                 render_pass,
                 layout,
-                water_vert_spv,
-                water_frag_spv,
-                super::pipelines::PipelineConfig { polygon_mode: vk::PolygonMode::LINE, enable_blend: true, depth_write: false },
+                module,
+                "terrain::water_vert",
+                "terrain::water_frag",
+                super::pipelines::PipelineConfig {
+                    polygon_mode: vk::PolygonMode::LINE,
+                    enable_blend: true,
+                    depth_write: false,
+                },
             ))
-        } else { None };
+        } else {
+            None
+        };
 
-        Self { layout, block, block_wire, water, water_wire }
+        Self {
+            layout,
+            block,
+            block_wire,
+            water,
+            water_wire,
+        }
     }
 
     pub fn block_pipeline(&self, wireframe_mode: bool) -> vk::Pipeline {
-        if wireframe_mode { self.block_wire.unwrap_or(self.block) } else { self.block }
+        if wireframe_mode {
+            self.block_wire.unwrap_or(self.block)
+        } else {
+            self.block
+        }
     }
     pub fn water_pipeline(&self, wireframe_mode: bool) -> vk::Pipeline {
-        if wireframe_mode { self.water_wire.unwrap_or(self.water) } else { self.water }
+        if wireframe_mode {
+            self.water_wire.unwrap_or(self.water)
+        } else {
+            self.water
+        }
     }
 
     pub fn destroy(&mut self, device: &Device) {
         unsafe {
-            if let Some(p) = self.block_wire.take() { device.destroy_pipeline(p, None); }
-            if let Some(p) = self.water_wire.take() { device.destroy_pipeline(p, None); }
+            if let Some(p) = self.block_wire.take() {
+                device.destroy_pipeline(p, None);
+            }
+            if let Some(p) = self.water_wire.take() {
+                device.destroy_pipeline(p, None);
+            }
             device.destroy_pipeline(self.block, None);
             device.destroy_pipeline(self.water, None);
             device.destroy_pipeline_layout(self.layout, None);

@@ -24,9 +24,6 @@ pub struct HiZCompute {
     pub depth_sampler: vk::Sampler,
 }
 
-const HIZ_COPY_COMP: &[u8] = include_bytes!(env!("HIZ_COPY_COMP"));
-const HIZ_REDUCE_COMP: &[u8] = include_bytes!(env!("HIZ_REDUCE_COMP"));
-
 impl HiZPyramid {
     pub fn new(ctx: &VkContext, width: u32, height: u32) -> Self {
         let max_dim = width.max(height).max(1);
@@ -132,7 +129,12 @@ impl HiZPyramid {
 }
 
 impl HiZCompute {
-    pub fn new(ctx: &VkContext, pyramids: &[HiZPyramid], depth_images: &[AllocatedImage]) -> Self {
+    pub fn new(
+        ctx: &VkContext,
+        module: vk::ShaderModule,
+        pyramids: &[HiZPyramid],
+        depth_images: &[AllocatedImage],
+    ) -> Self {
         assert!(!pyramids.is_empty(), "need at least one HiZPyramid");
         assert_eq!(
             pyramids.len(),
@@ -146,7 +148,7 @@ impl HiZCompute {
         let bindings = [
             vk::DescriptorSetLayoutBinding::default()
                 .binding(0)
-                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
             vk::DescriptorSetLayoutBinding::default()
@@ -168,8 +170,8 @@ impl HiZCompute {
             ctx.device().create_pipeline_layout(&pli, None).unwrap()
         };
 
-        let copy_pipeline = create_compute_pipeline(ctx, HIZ_COPY_COMP, pipeline_layout);
-        let reduce_pipeline = create_compute_pipeline(ctx, HIZ_REDUCE_COMP, pipeline_layout);
+        let copy_pipeline = create_compute_pipeline(ctx, module, "visibility::hiz_copy", pipeline_layout);
+        let reduce_pipeline = create_compute_pipeline(ctx, module, "visibility::hiz_reduce", pipeline_layout);
 
         let (pool, sets) = Self::alloc_sets(ctx, layout, frames, mip_levels);
 
@@ -499,14 +501,12 @@ impl HiZCompute {
 
 fn create_compute_pipeline(
     ctx: &VkContext,
-    spirv: &[u8],
+    module: vk::ShaderModule,
+    entry: &str,
     pipeline_layout: vk::PipelineLayout,
 ) -> vk::Pipeline {
     unsafe {
-        let code = ash::util::read_spv(&mut std::io::Cursor::new(spirv)).unwrap();
-        let sm_info = vk::ShaderModuleCreateInfo::default().code(&code);
-        let module = ctx.device().create_shader_module(&sm_info, None).unwrap();
-        let entry = std::ffi::CString::new("main").unwrap();
+        let entry = std::ffi::CString::new(entry).unwrap();
         let stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(module)
@@ -518,7 +518,6 @@ fn create_compute_pipeline(
             .device()
             .create_compute_pipelines(vk::PipelineCache::null(), std::slice::from_ref(&ci), None)
             .unwrap()[0];
-        ctx.device().destroy_shader_module(module, None);
         pipeline
     }
 }

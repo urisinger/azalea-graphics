@@ -1,6 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::{io::Cursor, sync::Arc, time::Duration};
 
-use ash::vk::{self};
+use ash::{
+    util::read_spv,
+    vk::{self, ShaderModuleCreateInfo},
+};
 use crossbeam::channel::Receiver;
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vulkan::{
@@ -69,11 +72,22 @@ impl Renderer {
 
         let assets = assets::load_assets(&context, "assets/minecraft");
 
-       let world = WorldRenderer::new(
+        let spirv = read_spv(&mut Cursor::new(include_bytes!(env!("SHADERS")))).unwrap();
+        let module = unsafe {
+            context
+                .device()
+                .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&spirv), None)
+                .unwrap()
+        };
+
+        let world = WorldRenderer::new(
             Arc::new(assets),
             &context,
+            module,
             &swapchain,
-            WorldRendererFeatures { fill_mode_non_solid: context.features().fill_mode_non_solid },
+            WorldRendererFeatures {
+                fill_mode_non_solid: context.features().fill_mode_non_solid,
+            },
         );
 
         let command_pool = create_command_pool(&context);
@@ -85,7 +99,7 @@ impl Renderer {
         let projection = Projection::new(size.width, size.height, 90.0, 0.1, 10000.0);
         let camera_controller = CameraController::new(4.0, 1.0);
 
-        let egui = EguiVulkan::new(event_loop, &context, &swapchain, None)?;
+        let egui = EguiVulkan::new(event_loop, &context, module, &swapchain, None)?;
 
         Ok(Self {
             context,
@@ -147,8 +161,7 @@ impl Renderer {
     }
 
     pub fn update_world(&mut self, update: WorldUpdate) {
-        self.world
-            .update(&self.context, update);
+        self.world.update(&self.context, update);
     }
 
     pub fn update(&mut self, dt: Duration) {
@@ -181,7 +194,8 @@ impl Renderer {
         let frame = self.sync.next_frame();
 
         self.sync.wait_for_fence(device, frame);
-        self.world.update_visibility(&self.context, frame, self.camera.position);
+        self.world
+            .update_visibility(&self.context, frame, self.camera.position);
 
         let device = self.context.device();
 

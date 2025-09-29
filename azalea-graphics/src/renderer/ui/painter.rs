@@ -77,7 +77,7 @@ pub struct Painter {
 
 impl Painter {
     /// Create a new Vulkan egui painter.
-    pub fn new(ctx: &VkContext, swapchain: &Swapchain) -> anyhow::Result<Self> {
+    pub fn new(ctx: &VkContext, module: vk::ShaderModule, swapchain: &Swapchain) -> anyhow::Result<Self> {
         let device = ctx.device();
 
         let render_pass = create_egui_render_pass(ctx, swapchain.format);
@@ -129,7 +129,7 @@ impl Painter {
                 .map_err(|e| anyhow::anyhow!("Failed to create pipeline layout: {:?}", e))?
         };
 
-        let pipeline = create_egui_pipeline(device, render_pass, pipeline_layout)?;
+        let pipeline = create_egui_pipeline(device, module, render_pass, pipeline_layout)?;
 
         Ok(Self {
             render_pass,

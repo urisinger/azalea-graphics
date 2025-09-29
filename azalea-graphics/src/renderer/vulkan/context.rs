@@ -207,7 +207,6 @@ impl VkContext {
         }
     }
 
-
     pub fn begin_one_time_commands(&self) -> vk::CommandBuffer {
         let alloc_info = vk::CommandBufferAllocateInfo::default()
             .command_pool(self.command_pool)
@@ -356,6 +355,9 @@ impl VkContext {
             fill_mode_non_solid,
         };
 
+        let mut vulkan_memory_model_features =
+            vk::PhysicalDeviceVulkanMemoryModelFeatures::default().vulkan_memory_model(true);
+
         let mut enabled_features = vk::PhysicalDeviceFeatures::default();
         if fill_mode_non_solid {
             enabled_features.fill_mode_non_solid = vk::TRUE;
@@ -364,6 +366,7 @@ impl VkContext {
         let extensions = [khr_swapchain::NAME.as_ptr()];
 
         let create_info = vk::DeviceCreateInfo::default()
+            .push_next(&mut vulkan_memory_model_features)
             .queue_create_infos(&queue_infos)
             .enabled_extension_names(&extensions)
             .enabled_features(&enabled_features);

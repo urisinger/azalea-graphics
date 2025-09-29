@@ -1,3 +1,5 @@
+use std::ffi::CString;
+
 use ash::{vk, Device};
 
 fn create_shader_module(device: &Device, code: &[u8]) -> vk::ShaderModule {
@@ -8,6 +10,7 @@ fn create_shader_module(device: &Device, code: &[u8]) -> vk::ShaderModule {
 
 pub fn create_egui_pipeline(
     device: &Device,
+    module: vk::ShaderModule,
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
 ) -> anyhow::Result<vk::Pipeline> {
@@ -81,23 +84,19 @@ pub fn create_egui_pipeline(
     let dynamic_state_info =
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-    // Load egui shaders
-    let vert_spv = include_bytes!(env!("EGUI_VERT"));
-    let frag_spv = include_bytes!(env!("EGUI_FRAG"));
 
-    let vert_module = create_shader_module(device, vert_spv);
-    let frag_module = create_shader_module(device, frag_spv);
+    let vert_entry = CString::new("ui::egui_vert").unwrap();
+    let frag_entry = CString::new("ui::egui_frag").unwrap();
 
-    let entry_point = std::ffi::CString::new("main").unwrap();
     let shader_stages = [
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::VERTEX)
-            .module(vert_module)
-            .name(&entry_point),
+            .module(module)
+            .name(&vert_entry),
         vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::FRAGMENT)
-            .module(frag_module)
-            .name(&entry_point),
+            .module(module)
+            .name(&frag_entry),
     ];
 
     let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
@@ -118,12 +117,6 @@ pub fn create_egui_pipeline(
             .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
             .map_err(|e| anyhow::anyhow!("Failed to create egui pipeline: {:?}", e))?
     };
-
-    // Clean up shader modules
-    unsafe {
-        device.destroy_shader_module(vert_module, None);
-        device.destroy_shader_module(frag_module, None);
-    }
 
     Ok(pipelines[0])
 }

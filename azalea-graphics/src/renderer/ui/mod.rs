@@ -1,3 +1,4 @@
+use ash::vk;
 use egui::{ViewportId, ViewportOutput};
 use egui_winit::winit;
 pub use egui_winit::{self, EventResponse};
@@ -8,8 +9,8 @@ use crate::renderer::{
 };
 
 mod painter;
-mod pipelines;
 mod passes;
+mod pipelines;
 
 /// Use [`egui`] from a Vulkan app based on [`winit`].
 pub struct EguiVulkan {
@@ -29,10 +30,11 @@ impl EguiVulkan {
     pub fn new(
         event_loop: &winit::event_loop::ActiveEventLoop,
         ctx: &VkContext,
+        module: vk::ShaderModule,
         swapchain: &Swapchain,
         native_pixels_per_point: Option<f32>,
     ) -> anyhow::Result<Self> {
-        let painter = Painter::new(ctx, swapchain)?;
+        let painter = Painter::new(ctx, module, swapchain)?;
 
         let egui_ctx = egui::Context::default();
 
@@ -114,7 +116,8 @@ impl EguiVulkan {
         let mut textures_delta = std::mem::take(&mut self.textures_delta);
 
         for (id, image_delta) in textures_delta.set {
-            self.painter.set_texture(ctx, id, &image_delta, frame_index)?;
+            self.painter
+                .set_texture(ctx, id, &image_delta, frame_index)?;
         }
 
         let pixels_per_point = self.pixels_per_point;

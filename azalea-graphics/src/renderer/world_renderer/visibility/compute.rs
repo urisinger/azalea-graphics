@@ -2,7 +2,9 @@ use ash::{Device, vk};
 
 use crate::renderer::{
     vulkan::{buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT},
-    world_renderer::{hiz::HiZPyramid, types::VisibilityPushConstants, visibility::buffers::VisibilityBuffers},
+    world_renderer::{
+        hiz::HiZPyramid, types::VisibilityPushConstants, visibility::buffers::VisibilityBuffers,
+    },
 };
 
 pub struct VisibilityCompute {
@@ -22,7 +24,13 @@ pub struct VisibilityCompute {
 }
 
 impl VisibilityCompute {
-    pub fn new(ctx: &VkContext, pyramids: &[HiZPyramid], radius: i32, height: i32) -> Self {
+    pub fn new(
+        ctx: &VkContext,
+        module: vk::ShaderModule,
+        pyramids: &[HiZPyramid],
+        radius: i32,
+        height: i32,
+    ) -> Self {
         let d = ctx.device();
         let images = pyramids.len();
 
@@ -53,16 +61,7 @@ impl VisibilityCompute {
             .unwrap()
         };
 
-        // pipeline (push constants = VisibilityPushConstants)
-        let module = unsafe {
-            let code = ash::util::read_spv(&mut std::io::Cursor::new(include_bytes!(env!(
-                "VISIBILITY_COMP"
-            ))))
-            .unwrap();
-            d.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&code), None)
-                .unwrap()
-        };
-        let entry = std::ffi::CString::new("main").unwrap();
+        let entry = std::ffi::CString::new("visibility::compute_visibility").unwrap();
         let stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(module)

@@ -35,12 +35,6 @@ mod staging;
 mod types;
 mod visibility;
 
-const TRIANGLE_VERT: &[u8] = include_bytes!(env!("BLOCK_VERT"));
-const TRIANGLE_FRAG: &[u8] = include_bytes!(env!("BLOCK_FRAG"));
-
-const WATER_VERT: &[u8] = include_bytes!(env!("WATER_VERT"));
-const WATER_FRAG: &[u8] = include_bytes!(env!("WATER_FRAG"));
-
 use descriptors::Descriptors;
 use meshes::MeshStore;
 use pipelines::{PipelineOptions, Pipelines};
@@ -98,6 +92,7 @@ impl WorldRenderer {
     pub fn new(
         assets: Arc<Assets>,
         ctx: &VkContext,
+        module: vk::ShaderModule,
         swapchain: &Swapchain,
         options: WorldRendererFeatures,
     ) -> Self {
@@ -112,10 +107,7 @@ impl WorldRenderer {
             ctx,
             render_targets.render_pass,
             descriptors.layout,
-            TRIANGLE_VERT,
-            TRIANGLE_FRAG,
-            WATER_VERT,
-            WATER_FRAG,
+            module,
             PipelineOptions {
                 wireframe_enabled: options.fill_mode_non_solid,
             },
@@ -123,12 +115,14 @@ impl WorldRenderer {
 
         let hiz_compute = hiz::HiZCompute::new(
             ctx,
+            module,
             &render_targets.depth_pyramids,
             &render_targets.depth_images,
         );
 
-        let visibility_compute = VisibilityCompute::new(ctx, &render_targets.depth_pyramids, 32, 1);
-        let aabb_renderer = AabbRenderer::new(ctx, render_targets.render_pass);
+        let visibility_compute =
+            VisibilityCompute::new(ctx, module, &render_targets.depth_pyramids, 32, 1);
+        let aabb_renderer = AabbRenderer::new(ctx, module, render_targets.render_pass);
 
         Self {
             mesher: None,
@@ -170,7 +164,6 @@ impl WorldRenderer {
             WorldUpdate::ChunkAdded(chunk_pos) => {
                 if let Some(mesher) = &self.mesher {
                     mesher.submit_chunk(chunk_pos);
-                    
                 }
             }
             WorldUpdate::SectionChange(spos) => {

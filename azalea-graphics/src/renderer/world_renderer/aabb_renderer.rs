@@ -1,13 +1,11 @@
-use ash::{vk, Device};
-use std::mem;
+use std::{ffi::CString, mem};
+
+use ash::{Device, vk};
 
 use crate::renderer::{
     vulkan::{buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT},
     world_renderer::types::VisibilityPushConstants,
 };
-
-const AABB_DEBUG_VERT: &[u8] = include_bytes!(env!("AABB_DEBUG_VERT"));
-const AABB_DEBUG_FRAG: &[u8] = include_bytes!(env!("AABB_DEBUG_FRAG"));
 
 pub struct AabbRenderer {
     pub pipeline_layout: vk::PipelineLayout,
@@ -18,21 +16,23 @@ pub struct AabbRenderer {
 }
 
 impl AabbRenderer {
-    pub fn new(ctx: &VkContext, render_pass: vk::RenderPass) -> Self {
+    pub fn new(ctx: &VkContext, module: vk::ShaderModule, render_pass: vk::RenderPass) -> Self {
         let device = ctx.device();
 
-        // Descriptor set layout for visibility buffer
         let binding = vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::VERTEX);
 
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default()
-            .bindings(std::slice::from_ref(&binding));
-        let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&layout_info, None).unwrap() };
+        let layout_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding));
+        let descriptor_set_layout = unsafe {
+            device
+                .create_descriptor_set_layout(&layout_info, None)
+                .unwrap()
+        };
 
-        // Pipeline layout with push constants
         let push_constant_range = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::VERTEX)
             .offset(0)
@@ -41,12 +41,14 @@ impl AabbRenderer {
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(std::slice::from_ref(&descriptor_set_layout))
             .push_constant_ranges(std::slice::from_ref(&push_constant_range));
-        let pipeline_layout = unsafe { device.create_pipeline_layout(&pipeline_layout_info, None).unwrap() };
+        let pipeline_layout = unsafe {
+            device
+                .create_pipeline_layout(&pipeline_layout_info, None)
+                .unwrap()
+        };
 
-        // Create pipeline
-        let pipeline = Self::create_pipeline(ctx, render_pass, pipeline_layout);
+        let pipeline = Self::create_pipeline(ctx, module, render_pass, pipeline_layout);
 
-        // Create empty descriptor pool (will be populated when visibility buffers are created)
         let pool_size = vk::DescriptorPoolSize::default()
             .ty(vk::DescriptorType::STORAGE_BUFFER)
             .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
@@ -64,32 +66,25 @@ impl AabbRenderer {
         }
     }
 
-    fn create_pipeline(ctx: &VkContext, render_pass: vk::RenderPass, pipeline_layout: vk::PipelineLayout) -> vk::Pipeline {
+    fn create_pipeline(
+        ctx: &VkContext,
+        module: vk::ShaderModule,
+        render_pass: vk::RenderPass,
+        pipeline_layout: vk::PipelineLayout,
+    ) -> vk::Pipeline {
         let device = ctx.device();
 
-        // Shader modules
-        let vert_code = ash::util::read_spv(&mut std::io::Cursor::new(AABB_DEBUG_VERT)).unwrap();
-        let frag_code = ash::util::read_spv(&mut std::io::Cursor::new(AABB_DEBUG_FRAG)).unwrap();
-
-        let vert_module = unsafe {
-            let info = vk::ShaderModuleCreateInfo::default().code(&vert_code);
-            device.create_shader_module(&info, None).unwrap()
-        };
-        let frag_module = unsafe {
-            let info = vk::ShaderModuleCreateInfo::default().code(&frag_code);
-            device.create_shader_module(&info, None).unwrap()
-        };
-
-        let entry_point = std::ffi::CString::new("main").unwrap();
+        let vert_entry = CString::new("aabb_vert").unwrap();
+        let frag_entry = CString::new("aabb_frag").unwrap();
         let stages = [
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::VERTEX)
-                .module(vert_module)
-                .name(&entry_point),
+                .module(module)
+                .name(&vert_entry),
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::FRAGMENT)
-                .module(frag_module)
-                .name(&entry_point),
+                .module(module)
+                .name(&frag_entry),
         ];
 
         // No vertex input (geometry generated in shader)
@@ -129,8 +124,8 @@ impl AabbRenderer {
             .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL);
 
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-        let dynamic_state = vk::PipelineDynamicStateCreateInfo::default()
-            .dynamic_states(&dynamic_states);
+        let dynamic_state =
+            vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
         let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
             .stages(&stages)
@@ -148,35 +143,35 @@ impl AabbRenderer {
 
         let pipeline = unsafe {
             device
-                .create_graphics_pipelines(vk::PipelineCache::null(), std::slice::from_ref(&pipeline_info), None)
+                .create_graphics_pipelines(
+                    vk::PipelineCache::null(),
+                    std::slice::from_ref(&pipeline_info),
+                    None,
+                )
                 .unwrap()[0]
         };
-
-        unsafe {
-            device.destroy_shader_module(vert_module, None);
-            device.destroy_shader_module(frag_module, None);
-        }
 
         pipeline
     }
 
-    pub fn recreate_descriptor_sets(&mut self, device: &Device, visibility_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT]) {
-        // Reset the descriptor pool to clear all sets
+    pub fn recreate_descriptor_sets(
+        &mut self,
+        device: &Device,
+        visibility_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT],
+    ) {
         unsafe {
-            device.reset_descriptor_pool(self.descriptor_pool, vk::DescriptorPoolResetFlags::empty()).unwrap();
+            device
+                .reset_descriptor_pool(self.descriptor_pool, vk::DescriptorPoolResetFlags::empty())
+                .unwrap();
         }
-        
-        // Allocate new descriptor sets (exactly MAX_FRAMES_IN_FLIGHT)
+
         let layouts = vec![self.descriptor_set_layout; MAX_FRAMES_IN_FLIGHT];
         let alloc_info = vk::DescriptorSetAllocateInfo::default()
             .descriptor_pool(self.descriptor_pool)
             .set_layouts(&layouts);
-        
-        self.descriptor_sets = unsafe { 
-            device.allocate_descriptor_sets(&alloc_info).unwrap() 
-        };
 
-        // Update each descriptor set with its corresponding buffer
+        self.descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info).unwrap() };
+
         for (i, buffer) in visibility_buffers.iter().enumerate() {
             let buffer_info = vk::DescriptorBufferInfo::default()
                 .buffer(buffer.buffer)
@@ -203,7 +198,6 @@ impl AabbRenderer {
         instance_count: u32,
         buffer_index: usize,
     ) {
-
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
 
@@ -227,7 +221,6 @@ impl AabbRenderer {
                 &[],
             );
 
-            // Draw 24 vertices (12 lines) per instance, instanced for each chunk
             device.cmd_draw(cmd, 24, instance_count, 0, 0);
         }
     }

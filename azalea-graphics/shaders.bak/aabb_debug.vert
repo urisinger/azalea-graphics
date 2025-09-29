@@ -29,8 +29,6 @@ const int cubeIndices[24] = int[24](
     0,4, 1,5, 2,6, 3,7  // verticals
 );
 
-layout(location=0) out vec3 vColor;
-
 ivec3 chunkCoords(uint instance) {
     int side = pc.radius * 2 + 1;
     int layerSize = side * side;
@@ -54,18 +52,14 @@ void main() {
 
     ivec3 coord = chunkCoords(chunk);
 
-    // Compute chunk AABB
     vec3 base = pc.gridOrigin_ws.xyz + vec3(coord) * float(16);
     vec3 bmin = base;
     vec3 bmax = base + vec3(float(16));
 
-    // Fetch unit cube corner
     int vidx = cubeIndices[gl_VertexIndex];
     vec3 unit = cubeVerts[vidx];
 
-    // Map unit cube [0,1] → AABB
     vec3 world = mix(bmin, bmax, unit);
 
     gl_Position = pc.viewProj * vec4(world, 1.0);
-    vColor = vec3(0.0, 1.0, 0.0); // green lines
 }
