@@ -53,7 +53,7 @@ pub struct Mesher {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 struct Job {
-    prio: u32,
+    prio: i32,
     spos: ChunkSectionPos,
 }
 
@@ -69,11 +69,10 @@ impl PartialOrd for Job {
     }
 }
 
-fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> u32 {
+fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> i32 {
     let dx = (spos.x - vis.cx) as i32;
-    let dy = (spos.y - vis.cy) as i32;
     let dz = (spos.z - vis.cz) as i32;
-    (dx * dx + dz * dz + dy * dy) as u32
+    dx * dx + dz * dz - spos.y * 10
 }
 
 impl Mesher {
@@ -106,35 +105,37 @@ impl Mesher {
                 if !queued.insert(spos) {
                     return;
                 }
-                let prio = vis.map(|v| prio_for(v, spos)).unwrap_or(u32::MAX);
+                let prio = vis.map(|v| prio_for(v, spos)).unwrap_or(i32::MAX);
                 queue.push(Job { prio, spos });
             }
 
             loop {
-                while let Some(job) = queue.pop() {
-                    queued.remove(&job.spos);
+                if work_rx.is_empty() && visibility_rx.is_empty() {
+                    while let Some(job) = queue.pop() {
+                        queued.remove(&job.spos);
 
-                    if let Some(vis) = &current_visibility {
-                        if !vis.section_is_visible(job.spos) {
-                            continue;
+                        if let Some(vis) = &current_visibility {
+                            if !vis.section_is_visible(job.spos) {
+                                continue;
+                            }
                         }
-                    }
 
-                    {
-                        let mut d = thread_dirty.lock();
-                        if !d.remove(&job.spos) {
-                            continue;
+                        {
+                            let mut d = thread_dirty.lock();
+                            if !d.remove(&job.spos) {
+                                continue;
+                            }
                         }
-                    }
 
-                    if let Some(local) = build_local_section(&thread_world, job.spos) {
-                        let t0 = std::time::Instant::now();
-                        let mesh = mesh_section(&local, &thread_biome_cache, &thread_assets);
-                        result_tx.send(mesh).unwrap();
-                        log::debug!("Meshed {:?} in {:?}", job.spos, t0.elapsed());
-                    }
-                    if !work_rx.is_empty() || !visibility_rx.is_empty() {
-                        break;
+                        if let Some(local) = build_local_section(&thread_world, job.spos) {
+                            let t0 = std::time::Instant::now();
+                            let mesh = mesh_section(&local, &thread_biome_cache, &thread_assets);
+                            result_tx.send(mesh).unwrap();
+                            log::debug!("Meshed {:?} in {:?}", job.spos, t0.elapsed());
+                        }
+                        if !work_rx.is_empty() || !visibility_rx.is_empty() {
+                            break;
+                        }
                     }
                 }
 
@@ -162,6 +163,7 @@ impl Mesher {
                                 for dy in 0..new_vis.height {
                                     for dx in -new_vis.radius..=new_vis.radius {
                                         for dz in -new_vis.radius..=new_vis.radius {
+                                            let dy = new_vis.height - dy;
                                             if new_vis.is_visible(dx,dy,dz) {
                                                 let x = new_vis.cx + dx;
                                                 let y = (new_vis.min_y / 16) + dy;

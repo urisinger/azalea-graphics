@@ -77,6 +77,7 @@ impl Default for WorldRendererFeatures {
 pub struct WorldRendererConfig {
     pub wireframe_mode: bool,
     pub render_aabbs: bool,
+    pub disable_visibilty: bool,
 }
 
 impl Default for WorldRendererConfig {
@@ -84,6 +85,7 @@ impl Default for WorldRendererConfig {
         Self {
             wireframe_mode: false,
             render_aabbs: false,
+            disable_visibilty: false,
         }
     }
 }
@@ -208,7 +210,7 @@ impl WorldRenderer {
         view_proj: glam::Mat4,
         camera_pos: glam::Vec3,
         frame_index: usize,
-        state: WorldRendererConfig,
+        config: WorldRendererConfig,
     ) {
         ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
 
@@ -238,7 +240,7 @@ impl WorldRenderer {
             view_proj,
             camera_pos,
             frame_index,
-            state.wireframe_mode,
+            config.wireframe_mode,
         );
 
         let visibility_push_constants = if let Some(vb) = &mut self.visibility_buffers {
@@ -268,7 +270,7 @@ impl WorldRenderer {
                 height: vb.height,
                 _padding: [0, 0],
             };
-            if state.render_aabbs {
+            if config.render_aabbs {
                 ctx.cmd_begin_debug_label(cmd, "Draw AABBs");
                 self.render_aabbs(ctx, cmd, &pc, frame_index);
                 ctx.cmd_end_debug_label(cmd);
@@ -294,7 +296,7 @@ impl WorldRenderer {
         );
         ctx.cmd_end_debug_label(cmd);
 
-        if let Some(vb) = &mut self.visibility_buffers {
+        if let Some(vb) = &mut self.visibility_buffers && !config.disable_visibilty  {
             ctx.cmd_begin_debug_label(cmd, "Visibility Compute");
             self.visibility_compute.dispatch(
                 ctx,

@@ -12,18 +12,6 @@ pub struct HiZPyramid {
     pub full_view: vk::ImageView,
 }
 
-pub struct HiZCompute {
-    pub layout: vk::DescriptorSetLayout,
-    pub pool: vk::DescriptorPool,
-    pub sets: Vec<Vec<vk::DescriptorSet>>,
-    pub pipeline_layout: vk::PipelineLayout,
-    pub copy_pipeline: vk::Pipeline,
-    pub reduce_pipeline: vk::Pipeline,
-    pub frames: usize,
-    pub mip_levels: u32,
-    pub depth_sampler: vk::Sampler,
-}
-
 impl HiZPyramid {
     pub fn new(ctx: &VkContext, width: u32, height: u32) -> Self {
         let max_dim = width.max(height).max(1);
@@ -128,6 +116,21 @@ impl HiZPyramid {
     }
 }
 
+pub struct HiZCompute {
+    pub copy_layout: vk::DescriptorSetLayout,
+    pub reduce_layout: vk::DescriptorSetLayout,
+    pub pool: vk::DescriptorPool,
+    pub copy_sets: Vec<vk::DescriptorSet>,
+    pub reduce_sets: Vec<Vec<vk::DescriptorSet>>,
+    pub copy_pipeline_layout: vk::PipelineLayout,
+    pub reduce_pipeline_layout: vk::PipelineLayout,
+    pub copy_pipeline: vk::Pipeline,
+    pub reduce_pipeline: vk::Pipeline,
+    pub frames: usize,
+    pub mip_levels: u32,
+    pub depth_sampler: vk::Sampler,
+}
+
 impl HiZCompute {
     pub fn new(
         ctx: &VkContext,
@@ -135,17 +138,13 @@ impl HiZCompute {
         pyramids: &[HiZPyramid],
         depth_images: &[AllocatedImage],
     ) -> Self {
-        assert!(!pyramids.is_empty(), "need at least one HiZPyramid");
-        assert_eq!(
-            pyramids.len(),
-            depth_images.len(),
-            "pyramids vs depth images mismatch"
-        );
+        assert!(!pyramids.is_empty());
+        assert_eq!(pyramids.len(), depth_images.len());
 
         let frames = pyramids.len();
         let mip_levels = pyramids[0].mip_levels;
 
-        let bindings = [
+        let copy_bindings = [
             vk::DescriptorSetLayoutBinding::default()
                 .binding(0)
                 .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
@@ -157,23 +156,52 @@ impl HiZCompute {
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::COMPUTE),
         ];
-        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
-        let layout = unsafe {
+        let copy_layout_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&copy_bindings);
+        let copy_layout = unsafe {
             ctx.device()
-                .create_descriptor_set_layout(&layout_info, None)
+                .create_descriptor_set_layout(&copy_layout_info, None)
                 .unwrap()
         };
 
-        let pipeline_layout = unsafe {
-            let pli =
-                vk::PipelineLayoutCreateInfo::default().set_layouts(std::slice::from_ref(&layout));
+        let reduce_bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::COMPUTE),
+        ];
+        let reduce_layout_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&reduce_bindings);
+        let reduce_layout = unsafe {
+            ctx.device()
+                .create_descriptor_set_layout(&reduce_layout_info, None)
+                .unwrap()
+        };
+
+        let copy_pipeline_layout = unsafe {
+            let pli = vk::PipelineLayoutCreateInfo::default()
+                .set_layouts(std::slice::from_ref(&copy_layout));
             ctx.device().create_pipeline_layout(&pli, None).unwrap()
         };
 
-        let copy_pipeline = create_compute_pipeline(ctx, module, "visibility::hiz_copy", pipeline_layout);
-        let reduce_pipeline = create_compute_pipeline(ctx, module, "visibility::hiz_reduce", pipeline_layout);
+        let reduce_pipeline_layout = unsafe {
+            let pli = vk::PipelineLayoutCreateInfo::default()
+                .set_layouts(std::slice::from_ref(&reduce_layout));
+            ctx.device().create_pipeline_layout(&pli, None).unwrap()
+        };
 
-        let (pool, sets) = Self::alloc_sets(ctx, layout, frames, mip_levels);
+        let copy_pipeline = create_compute_pipeline(ctx, module, "hiz::copy", copy_pipeline_layout);
+        let reduce_pipeline =
+            create_compute_pipeline(ctx, module, "hiz::reduce", reduce_pipeline_layout);
+
+        let (pool, copy_sets, reduce_sets) =
+            Self::alloc_sets(ctx, copy_layout, reduce_layout, frames, mip_levels);
 
         let depth_sampler_info = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::NEAREST)
@@ -191,10 +219,13 @@ impl HiZCompute {
         };
 
         let this = Self {
-            layout,
+            copy_layout,
+            reduce_layout,
             pool,
-            sets,
-            pipeline_layout,
+            copy_sets,
+            reduce_sets,
+            copy_pipeline_layout,
+            reduce_pipeline_layout,
             copy_pipeline,
             reduce_pipeline,
             frames,
@@ -203,111 +234,7 @@ impl HiZCompute {
         };
 
         this.recreate_descriptors(ctx.device(), pyramids, depth_images);
-
         this
-    }
-
-    fn alloc_sets(
-        ctx: &VkContext,
-        layout: vk::DescriptorSetLayout,
-        frames: usize,
-        mip_levels: u32,
-    ) -> (vk::DescriptorPool, Vec<Vec<vk::DescriptorSet>>) {
-        let total = frames * mip_levels as usize;
-
-        let sizes = [
-            vk::DescriptorPoolSize::default()
-                .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(total as u32),
-            vk::DescriptorPoolSize::default()
-                .ty(vk::DescriptorType::STORAGE_IMAGE)
-                .descriptor_count(total as u32),
-        ];
-        let pool_info = vk::DescriptorPoolCreateInfo::default()
-            .pool_sizes(&sizes)
-            .max_sets(total as u32);
-        let pool = unsafe {
-            ctx.device()
-                .create_descriptor_pool(&pool_info, None)
-                .unwrap()
-        };
-
-        let layouts = vec![layout; total];
-        let alloc = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(pool)
-            .set_layouts(&layouts);
-        let flat = unsafe { ctx.device().allocate_descriptor_sets(&alloc).unwrap() };
-
-        let mut sets = Vec::with_capacity(frames);
-        for f in 0..frames {
-            let s = f * mip_levels as usize;
-            let e = s + mip_levels as usize;
-            sets.push(flat[s..e].to_vec());
-        }
-        (pool, sets)
-    }
-
-    pub fn recreate_descriptors(
-        &self,
-        device: &Device,
-        pyramids: &[HiZPyramid],
-        depth_images: &[AllocatedImage],
-    ) {
-        assert_eq!(pyramids.len(), self.frames);
-        assert_eq!(depth_images.len(), self.frames);
-
-        for f in 0..self.frames {
-            let pyr = &pyramids[f];
-            assert_eq!(
-                pyr.mip_levels, self.mip_levels,
-                "mip count mismatch at frame {f}"
-            );
-
-            for level in 0..self.mip_levels {
-                let (src, dst) = if level == 0 {
-                    (
-                        vk::DescriptorImageInfo {
-                            sampler: self.depth_sampler,
-                            image_view: depth_images[f].default_view,
-                            image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                        },
-                        vk::DescriptorImageInfo {
-                            sampler: vk::Sampler::null(),
-                            image_view: pyr.mip_views[0],
-                            image_layout: vk::ImageLayout::GENERAL,
-                        },
-                    )
-                } else {
-                    (
-                        vk::DescriptorImageInfo {
-                            sampler: pyr.sampler,
-                            image_view: pyr.mip_views[(level - 1) as usize],
-                            image_layout: vk::ImageLayout::GENERAL,
-                        },
-                        vk::DescriptorImageInfo {
-                            sampler: vk::Sampler::null(),
-                            image_view: pyr.mip_views[level as usize],
-                            image_layout: vk::ImageLayout::GENERAL,
-                        },
-                    )
-                };
-
-                let set = self.sets[f][level as usize];
-                let writes = [
-                    vk::WriteDescriptorSet::default()
-                        .dst_set(set)
-                        .dst_binding(0)
-                        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                        .image_info(std::slice::from_ref(&src)),
-                    vk::WriteDescriptorSet::default()
-                        .dst_set(set)
-                        .dst_binding(1)
-                        .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
-                        .image_info(std::slice::from_ref(&dst)),
-                ];
-                unsafe { device.update_descriptor_sets(&writes, &[]) };
-            }
-        }
     }
 
     pub fn recreate(
@@ -324,14 +251,147 @@ impl HiZCompute {
 
         if new_frames != self.frames || new_mips != self.mip_levels {
             unsafe { ctx.device().destroy_descriptor_pool(self.pool, None) };
-            let (pool, sets) = Self::alloc_sets(ctx, self.layout, new_frames, new_mips);
+            let (pool, copy_sets, reduce_sets) = Self::alloc_sets(
+                ctx,
+                self.copy_layout,
+                self.reduce_layout,
+                new_frames,
+                new_mips,
+            );
             self.pool = pool;
-            self.sets = sets;
+            self.copy_sets = copy_sets;
+            self.reduce_sets = reduce_sets;
             self.frames = new_frames;
             self.mip_levels = new_mips;
         }
 
         self.recreate_descriptors(ctx.device(), pyramids, depth_images);
+    }
+
+    fn alloc_sets(
+        ctx: &VkContext,
+        copy_layout: vk::DescriptorSetLayout,
+        reduce_layout: vk::DescriptorSetLayout,
+        frames: usize,
+        mip_levels: u32,
+    ) -> (
+        vk::DescriptorPool,
+        Vec<vk::DescriptorSet>,
+        Vec<Vec<vk::DescriptorSet>>,
+    ) {
+        let copy_total = frames;
+        let reduce_total = frames * (mip_levels as usize - 1);
+
+        let sizes = [
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::SAMPLED_IMAGE)
+                .descriptor_count(copy_total as u32),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count((copy_total + reduce_total * 2) as u32),
+        ];
+        let pool_info = vk::DescriptorPoolCreateInfo::default()
+            .pool_sizes(&sizes)
+            .max_sets((copy_total + reduce_total) as u32);
+        let pool = unsafe {
+            ctx.device()
+                .create_descriptor_pool(&pool_info, None)
+                .unwrap()
+        };
+
+        let copy_layouts = vec![copy_layout; copy_total];
+        let copy_alloc = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(pool)
+            .set_layouts(&copy_layouts);
+        let copy_sets = unsafe { ctx.device().allocate_descriptor_sets(&copy_alloc).unwrap() };
+
+        let reduce_layouts = vec![reduce_layout; reduce_total];
+        let reduce_alloc = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(pool)
+            .set_layouts(&reduce_layouts);
+        let reduce_flat = unsafe {
+            ctx.device()
+                .allocate_descriptor_sets(&reduce_alloc)
+                .unwrap()
+        };
+
+        let mut reduce_sets = Vec::with_capacity(frames);
+        let per_frame = mip_levels as usize - 1;
+        for f in 0..frames {
+            let s = f * per_frame;
+            let e = s + per_frame;
+            reduce_sets.push(reduce_flat[s..e].to_vec());
+        }
+
+        (pool, copy_sets, reduce_sets)
+    }
+
+    pub fn recreate_descriptors(
+        &self,
+        device: &Device,
+        pyramids: &[HiZPyramid],
+        depth_images: &[AllocatedImage],
+    ) {
+        assert_eq!(pyramids.len(), self.frames);
+        assert_eq!(depth_images.len(), self.frames);
+
+        for f in 0..self.frames {
+            let pyr = &pyramids[f];
+            assert_eq!(pyr.mip_levels, self.mip_levels);
+
+            let src = vk::DescriptorImageInfo {
+                sampler: vk::Sampler::null(),
+                image_view: depth_images[f].default_view,
+                image_layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            };
+            let dst = vk::DescriptorImageInfo {
+                sampler: vk::Sampler::null(),
+                image_view: pyr.mip_views[0],
+                image_layout: vk::ImageLayout::GENERAL,
+            };
+
+            let copy_writes = [
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.copy_sets[f])
+                    .dst_binding(0)
+                    .descriptor_type(vk::DescriptorType::SAMPLED_IMAGE)
+                    .image_info(std::slice::from_ref(&src)),
+                vk::WriteDescriptorSet::default()
+                    .dst_set(self.copy_sets[f])
+                    .dst_binding(1)
+                    .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                    .image_info(std::slice::from_ref(&dst)),
+            ];
+            unsafe { device.update_descriptor_sets(&copy_writes, &[]) };
+
+            for level in 1..self.mip_levels {
+                let src = vk::DescriptorImageInfo {
+                    sampler: vk::Sampler::null(),
+                    image_view: pyr.mip_views[(level - 1) as usize],
+                    image_layout: vk::ImageLayout::GENERAL,
+                };
+                let dst = vk::DescriptorImageInfo {
+                    sampler: vk::Sampler::null(),
+                    image_view: pyr.mip_views[level as usize],
+                    image_layout: vk::ImageLayout::GENERAL,
+                };
+
+                let set = self.reduce_sets[f][(level - 1) as usize];
+                let reduce_writes = [
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(set)
+                        .dst_binding(0)
+                        .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                        .image_info(std::slice::from_ref(&src)),
+                    vk::WriteDescriptorSet::default()
+                        .dst_set(set)
+                        .dst_binding(1)
+                        .descriptor_type(vk::DescriptorType::STORAGE_IMAGE)
+                        .image_info(std::slice::from_ref(&dst)),
+                ];
+                unsafe { device.update_descriptor_sets(&reduce_writes, &[]) };
+            }
+        }
     }
 
     pub fn dispatch_all_levels(
@@ -346,13 +406,6 @@ impl HiZCompute {
     ) {
         let device = ctx.device();
 
-        let depth_range = vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::DEPTH,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
         let pyramid_full = vk::ImageSubresourceRange {
             aspect_mask: vk::ImageAspectFlags::COLOR,
             base_mip_level: 0,
@@ -360,6 +413,7 @@ impl HiZCompute {
             base_array_layer: 0,
             layer_count: 1,
         };
+
         unsafe {
             device.cmd_pipeline_barrier(
                 cmd,
@@ -375,31 +429,27 @@ impl HiZCompute {
                     .image(pyramid.image)
                     .subresource_range(pyramid_full)],
             );
-        }
 
-        unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.copy_pipeline);
             device.cmd_bind_descriptor_sets(
                 cmd,
                 vk::PipelineBindPoint::COMPUTE,
-                self.pipeline_layout,
+                self.copy_pipeline_layout,
                 0,
-                &[self.sets[image_idx as usize][0]],
+                &[self.copy_sets[image_idx as usize]],
                 &[],
             );
             let gx = (base_width + 7) / 8;
             let gy = (base_height + 7) / 8;
             device.cmd_dispatch(cmd, gx.max(1), gy.max(1), 1);
-        }
 
-        let mip0_range = vk::ImageSubresourceRange {
-            aspect_mask: vk::ImageAspectFlags::COLOR,
-            base_mip_level: 0,
-            level_count: 1,
-            base_array_layer: 0,
-            layer_count: 1,
-        };
-        unsafe {
+            let mip0_range = vk::ImageSubresourceRange {
+                aspect_mask: vk::ImageAspectFlags::COLOR,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                layer_count: 1,
+            };
             device.cmd_pipeline_barrier(
                 cmd,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
@@ -415,9 +465,7 @@ impl HiZCompute {
                     .image(pyramid.image)
                     .subresource_range(mip0_range)],
             );
-        }
 
-        unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.reduce_pipeline);
         }
 
@@ -437,14 +485,14 @@ impl HiZCompute {
             unsafe {
                 device.cmd_pipeline_barrier(
                     cmd,
-                    vk::PipelineStageFlags::COMPUTE_SHADER, // prev write happened in compute
-                    vk::PipelineStageFlags::COMPUTE_SHADER, // this read happens in compute
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
                     vk::DependencyFlags::BY_REGION,
                     &[],
                     &[],
                     &[vk::ImageMemoryBarrier::default()
-                        .src_access_mask(vk::AccessFlags::SHADER_WRITE) // prev wrote
-                        .dst_access_mask(vk::AccessFlags::SHADER_READ) // now we read it
+                        .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+                        .dst_access_mask(vk::AccessFlags::SHADER_READ)
                         .old_layout(vk::ImageLayout::GENERAL)
                         .new_layout(vk::ImageLayout::GENERAL)
                         .image(pyramid.image)
@@ -453,9 +501,9 @@ impl HiZCompute {
                 device.cmd_bind_descriptor_sets(
                     cmd,
                     vk::PipelineBindPoint::COMPUTE,
-                    self.pipeline_layout,
+                    self.reduce_pipeline_layout,
                     0,
-                    &[self.sets[image_idx as usize][level as usize]],
+                    &[self.reduce_sets[image_idx as usize][(level - 1) as usize]],
                     &[],
                 );
                 let gx = (w + 7) / 8;
@@ -492,9 +540,11 @@ impl HiZCompute {
             d.destroy_sampler(self.depth_sampler, None);
             d.destroy_pipeline(self.copy_pipeline, None);
             d.destroy_pipeline(self.reduce_pipeline, None);
-            d.destroy_pipeline_layout(self.pipeline_layout, None);
+            d.destroy_pipeline_layout(self.copy_pipeline_layout, None);
+            d.destroy_pipeline_layout(self.reduce_pipeline_layout, None);
             d.destroy_descriptor_pool(self.pool, None);
-            d.destroy_descriptor_set_layout(self.layout, None);
+            d.destroy_descriptor_set_layout(self.copy_layout, None);
+            d.destroy_descriptor_set_layout(self.reduce_layout, None);
         }
     }
 }

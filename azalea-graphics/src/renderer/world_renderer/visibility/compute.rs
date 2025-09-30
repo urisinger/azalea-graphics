@@ -47,7 +47,6 @@ impl VisibilityCompute {
             .unwrap()
         };
 
-        // set=1 (per-image): b0 Hi-Z sampler2D
         let image_bindings = [vk::DescriptorSetLayoutBinding::default()
             .binding(0)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
@@ -61,7 +60,7 @@ impl VisibilityCompute {
             .unwrap()
         };
 
-        let entry = std::ffi::CString::new("visibility::compute_visibility").unwrap();
+        let entry = std::ffi::CString::new("visibility::cull_chunks").unwrap();
         let stage = vk::PipelineShaderStageCreateInfo::default()
             .stage(vk::ShaderStageFlags::COMPUTE)
             .module(module)
@@ -93,9 +92,7 @@ impl VisibilityCompute {
             )
             .unwrap()[0]
         };
-        unsafe { d.destroy_shader_module(module, None) };
 
-        // pools
         let pool_frame = unsafe {
             d.create_descriptor_pool(
                 &vk::DescriptorPoolCreateInfo::default()

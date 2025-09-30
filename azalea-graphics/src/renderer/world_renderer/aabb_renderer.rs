@@ -74,8 +74,8 @@ impl AabbRenderer {
     ) -> vk::Pipeline {
         let device = ctx.device();
 
-        let vert_entry = CString::new("aabb_vert").unwrap();
-        let frag_entry = CString::new("aabb_frag").unwrap();
+        let vert_entry = CString::new("debug::aabb_vert").unwrap();
+        let frag_entry = CString::new("debug::aabb_frag").unwrap();
         let stages = [
             vk::PipelineShaderStageCreateInfo::default()
                 .stage(vk::ShaderStageFlags::VERTEX)
@@ -119,7 +119,7 @@ impl AabbRenderer {
             .attachments(std::slice::from_ref(&color_blend_attachment));
 
         let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
-            .depth_test_enable(true)
+            .depth_test_enable(false)
             .depth_write_enable(false)
             .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL);
 

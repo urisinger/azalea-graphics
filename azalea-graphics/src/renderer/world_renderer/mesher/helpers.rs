@@ -6,7 +6,8 @@ use azalea::{
 use glam::IVec3;
 
 use crate::renderer::{
-    assets::processed::{atlas::PlacedSprite, model::Cube}, chunk::LocalSection,
+    assets::processed::{atlas::PlacedSprite, model::Cube},
+    chunk::LocalSection,
 };
 
 pub struct Face {
@@ -77,14 +78,13 @@ pub fn remap_uv_to_atlas(
     atlas_w: u32,
     atlas_h: u32,
 ) -> [f32; 2] {
-
     let aw = atlas_w as f32;
     let ah = atlas_h as f32;
 
-    let u0 = (spr.x as f32) / aw;
-    let v0 = (spr.y as f32) / ah;
-    let u1 = (spr.x as f32 + spr.width as f32 ) / aw;
-    let v1 = (spr.y as f32 + spr.height as f32 ) / ah;
+    let u0 = (spr.x as f32 + 0.5) / aw;
+    let v0 = (spr.y as f32 + 0.5) / ah;
+    let u1 = (spr.x as f32 + spr.width as f32 - 0.5) / aw;
+    let v1 = (spr.y as f32 + spr.height as f32 - 0.5) / ah;
 
     let tu = (uv_px.x).clamp(0.0, 1.0);
     let tv = (uv_px.y).clamp(0.0, 1.0);
@@ -133,15 +133,11 @@ pub fn quad_uvs(spr: &PlacedSprite, atlas_w: u32, atlas_h: u32) -> [[f32; 2]; 4]
     let u1 = (spr.x + spr.width) as f32 / aw;
     let v1 = (spr.y + spr.height) as f32 / ah;
 
-    [
-        [u0, v1],
-        [u1, v1],
-        [u1, v0],
-        [u0, v0], 
-    ]
+    [[u0, v1], [u1, v1], [u1, v0], [u0, v0]]
 }
 
-/// Rotate direction based on x and y rotations (keeping old function for compatibility)
+/// Rotate direction based on x and y rotations (keeping old function for
+/// compatibility)
 pub fn rotate_direction(dir: Direction, x_rot: i32, y_rot: i32) -> Direction {
     let mut d = dir;
     match x_rot.rem_euclid(360) {
@@ -262,14 +258,15 @@ pub fn compute_ao(local: IVec3, offset: IVec3, dir: Direction, section: &LocalSe
         if p.x < 0 || p.y < 0 || p.z < 0 || p.x >= 18 || p.y >= 18 || p.z >= 18 {
             return false;
         }
-        let state = section.blocks[p.x as usize][p.y as usize][p.z as usize].unwrap_or(BlockState::AIR);
+        let state =
+            section.blocks[p.x as usize][p.y as usize][p.z as usize].unwrap_or(BlockState::AIR);
         let dyn_state: Box<dyn BlockTrait> = Box::from(state);
 
         if state.is_air() {
             return false;
         }
 
-       state.is_collision_shape_full()
+        state.is_collision_shape_full()
     };
 
     let ox = offset.x * 2 - 1;

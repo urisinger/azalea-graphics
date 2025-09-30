@@ -42,7 +42,7 @@ pub struct Renderer {
     width: u32,
     height: u32,
 
-    renderer_state: WorldRendererConfig,
+    renderer_config: WorldRendererConfig,
     command_pool: vk::CommandPool,
     command_buffers: [vk::CommandBuffer; MAX_FRAMES_IN_FLIGHT],
 
@@ -96,7 +96,7 @@ impl Renderer {
         let sync = FrameSync::new(context.device(), swapchain.images.len());
 
         let camera = Camera::new(glam::vec3(0.0, 250.0, 2.0), 0.0, 90.0);
-        let projection = Projection::new(size.width, size.height, 90.0, 0.1, 10000.0);
+        let projection = Projection::new(size.width, size.height, 90.0, 0.1, 1000.0);
         let camera_controller = CameraController::new(4.0, 1.0);
 
         let egui = EguiVulkan::new(event_loop, &context, module, &swapchain, None)?;
@@ -107,7 +107,7 @@ impl Renderer {
             should_recreate: false,
             width: size.width,
             height: size.height,
-            renderer_state: Default::default(),
+            renderer_config: Default::default(),
 
             command_pool,
             command_buffers,
@@ -125,14 +125,6 @@ impl Renderer {
         })
     }
 
-    pub fn toggle_wireframe(&mut self) {
-        self.renderer_state.wireframe_mode = !self.renderer_state.wireframe_mode;
-    }
-
-    pub fn toggle_aabbs(&mut self) {
-        self.renderer_state.render_aabbs = !self.renderer_state.render_aabbs;
-    }
-
     /// Run the built-in debug UI.
     pub fn run_debug_ui(&mut self, window: &Window, frame_time_ms: f64) {
         let wireframe_available = self.context.features().fill_mode_non_solid;
@@ -147,15 +139,22 @@ impl Renderer {
                 ui.add_enabled(
                     wireframe_available,
                     egui::Checkbox::new(
-                        &mut self.renderer_state.wireframe_mode,
+                        &mut self.renderer_config.wireframe_mode,
                         "Wireframe mode (F3)",
                     ),
                 );
 
                 ui.add_enabled(
                     wireframe_available,
-                    egui::Checkbox::new(&mut self.renderer_state.render_aabbs, "Render aabbs (F2)"),
+                    egui::Checkbox::new(
+                        &mut self.renderer_config.render_aabbs,
+                        "Render aabbs (F2)",
+                    ),
                 );
+                ui.checkbox(
+                    &mut self.renderer_config.disable_visibilty,
+                    "Disable visibility calculation (F4)",
+                )
             });
         });
     }
@@ -175,7 +174,28 @@ impl Renderer {
     }
 
     pub fn process_keyboard(&mut self, key: KeyCode, state: ElementState) -> bool {
-        self.camera_controller.process_keyboard(key, state)
+        if self.camera_controller.process_keyboard(key, state) {
+            return true;
+        }
+        if state == ElementState::Pressed {
+            match key {
+                KeyCode::F4 => {
+                    self.renderer_config.disable_visibilty ^= true;
+                    true
+                }
+                KeyCode::F3 => {
+                    self.renderer_config.wireframe_mode ^= true;
+                    true
+                }
+                KeyCode::F2 => {
+                    self.renderer_config.render_aabbs ^= true;
+                    true
+                }
+                _ => false,
+            }
+        } else {
+            false
+        }
     }
 
     pub fn handle_mouse_scroll(&mut self, delta: &MouseScrollDelta) {
@@ -226,7 +246,7 @@ impl Renderer {
             self.projection.calc_proj() * self.camera.calc_view(),
             self.camera.position,
             frame,
-            self.renderer_state,
+            self.renderer_config,
         );
 
         if let Err(e) = self.render_egui(cmd, image_index, frame) {

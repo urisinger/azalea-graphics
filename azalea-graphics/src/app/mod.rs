@@ -164,12 +164,6 @@ impl ApplicationHandler for App {
                                         window.set_cursor_visible(true);
                                     }
                                 }
-                                KeyCode::F3 => {
-                                    renderer.toggle_wireframe();
-                                }
-                                KeyCode::F2 => {
-                                    renderer.toggle_aabbs();
-                                }
                                 _ => {}
                             }
                         }
