@@ -6,10 +6,7 @@ use azalea::{
     chunks::{handle_receive_chunk_event, ReceiveChunkEvent},
     core::position::{ChunkPos, ChunkSectionPos},
     ecs::{
-        event::{EventReader, EventWriter},
-        query::Changed,
-        schedule::IntoScheduleConfigs,
-        system::{Query, Res},
+        message::{MessageReader, MessageWriter}, query::Changed, schedule::IntoScheduleConfigs, system::{Query, Res}
     },
     local_player::InstanceHolder,
     prelude::*,
@@ -61,7 +58,7 @@ pub fn handle_block_updates(
 }
 
 fn forward_chunk_updates(
-    mut events: EventReader<ReceiveChunkEvent>,
+    mut events: MessageReader<ReceiveChunkEvent>,
     renderer: Res<RendererResource>,
 ) {
     for event in events.read() {
@@ -81,7 +78,7 @@ fn add_world(
     }
 }
 
-fn poll_renderer_events(renderer: Res<RendererResource>, mut writer: EventWriter<AppExit>) {
+fn poll_renderer_events(renderer: Res<RendererResource>, mut writer: MessageWriter<AppExit>) {
     match renderer.handle.rx.try_recv() {
         Ok(RendererEvent::Closed) => {
             writer.write(AppExit::Success);

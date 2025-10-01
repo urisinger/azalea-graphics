@@ -54,6 +54,8 @@ pub struct App {
     renderer: Option<Renderer>,
 
     last_frame_time: Instant,
+
+    is_focused: bool,
 }
 
 impl App {
@@ -71,6 +73,7 @@ impl App {
             evt_tx,
             renderer: None,
             last_frame_time: Instant::now(),
+            is_focused: false,
         };
 
         (handle, app)
@@ -110,7 +113,7 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         let mut egui_consumed = false;
-        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) {
+        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) && !self.is_focused {
             egui_consumed = renderer.handle_egui_event(window, &event);
         }
 
@@ -139,7 +142,6 @@ impl ApplicationHandler for App {
 
                         renderer.update(dt);
 
-                        // Run debug UI
                         if let Some(window) = &self.window {
                             renderer.run_debug_ui(window, ms);
                         }
@@ -159,9 +161,9 @@ impl ApplicationHandler for App {
                         if event.state == ElementState::Pressed {
                             match code {
                                 KeyCode::Escape => {
-                                    if let Some(window) = &self.window {
-                                        let _ = window.set_cursor_grab(CursorGrabMode::None);
+                                    if let Some(window) = &self.window && window.set_cursor_grab(CursorGrabMode::None).is_ok(){
                                         window.set_cursor_visible(true);
+                                        self.is_focused = false;
                                     }
                                 }
                                 _ => {}
@@ -178,8 +180,9 @@ impl ApplicationHandler for App {
                     if let Some(window) = &self.window
                         && button == MouseButton::Left
                         && state == ElementState::Pressed
-                        && window.set_cursor_grab(CursorGrabMode::Confined).is_ok()
+                        && window.set_cursor_grab(CursorGrabMode::Locked).or_else(|e| window.set_cursor_grab(CursorGrabMode::Confined)).is_ok()
                     {
+                        self.is_focused = true;
                         window.set_cursor_visible(false);
                     }
                 }
@@ -189,6 +192,9 @@ impl ApplicationHandler for App {
     }
 
     fn device_event(&mut self, _: &ActiveEventLoop, _: DeviceId, event: DeviceEvent) {
+        if !self.is_focused{
+            return;
+        }
         if let (Some(renderer), DeviceEvent::MouseMotion { delta }) = (&mut self.renderer, event) {
             renderer.handle_mouse(delta.0, delta.1);
         }

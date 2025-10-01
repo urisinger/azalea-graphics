@@ -1,9 +1,8 @@
 use std::{
-    cmp::{Ordering, Reverse},
+    cmp::Ordering,
     collections::{BinaryHeap, HashSet},
     io::Cursor,
     sync::Arc,
-    thread,
 };
 
 use azalea::{
@@ -90,7 +89,6 @@ impl Mesher {
         let thread_biome_cache = Arc::clone(&biome_cache);
 
         std::thread::spawn(move || {
-            use std::collections::{BinaryHeap, HashSet};
 
             let mut current_visibility: Option<VisibilitySnapshot> = None;
             let mut queue: BinaryHeap<Job> = BinaryHeap::new();

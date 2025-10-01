@@ -7,7 +7,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let backend = cargo_gpu::Install::from_shader_crate(shader_crate.clone()).run()?;
 
-    let mut builder = backend
+    let builder = backend
         .to_spirv_builder(shader_crate, "spirv-unknown-vulkan1.2")
         .capability(Capability::ImageQuery)
         .print_metadata(MetadataPrintout::DependencyOnly)

@@ -32,13 +32,13 @@ pub fn aabb_vert(
     #[spirv(instance_index)] instance_index: u32,
 
     #[spirv(position)] out_pos: &mut Vec4,
-    out_color: &mut Vec3,
+    out_color: &mut Vec4,
 ) {
     let chunk = instance_index;
 
     if visible[chunk as usize] == 0 {
         *out_pos = Vec4::new(2.0, 2.0, 2.0, 1.0);
-        *out_color = Vec3::ZERO;
+        *out_color = Vec4::ZERO;
         return;
     }
 
@@ -47,7 +47,6 @@ pub fn aabb_vert(
     let bmin = base;
     let bmax = base + Vec3::splat(16.0);
 
-    // inline CUBE_INDICES
     let vidx = match vertex_index {
         0 => 0,  1 => 1,  2 => 1,  3 => 2,
         4 => 2,  5 => 3,  6 => 3,  7 => 0,
@@ -58,7 +57,6 @@ pub fn aabb_vert(
         _ => 0,
     };
 
-    // inline CUBE_VERTS
     let unit = match vidx {
         0 => Vec3::new(0.0, 0.0, 0.0),
         1 => Vec3::new(1.0, 0.0, 0.0),
@@ -74,10 +72,11 @@ pub fn aabb_vert(
     let world = bmin + (bmax - bmin) * unit;
 
     *out_pos = pc.view_proj * world.extend(1.0);
-    *out_color = Vec3::new(1.0, 0.0, 0.0);
+    *out_color = Vec4::new(1.0, 0.0, 0.0, 1.0);
 }
 
 #[spirv(fragment)]
-pub fn aabb_frag(in_color: Vec3, frag_color: &mut Vec4) {
-    *frag_color = in_color.extend(1.0);
+#[unsafe(no_mangle)]
+pub fn aabb_frag(in_color: Vec4, frag_color: &mut Vec4) {
+    *frag_color = in_color;
 }
