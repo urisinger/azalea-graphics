@@ -89,7 +89,6 @@ impl Mesher {
         let thread_biome_cache = Arc::clone(&biome_cache);
 
         std::thread::spawn(move || {
-
             let mut current_visibility: Option<VisibilitySnapshot> = None;
             let mut queue: BinaryHeap<Job> = BinaryHeap::new();
             let mut queued: HashSet<ChunkSectionPos> = HashSet::new();
@@ -158,24 +157,36 @@ impl Mesher {
                     recv(visibility_rx) -> msg => {
                         if let Ok(new_vis) = msg {
                             if let Some(old_vis) = &current_visibility {
-                                for dy in 0..new_vis.height {
-                                    for dx in -new_vis.radius..=new_vis.radius {
-                                        for dz in -new_vis.radius..=new_vis.radius {
-                                            let dy = new_vis.height - dy;
-                                            if new_vis.is_visible(dx,dy,dz) {
-                                                let x = new_vis.cx + dx;
-                                                let y = (new_vis.min_y / 16) + dy;
-                                                let z = new_vis.cz + dz;
-                                                let spos = ChunkSectionPos::new(x,y,z);
+                                let side = new_vis.radius * 2 + 1;
+                                for (i, &entry) in new_vis.data.iter().enumerate() {
+                                    if entry == 0 {
+                                        continue; // not visible
+                                    }
 
-                                                if thread_dirty.lock().contains(&spos) {
-                                                    push_job(&mut queue, &mut queued, Some(&new_vis), spos);
-                                                }
-                                            }
+                                    let y = i / (side as usize * side as usize);
+                                    let rem = i % (side as usize * side as usize);
+                                    let z = rem / side as usize;
+                                    let x = rem % side as usize;
+
+                                    // Convert back to relative coordinates
+                                    let dx = x as i32 - new_vis.radius;
+                                    let dz = z as i32 - new_vis.radius;
+                                    let dy = y as i32;
+
+                                    if !old_vis.is_visible(dx, dy, dz) {
+                                        let spos = ChunkSectionPos::new(
+                                            new_vis.cx + dx,
+                                            (new_vis.min_y / 16) + dy,
+                                            new_vis.cz + dz,
+                                        );
+
+                                        if thread_dirty.lock().contains(&spos) {
+                                            push_job(&mut queue, &mut queued, Some(&new_vis), spos);
                                         }
                                     }
                                 }
                             }
+
                             current_visibility = Some(new_vis);
                         } else {
                             break;

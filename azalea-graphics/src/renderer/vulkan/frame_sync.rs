@@ -1,11 +1,14 @@
 use ash::vk;
 
+use crate::renderer::vulkan::{context::VkContext, object::VkObject};
+
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct FrameSync {
     pub image_available: [vk::Semaphore; MAX_FRAMES_IN_FLIGHT],
     pub in_flight: [vk::Fence; MAX_FRAMES_IN_FLIGHT],
-    pub render_finished: Vec<vk::Semaphore>, // per swapchain image
+    pub render_finished: Vec<vk::Semaphore>,
+    pub deletion_queues: [Vec<Box<dyn VkObject>>; MAX_FRAMES_IN_FLIGHT],
     pub current_frame: usize,
 }
 
@@ -29,10 +32,13 @@ impl FrameSync {
             render_finished.push(sem);
         }
 
+        let deletion_queues = [(); MAX_FRAMES_IN_FLIGHT].map(|_| Vec::new());
+        
         Self {
             image_available,
             in_flight,
             render_finished,
+            deletion_queues,
             current_frame: 0,
         }
     }
@@ -52,14 +58,29 @@ impl FrameSync {
         }
     }
 
-    pub fn destroy(&mut self, device: &ash::Device) {
+    pub fn add_to_deletion_queue(&mut self, frame: usize, object: Box<dyn VkObject>) {
+        self.deletion_queues[frame].push(object);
+    }
+
+    pub fn process_deletion_queue(&mut self, ctx: &VkContext, frame: usize) {
+        for object in self.deletion_queues[frame].drain(..) {
+            object.destroy(ctx);
+        }
+    }
+
+    pub fn destroy(&mut self, ctx: &VkContext) {
         unsafe {
+            for deletion_queue in &mut self.deletion_queues {
+                for object in deletion_queue.drain(..) {
+                    object.destroy(ctx);
+                }
+            }
             for i in 0..MAX_FRAMES_IN_FLIGHT {
-                device.destroy_semaphore(self.image_available[i], None);
-                device.destroy_fence(self.in_flight[i], None);
+                ctx.device().destroy_semaphore(self.image_available[i], None);
+                ctx.device().destroy_fence(self.in_flight[i], None);
             }
             for sempahore in &self.render_finished {
-                device.destroy_semaphore(*sempahore, None);
+                ctx.device().destroy_semaphore(*sempahore, None);
             }
         }
     }

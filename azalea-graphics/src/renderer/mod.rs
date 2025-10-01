@@ -2,7 +2,7 @@ use std::{io::Cursor, sync::Arc, time::Duration};
 
 use ash::{
     util::read_spv,
-    vk::{self, ShaderModuleCreateInfo},
+    vk,
 };
 use crossbeam::channel::Receiver;
 use raw_window_handle::{DisplayHandle, WindowHandle};
@@ -214,6 +214,7 @@ impl Renderer {
         let frame = self.sync.next_frame();
 
         self.sync.wait_for_fence(device, frame);
+        self.sync.process_deletion_queue(&self.context, frame);
         self.world
             .update_visibility(&self.context, frame, self.camera.position);
 
@@ -247,6 +248,7 @@ impl Renderer {
             self.camera.position,
             frame,
             self.renderer_config,
+            &mut self.sync,
         );
 
         if let Err(e) = self.render_egui(cmd, image_index, frame) {
@@ -339,7 +341,7 @@ impl Renderer {
         self.egui.destroy(&self.context);
 
         self.swapchain.destroy(device);
-        self.sync.destroy(device);
+        self.sync.destroy(&self.context);
     }
 
     /// Handle window events for egui.

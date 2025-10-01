@@ -5,10 +5,12 @@ use azalea::core::position::ChunkSectionPos;
 
 use super::{
     mesher::{MeshResult, Mesher},
-    staging::StagingArena,
     types::BlockVertex,
 };
-use crate::renderer::{mesh::Mesh, vulkan::context::VkContext};
+use crate::renderer::{
+    mesh::Mesh, 
+    vulkan::{context::VkContext, frame_sync::FrameSync}
+};
 
 pub struct MeshStore {
     pub blocks: HashMap<ChunkSectionPos, Mesh<BlockVertex>>,
@@ -56,7 +58,7 @@ impl MeshStore {
         cmd: ash::vk::CommandBuffer,
         frame_index: usize,
         mesher: &Option<Mesher>,
-        staging: &mut StagingArena,
+        frame_sync: &mut FrameSync,
     ) {
         let mut touched_buffers: Vec<vk::Buffer> = Vec::new();
 
@@ -64,7 +66,7 @@ impl MeshStore {
             if !blocks.vertices.is_empty() {
                 let staging_mesh = Mesh::new_staging(ctx, &blocks.vertices, &blocks.indices);
                 let mesh = staging_mesh.upload(ctx, cmd);
-                staging.push(frame_index, staging_mesh.buffer);
+                frame_sync.add_to_deletion_queue(frame_index, Box::new(staging_mesh.buffer));
 
                 touched_buffers.push(mesh.buffer.buffer);
 
@@ -76,7 +78,7 @@ impl MeshStore {
             if !water.vertices.is_empty() {
                 let staging_mesh = Mesh::new_staging(ctx, &water.vertices, &water.indices);
                 let mesh = staging_mesh.upload(ctx, cmd);
-                staging.push(frame_index, staging_mesh.buffer);
+                frame_sync.add_to_deletion_queue(frame_index, Box::new(staging_mesh.buffer));
 
                 touched_buffers.push(mesh.buffer.buffer);
 

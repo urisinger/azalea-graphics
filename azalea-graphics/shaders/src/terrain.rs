@@ -42,6 +42,9 @@ pub fn block_frag(
     frag_color: &mut Vec4,
 ) {
     let tex_color: Vec4 = block_atlas.sample(in_uv);
+    if tex_color.w < 0.5 {
+        kill()
+    }
 
     *frag_color = (tex_color.xyz() * in_tint * in_ao).extend(tex_color.w);
 }

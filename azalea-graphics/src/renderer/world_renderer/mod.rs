@@ -11,7 +11,7 @@ use crate::{
     renderer::{
         assets::{Assets, processed::atlas::TextureEntry},
         vulkan::{
-            buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT,
+            buffer::Buffer, context::VkContext, frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
             swapchain::Swapchain, texture::Texture,
         },
         world_renderer::{
@@ -31,7 +31,6 @@ mod mesher;
 mod meshes;
 mod pipelines;
 mod render_targets;
-mod staging;
 mod types;
 mod visibility;
 
@@ -39,7 +38,6 @@ use descriptors::Descriptors;
 use meshes::MeshStore;
 use pipelines::{PipelineOptions, Pipelines};
 use render_targets::RenderTargets;
-use staging::StagingArena;
 use types::{BlockVertex, PushConstants, VisibilityPushConstants};
 
 pub struct WorldRenderer {
@@ -57,7 +55,6 @@ pub struct WorldRenderer {
     descriptors: Descriptors,
     render_targets: RenderTargets,
     blocks_texture: Texture,
-    staging: StagingArena,
     assets: Arc<Assets>,
 }
 
@@ -135,7 +132,6 @@ impl WorldRenderer {
             visibility_buffers: None,
             aabb_renderer,
 
-            staging: Default::default(),
             mesh_store: Default::default(),
             pipelines,
             descriptors,
@@ -211,10 +207,9 @@ impl WorldRenderer {
         camera_pos: glam::Vec3,
         frame_index: usize,
         config: WorldRendererConfig,
+        frame_sync: &mut FrameSync,
     ) {
         ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
-
-        self.staging.clear_frame(ctx, frame_index);
 
         ctx.cmd_begin_debug_label(cmd, "Update meshes");
         self.mesh_store.process_mesher_results(
@@ -222,13 +217,13 @@ impl WorldRenderer {
             cmd,
             frame_index,
             &self.mesher,
-            &mut self.staging,
+            frame_sync,
         );
 
         ctx.cmd_end_debug_label(cmd);
 
         ctx.cmd_begin_debug_label(cmd, "Update dirty textures");
-        self.upload_dirty_textures(ctx, cmd, frame_index);
+        self.upload_dirty_textures(ctx, cmd, frame_index, frame_sync);
         ctx.cmd_end_debug_label(cmd);
 
         ctx.cmd_begin_debug_label(cmd, "Main Render Pass");
@@ -458,6 +453,7 @@ impl WorldRenderer {
         ctx: &VkContext,
         cmd: vk::CommandBuffer,
         frame_index: usize,
+        frame_sync: &mut FrameSync,
     ) {
         let dirty = self.animation_manager.dirty_textures(&self.assets.textures);
         if dirty.is_empty() {
@@ -568,7 +564,7 @@ impl WorldRenderer {
             );
         }
 
-        self.staging.push(frame_index, staging);
+        frame_sync.add_to_deletion_queue(frame_index, Box::new(staging));
     }
 
     pub fn render_aabbs(
@@ -605,7 +601,6 @@ impl WorldRenderer {
         let device = ctx.device();
 
         self.mesh_store.drain_and_destroy(ctx);
-        self.staging.destroy_all(ctx);
 
         self.hiz_compute.destroy(ctx);
         self.render_targets.destroy(ctx);

@@ -3,7 +3,7 @@ use vk_mem::{
     Alloc, Allocation, AllocationCreateFlags, AllocationCreateInfo, Allocator, MemoryUsage,
 };
 
-use crate::renderer::vulkan::context::VkContext;
+use crate::renderer::vulkan::{context::VkContext, object::VkObject};
 
 pub struct Buffer {
     pub buffer: vk::Buffer,
@@ -101,4 +101,13 @@ pub fn create_buffer(
     };
 
     (buffer, allocation)
+}
+
+impl VkObject for Buffer {
+    fn destroy(&self, ctx: &VkContext) {
+        unsafe {
+            ctx.allocator()
+                .destroy_buffer(self.buffer, &mut self.allocation.clone());
+        }
+    }
 }
