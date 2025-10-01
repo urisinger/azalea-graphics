@@ -1,9 +1,6 @@
 use std::{io::Cursor, sync::Arc, time::Duration};
 
-use ash::{
-    util::read_spv,
-    vk,
-};
+use ash::{util::read_spv, vk};
 use crossbeam::channel::Receiver;
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vulkan::{
@@ -24,11 +21,18 @@ use self::{
     ui::EguiVulkan,
     world_renderer::{WorldRenderer, WorldRendererFeatures},
 };
-use crate::{app::WorldUpdate, renderer::world_renderer::WorldRendererConfig};
+use crate::{
+    app::WorldUpdate,
+    renderer::{
+        timings::Timings, vulkan::timestamp::TimestampQueryPool,
+        world_renderer::WorldRendererConfig,
+    },
+};
 
 mod camera;
 pub(crate) mod chunk;
 mod mesh;
+pub mod timings;
 mod ui;
 pub(crate) mod vulkan;
 pub(crate) mod world_renderer;
@@ -45,6 +49,7 @@ pub struct Renderer {
     renderer_config: WorldRendererConfig,
     command_pool: vk::CommandPool,
     command_buffers: [vk::CommandBuffer; MAX_FRAMES_IN_FLIGHT],
+    timestamp_pools: Option<[TimestampQueryPool; MAX_FRAMES_IN_FLIGHT]>,
 
     sync: FrameSync,
 
@@ -101,6 +106,17 @@ impl Renderer {
 
         let egui = EguiVulkan::new(event_loop, &context, module, &swapchain, None)?;
 
+        let module = unsafe { context.device().destroy_shader_module(module, None) };
+
+        let timestamp_pools = if context.features().timestamp_queries {
+            Some([(); MAX_FRAMES_IN_FLIGHT].map(|_| {
+                TimestampQueryPool::new(context.device(), timings::TIMESTAMP_COUNT as u32)
+                    .expect("Failed creating timestamp query pool")
+            }))
+        } else {
+            None
+        };
+
         Ok(Self {
             context,
             swapchain,
@@ -111,6 +127,7 @@ impl Renderer {
 
             command_pool,
             command_buffers,
+            timestamp_pools,
 
             sync,
             world,
@@ -125,14 +142,59 @@ impl Renderer {
         })
     }
 
-    /// Run the built-in debug UI.
+    pub fn collect_timings(&self, frame: usize) -> Option<Timings> {
+        if let Some(timestamps) = &self.timestamp_pools {
+            let mut raw_timestamps = [0u64; timings::TIMESTAMP_COUNT];
+            timestamps[frame].get_results(self.context.device(), &mut raw_timestamps);
+
+            let properties = unsafe {
+                self.context
+                    .instance()
+                    .get_physical_device_properties(self.context.physical_device())
+            };
+            let timestamp_period = properties.limits.timestamp_period;
+
+            Some(timings::Timings::from_ticks(
+                raw_timestamps,
+                timestamp_period,
+            ))
+        } else {
+            None
+        }
+    }
+
     pub fn run_debug_ui(&mut self, window: &Window, frame_time_ms: f64) {
         let wireframe_available = self.context.features().fill_mode_non_solid;
+        let timings = self.collect_timings(self.sync.current_frame);
 
         self.egui.run(window, |ctx| {
             egui::Window::new("Debug Info").show(ctx, |ui| {
                 ui.label(format!("Frame time: {:.2}ms", frame_time_ms));
                 ui.label("Azalea Graphics Renderer");
+
+                ui.separator();
+
+                if let Some(timings) = timings {
+                    ui.collapsing("GPU Timings", |ui| {
+                        ui.label(format!(
+                            "Upload Dirty: {:.2}ms",
+                            timings.upload_dirty_time()
+                        ));
+                        ui.label(format!(
+                            "Terrain Pass: {:.2}ms",
+                            timings.terrain_pass_time()
+                        ));
+                        ui.label(format!("HiZ Compute: {:.2}ms", timings.hiz_compute_time()));
+                        ui.label(format!(
+                            "Visibility Compute: {:.2}ms",
+                            timings.visibility_compute_time()
+                        ));
+                        ui.label(format!("UI Pass: {:.2}ms", timings.ui_time()));
+                        ui.label(format!("Total GPU: {:.2}ms", timings.frame_time()));
+                    });
+                } else {
+                    ui.label("GPU timings: Not supported on this device");
+                }
 
                 ui.separator();
 
@@ -238,6 +300,19 @@ impl Renderer {
             let begin_info = vk::CommandBufferBeginInfo::default();
             device.begin_command_buffer(cmd, &begin_info).unwrap();
         }
+        self.timestamp_pools
+            .as_mut()
+            .map(|arr| arr[frame].reset(device, cmd, 0, timings::TIMESTAMP_COUNT as u32));
+
+        // Write frame start timestamp
+        if let Some(timestamps) = &self.timestamp_pools {
+            timestamps[frame].write_timestamp(
+                self.context.device(),
+                cmd,
+                timings::START_FRAME as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
 
         self.world.render(
             &self.context,
@@ -248,12 +323,39 @@ impl Renderer {
             self.camera.position,
             frame,
             self.renderer_config,
+            self.timestamp_pools.as_ref().map(|arr| &arr[frame]),
             &mut self.sync,
         );
-
+        if let Some(timestamps) = &self.timestamp_pools {
+            timestamps[frame].write_timestamp(
+                self.context.device(),
+                cmd,
+                timings::START_UI_PASS as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
         if let Err(e) = self.render_egui(cmd, image_index, frame) {
             log::warn!("Failed to render egui: {}", e);
         }
+
+        if let Some(timestamps) = &self.timestamp_pools {
+            timestamps[frame].write_timestamp(
+                self.context.device(),
+                cmd,
+                timings::END_UI_PASS as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
+
+        if let Some(timestamps) = &self.timestamp_pools {
+            timestamps[frame].write_timestamp(
+                self.context.device(),
+                cmd,
+                timings::END_FRAME as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
+
         let device = self.context.device();
 
         unsafe {

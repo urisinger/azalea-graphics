@@ -22,6 +22,7 @@ pub struct QueueFamiliesIndices {
 #[derive(Clone, Copy, Debug)]
 pub struct DeviceFeatures {
     pub fill_mode_non_solid: bool,
+    pub timestamp_queries: bool
 }
 
 pub struct Debug {
@@ -343,16 +344,38 @@ impl VkContext {
             .collect();
 
         let base_features = unsafe { instance.get_physical_device_features(physical) };
+        let properties = unsafe { instance.get_physical_device_properties(physical) };
+        let family_props = unsafe { instance.get_physical_device_queue_family_properties(physical) };
+        let graphics_family_props = family_props[families.graphics_index as usize];
 
         let fill_mode_non_solid = base_features.fill_mode_non_solid == vk::TRUE;
+        let queue_supports_timestamps = graphics_family_props.timestamp_valid_bits > 0;
+        let timestamp_queries = properties.limits.timestamp_compute_and_graphics == vk::TRUE
+            && properties.limits.timestamp_period > 0.0
+            && queue_supports_timestamps;
         if fill_mode_non_solid {
             log::info!("fillModeNonSolid supported, wireframe mode available");
         } else {
             log::warn!("fillModeNonSolid not supported, wireframe mode disabled");
         }
 
+        if timestamp_queries {
+            log::info!(
+                "Timestamp queries supported (period: {} ns, queue timestampValidBits: {})",
+                properties.limits.timestamp_period,
+                graphics_family_props.timestamp_valid_bits
+            );
+        } else {
+            log::warn!(
+                "Timestamp queries not supported (period: {} ns, queue timestampValidBits: {})",
+                properties.limits.timestamp_period,
+                graphics_family_props.timestamp_valid_bits
+            );
+        }
+
         let device_features = DeviceFeatures {
             fill_mode_non_solid,
+            timestamp_queries,
         };
 
         let mut vulkan_memory_model_features =

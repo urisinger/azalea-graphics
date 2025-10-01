@@ -10,9 +10,14 @@ use crate::{
     app::WorldUpdate,
     renderer::{
         assets::{Assets, processed::atlas::TextureEntry},
+        timings,
         vulkan::{
-            buffer::Buffer, context::VkContext, frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
-            swapchain::Swapchain, texture::Texture,
+            buffer::Buffer,
+            context::VkContext,
+            frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
+            swapchain::Swapchain,
+            texture::Texture,
+            timestamp::TimestampQueryPool,
         },
         world_renderer::{
             aabb_renderer::AabbRenderer,
@@ -207,24 +212,47 @@ impl WorldRenderer {
         camera_pos: glam::Vec3,
         frame_index: usize,
         config: WorldRendererConfig,
+        timestamps: Option<&TimestampQueryPool>,
         frame_sync: &mut FrameSync,
     ) {
         ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
 
         ctx.cmd_begin_debug_label(cmd, "Update meshes");
-        self.mesh_store.process_mesher_results(
-            ctx,
-            cmd,
-            frame_index,
-            &self.mesher,
-            frame_sync,
-        );
+        self.mesh_store
+            .process_mesher_results(ctx, cmd, frame_index, &self.mesher, frame_sync);
 
         ctx.cmd_end_debug_label(cmd);
 
         ctx.cmd_begin_debug_label(cmd, "Update dirty textures");
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::START_UPLOAD_DIRTY as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
+
         self.upload_dirty_textures(ctx, cmd, frame_index, frame_sync);
+
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::END_UPLOAD_DIRTY as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
         ctx.cmd_end_debug_label(cmd);
+
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::START_TERRAIN_PASS as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
 
         ctx.cmd_begin_debug_label(cmd, "Main Render Pass");
         self.render_targets
@@ -277,7 +305,25 @@ impl WorldRenderer {
         };
 
         self.render_targets.end(ctx.device(), cmd);
+
         ctx.cmd_end_debug_label(cmd);
+
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::END_TERRAIN_PASS as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::START_HIZ_COMPUTE as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
 
         ctx.cmd_begin_debug_label(cmd, "HiZ Pyramid Generation");
         self.hiz_compute.dispatch_all_levels(
@@ -291,7 +337,27 @@ impl WorldRenderer {
         );
         ctx.cmd_end_debug_label(cmd);
 
-        if let Some(vb) = &mut self.visibility_buffers && !config.disable_visibilty  {
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::END_HIZ_COMPUTE as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::START_VISIBILITY_COMPUTE as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
+
+
+        if let Some(vb) = &mut self.visibility_buffers
+            && !config.disable_visibilty
+        {
             ctx.cmd_begin_debug_label(cmd, "Visibility Compute");
             self.visibility_compute.dispatch(
                 ctx,
@@ -321,8 +387,16 @@ impl WorldRenderer {
 
             ctx.cmd_end_debug_label(cmd);
         };
-
         ctx.cmd_end_debug_label(cmd);
+
+        if let Some(timestamps) = timestamps {
+            timestamps.write_timestamp(
+                ctx.device(),
+                cmd,
+                timings::END_VISIBILITY_COMPUTE as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
     }
 
     pub fn draw(

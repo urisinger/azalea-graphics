@@ -142,11 +142,12 @@ impl ApplicationHandler for App {
 
                         renderer.update(dt);
 
+
+
+                        renderer.maybe_recreate();
                         if let Some(window) = &self.window {
                             renderer.run_debug_ui(window, ms);
                         }
-
-                        renderer.maybe_recreate();
                         renderer.draw_frame(&self.cmd_rx);
                         renderer.maybe_recreate();
                     }

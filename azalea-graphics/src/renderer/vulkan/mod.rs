@@ -1,7 +1,8 @@
-pub(crate) mod context;
-pub(crate) mod frame_sync;
-pub(crate) mod swapchain;
-pub(crate) mod texture;
-pub(crate) mod buffer;
-pub(crate) mod image;
-pub(crate) mod object;
+pub mod context;
+pub mod frame_sync;
+pub mod swapchain;
+pub mod texture;
+pub mod buffer;
+pub mod image;
+pub mod object;
+pub mod timestamp;
