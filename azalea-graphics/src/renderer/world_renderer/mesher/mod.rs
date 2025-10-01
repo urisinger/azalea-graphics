@@ -71,7 +71,7 @@ impl PartialOrd for Job {
 fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> i32 {
     let dx = (spos.x - vis.cx) as i32;
     let dz = (spos.z - vis.cz) as i32;
-    dx * dx + dz * dz - spos.y * 10
+    dx * dx + dz * dz - spos.y * 100
 }
 
 impl Mesher {

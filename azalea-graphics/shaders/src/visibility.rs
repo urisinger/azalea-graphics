@@ -70,8 +70,8 @@ pub fn cull_chunks(
                 1 => clip.x <= clip.w,  // right
                 2 => clip.y >= -clip.w, // bottom
                 3 => clip.y <= clip.w,  // top
-                4 => clip.z >= 0.0,     // near
-                5 => clip.z <= clip.w,  // far
+                4 => clip.z <= clip.w,  // near
+                5 => clip.z >= 0.0,     // far
                 _ => false,
             };
             if cond {
@@ -128,7 +128,7 @@ pub fn cull_chunks(
     let sample2 = hiz.sample_by_lod(rect.zy(), mip).x;
     let sample3 = hiz.sample_by_lod(rect.xw(), mip).x;
     let sample4 = hiz.sample_by_lod(rect.zw(), mip).x;
-    let max_z = sample1.max(sample2).max(sample3.max(sample4));
+    let max_z = sample1.min(sample2).min(sample3.min(sample4));
 
-    visible[index as usize] = if near_depth <= (max_z - 0.00001) { 1 } else { 0 };
+    visible[index as usize] = if near_depth > max_z { 1 } else { 0 };
 }

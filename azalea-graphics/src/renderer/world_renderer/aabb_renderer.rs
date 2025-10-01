@@ -121,7 +121,7 @@ impl AabbRenderer {
         let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
             .depth_test_enable(false)
             .depth_write_enable(false)
-            .depth_compare_op(vk::CompareOp::LESS_OR_EQUAL);
+            .depth_compare_op(vk::CompareOp::GREATER_OR_EQUAL);
 
         let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
         let dynamic_state =

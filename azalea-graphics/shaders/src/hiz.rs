@@ -48,6 +48,6 @@ pub fn reduce(
     let d2 = src.read(p01);
     let d3 = src.read(p11);
     
-    let d = d0.max(d1).max(d2.max(d3));
+    let d = d0.min(d1).min(d2.min(d3));
     unsafe { dst.write(o, Vec4::new(d, 0.0, 0.0, 0.0)) };
 }

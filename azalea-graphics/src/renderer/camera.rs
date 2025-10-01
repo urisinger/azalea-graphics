@@ -39,16 +39,14 @@ pub struct Projection {
     aspect: f32,
     fovy: f32,
     znear: f32,
-    zfar: f32,
 }
 
 impl Projection {
-    pub fn new(width: u32, height: u32, fovy_deg: f32, znear: f32, zfar: f32) -> Self {
+    pub fn new(width: u32, height: u32, fovy_deg: f32, znear: f32) -> Self {
         Self {
             aspect: width as f32 / height as f32,
             fovy: fovy_deg.to_radians(),
             znear,
-            zfar,
         }
     }
 
@@ -57,7 +55,7 @@ impl Projection {
     }
 
     pub fn calc_proj(&self) -> Mat4 {
-        let mut proj = Mat4::perspective_rh(self.fovy, self.aspect, self.znear, self.zfar);
+        let mut proj = Mat4::perspective_infinite_reverse_rh(self.fovy, self.aspect, self.znear);
         proj.col_mut(1)[1] *= -1.0;
         proj
     }

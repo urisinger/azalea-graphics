@@ -101,7 +101,7 @@ impl Renderer {
         let sync = FrameSync::new(context.device(), swapchain.images.len());
 
         let camera = Camera::new(glam::vec3(0.0, 250.0, 2.0), 0.0, 90.0);
-        let projection = Projection::new(size.width, size.height, 90.0, 0.1, 1000.0);
+        let projection = Projection::new(size.width, size.height, 90.0, 0.1);
         let camera_controller = CameraController::new(4.0, 1.0);
 
         let egui = EguiVulkan::new(event_loop, &context, module, &swapchain, None)?;

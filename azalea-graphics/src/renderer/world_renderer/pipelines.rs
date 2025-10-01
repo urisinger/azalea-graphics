@@ -108,7 +108,7 @@ pub fn create_world_pipeline(
     let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
         .depth_test_enable(true)
         .depth_write_enable(config.depth_write)
-        .depth_compare_op(vk::CompareOp::LESS);
+        .depth_compare_op(vk::CompareOp::GREATER_OR_EQUAL);
 
     let attachments = [color_blend_attachment];
     let color_blending = vk::PipelineColorBlendStateCreateInfo::default().attachments(&attachments);
