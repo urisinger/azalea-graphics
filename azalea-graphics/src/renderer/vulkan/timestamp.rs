@@ -56,4 +56,11 @@ impl TimestampQueryPool {
             }
         }
     }
+
+    pub fn destroy(&self, device: &ash::Device){
+        unsafe{
+            device.destroy_query_pool(self.handle, None);
+        }
+
+    }
 }

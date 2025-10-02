@@ -216,13 +216,23 @@ impl Renderer {
                 ui.checkbox(
                     &mut self.renderer_config.disable_visibilty,
                     "Disable visibility calculation (F4)",
-                )
+                );
+                let response = ui.add(
+                    egui::Slider::new(&mut self.renderer_config.render_distance, 0..=64)
+                        .text("Render distance"),
+                );
+
+                if response.changed() {
+                    self.world
+                        .set_render_distance(&self.context, self.renderer_config.render_distance);
+                }
             });
         });
     }
 
     pub fn update_world(&mut self, update: WorldUpdate) {
-        self.world.update(&self.context, update);
+        self.world
+            .update(&self.context, &self.renderer_config, update, &mut self.sync);
     }
 
     pub fn update(&mut self, dt: Duration) {
@@ -300,11 +310,11 @@ impl Renderer {
             let begin_info = vk::CommandBufferBeginInfo::default();
             device.begin_command_buffer(cmd, &begin_info).unwrap();
         }
+
         self.timestamp_pools
             .as_mut()
             .map(|arr| arr[frame].reset(device, cmd, 0, timings::TIMESTAMP_COUNT as u32));
 
-        // Write frame start timestamp
         if let Some(timestamps) = &self.timestamp_pools {
             timestamps[frame].write_timestamp(
                 self.context.device(),
@@ -434,6 +444,12 @@ impl Renderer {
 
         unsafe {
             device.device_wait_idle().unwrap();
+
+            self.timestamp_pools.as_ref().inspect(|pools| {
+                pools.iter().for_each(|pool| {
+                    pool.destroy(device);
+                });
+            });
 
             self.world.destroy(&self.context);
 

@@ -80,6 +80,7 @@ pub struct WorldRendererConfig {
     pub wireframe_mode: bool,
     pub render_aabbs: bool,
     pub disable_visibilty: bool,
+    pub render_distance: u32,
 }
 
 impl Default for WorldRendererConfig {
@@ -88,6 +89,7 @@ impl Default for WorldRendererConfig {
             wireframe_mode: false,
             render_aabbs: false,
             disable_visibilty: false,
+            render_distance: 10,
         }
     }
 }
@@ -162,7 +164,13 @@ impl WorldRenderer {
         }
     }
 
-    pub fn update(&mut self, ctx: &VkContext, update: WorldUpdate) {
+    pub fn update(
+        &mut self,
+        ctx: &VkContext,
+        config: &WorldRendererConfig,
+        update: WorldUpdate,
+        sync: &mut FrameSync,
+    ) {
         match update {
             WorldUpdate::ChunkAdded(chunk_pos) => {
                 if let Some(mesher) = &self.mesher {
@@ -177,15 +185,21 @@ impl WorldRenderer {
                 }
             }
             WorldUpdate::WorldAdded(world) => {
-                if let Some(mut vb) = self.visibility_buffers.take() {
-                    vb.destroy(ctx);
-                }
-
                 let world_read = world.read();
                 let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
                 drop(world_read);
 
-                let vb = VisibilityBuffers::new(ctx, 32, (max_height) / 16);
+                let radius = config.render_distance as i32;
+                let height = max_height / 16;
+
+                if let Some(vb) = &mut self.visibility_buffers {
+                    vb.recreate(ctx, radius, height);
+                } else {
+                    let vb = VisibilityBuffers::new(ctx, radius, height);
+                    self.visibility_buffers = Some(vb);
+                }
+
+                let vb = self.visibility_buffers.as_ref().unwrap();
 
                 for f in 0..MAX_FRAMES_IN_FLIGHT {
                     self.visibility_compute
@@ -195,9 +209,32 @@ impl WorldRenderer {
                 self.aabb_renderer
                     .recreate_descriptor_sets(ctx.device(), &vb.outputs);
 
-                self.visibility_buffers = Some(vb);
-
                 self.mesher = Some(Mesher::new(self.assets.clone(), world));
+            }
+        }
+    }
+
+    pub fn set_render_distance(&mut self, ctx: &VkContext, new_distance: u32) {
+        if let Some(mesher) = &self.mesher {
+            let world_read = mesher.world.read();
+            let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
+            drop(world_read);
+
+            let radius = new_distance as i32;
+            let height = max_height / 16;
+
+            if let Some(vb) = &mut self.visibility_buffers {
+                if vb.radius != radius || vb.height != height {
+                    vb.recreate(ctx, radius, height);
+
+                    for f in 0..MAX_FRAMES_IN_FLIGHT {
+                        self.visibility_compute
+                            .rewrite_frame_set(ctx.device(), f, &vb.outputs[f]);
+                    }
+
+                    self.aabb_renderer
+                        .recreate_descriptor_sets(ctx.device(), &vb.outputs);
+                }
             }
         }
     }
@@ -289,7 +326,7 @@ impl WorldRenderer {
             let pc = VisibilityPushConstants {
                 view_proj: view_proj.to_cols_array_2d(),
                 grid_origin_ws,
-                radius: 32,
+                radius: config.render_distance as i32,
                 height: vb.height,
                 _padding: [0, 0],
             };
@@ -353,7 +390,6 @@ impl WorldRenderer {
                 vk::PipelineStageFlags::TOP_OF_PIPE,
             );
         }
-
 
         if let Some(vb) = &mut self.visibility_buffers
             && !config.disable_visibilty

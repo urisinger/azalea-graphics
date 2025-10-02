@@ -5,6 +5,7 @@ use vk_mem::{
 
 use crate::renderer::vulkan::{context::VkContext, object::VkObject};
 
+#[derive(Debug, Clone)]
 pub struct Buffer {
     pub buffer: vk::Buffer,
     pub allocation: Allocation,

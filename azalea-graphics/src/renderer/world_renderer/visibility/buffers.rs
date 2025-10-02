@@ -1,9 +1,12 @@
 use std::array::from_fn;
+
 use ash::vk;
 use azalea::core::position::ChunkSectionPos;
 
 use crate::renderer::vulkan::{
-    buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT,
+    buffer::Buffer,
+    context::VkContext,
+    frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
 };
 
 pub struct VisibilitySnapshot {
@@ -15,7 +18,6 @@ pub struct VisibilitySnapshot {
     pub cz: i32,
     pub cy: i32,
     pub min_y: i32,
-
 }
 
 impl VisibilitySnapshot {
@@ -165,6 +167,52 @@ impl VisibilityBuffers {
             cz,
             min_y,
         }
+    }
+
+    pub fn resize(
+        &mut self,
+        ctx: &VkContext,
+        sync: &mut FrameSync,
+        new_radius: i32,
+        new_height: i32,
+    ) {
+        if self.radius == new_radius && self.height == new_height {
+            return;
+        }
+
+        for (frame, b) in &mut self.outputs.iter().enumerate() {
+            sync.add_to_deletion_queue(frame, Box::new(b.clone()));
+        }
+        for (frame, b) in &mut self.readbacks.iter().enumerate() {
+            sync.add_to_deletion_queue(frame, Box::new(b.clone()));
+        }
+
+        let (entry_count, byte_size) = Self::calc(new_radius, new_height);
+
+        self.outputs = std::array::from_fn(|_| {
+            Buffer::new(
+                ctx,
+                byte_size,
+                vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_SRC,
+                vk_mem::MemoryUsage::AutoPreferDevice,
+                false,
+            )
+        });
+
+        self.readbacks = std::array::from_fn(|_| {
+            Buffer::new(
+                ctx,
+                byte_size,
+                vk::BufferUsageFlags::TRANSFER_DST,
+                vk_mem::MemoryUsage::AutoPreferHost,
+                true,
+            )
+        });
+
+        self.radius = new_radius;
+        self.height = new_height;
+        self.entry_count = entry_count;
+        self.byte_size = byte_size;
     }
 
     pub fn destroy(&mut self, ctx: &VkContext) {
