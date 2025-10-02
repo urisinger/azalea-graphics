@@ -109,9 +109,6 @@ azalea-world = { path = "azalea-world", version = "0.14.0" }
 
 # --- Profile Settings ---
 
-[profile.release]
-debug = true
-
 # decoding packets takes forever if we don't do this
 [profile.dev.package.azalea-crypto]
 opt-level = 3

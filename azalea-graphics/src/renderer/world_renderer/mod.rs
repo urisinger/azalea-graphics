@@ -158,7 +158,7 @@ impl WorldRenderer {
             let cy = (camera_pos.y / 16.0).floor() as i32;
             let cz = (camera_pos.z / 16.0).floor() as i32;
             let min_y = self.mesher.as_ref().unwrap().world.read().chunks.min_y;
-            let snapshot = vis_bufs.snapshot(ctx, frame_index, cx, cy, cz, min_y);
+            let snapshot = vis_bufs.snapshot(ctx, frame_index, cx, cz, min_y);
 
             mesher.update_visibility(snapshot);
         }
@@ -543,9 +543,21 @@ impl WorldRenderer {
             dist(a).partial_cmp(&dist(b)).unwrap_or(Ordering::Equal)
         });
 
-        for (_, mesh) in water_meshes {
+        for (pos, mesh) in water_meshes {
+            let pos_min = Vec3::new(
+                pos.x as f32 * 16.0,
+                pos.y as f32 * 16.0,
+                pos.z as f32 * 16.0,
+            );
+            let pos_max = Vec3::new(pos_min.x + 16.0, pos_min.y + 16.0, pos_min.z + 16.0);
+
+            if !visibility::aabb_visible(view_proj, pos_min, pos_max) {
+                continue;
+            }
+
             let vertex_buffers = [mesh.buffer.buffer];
             let offsets = [mesh.vertex_offset];
+
             unsafe {
                 device.cmd_bind_vertex_buffers(cmd, 0, &vertex_buffers, &offsets);
                 device.cmd_bind_index_buffer(

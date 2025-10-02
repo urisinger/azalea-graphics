@@ -123,12 +123,12 @@ def generate_block_shapes_code(blocks: dict, shapes: dict, block_states_report):
         generated_map_code += f"&SHAPE{shape_id},\n"
     generated_map_code += "];\n"
 
-    generated_map_code += f"static SHAPE_FULL_MAP: [bool; {len(outline_shapes_map)}] = ["
+    generated_map_code += f"static SHAPE_FULL_MAP: [bool; {len(shape_full_map)}] = ["
     for block_state_id, is_full in enumerate(shape_full_map):
         generated_map_code += "true," if is_full else "false," 
     generated_map_code += f"];\n"
 
-    generated_map_code += f"static SHAPE_EMPTY_MAP: [bool; {len(outline_shapes_map)}] = ["
+    generated_map_code += f"static SHAPE_EMPTY_MAP: [bool; {len(shape_empty_map)}] = ["
     for block_state_id, is_empty in enumerate(shape_empty_map):
         generated_map_code += "true," if is_empty else "false," 
     generated_map_code += f"];\n"

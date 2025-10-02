@@ -50,15 +50,25 @@ pub struct Mesher {
     dirty: Arc<Mutex<RawMutex, HashSet<ChunkSectionPos>>>,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone)]
 struct Job {
-    prio: i32,
+    prio: f32,
     spos: ChunkSectionPos,
+}
+
+impl Eq for Job {}
+
+impl PartialEq for Job {
+    fn eq(&self, other: &Self) -> bool {
+        self.spos == other.spos && self.prio == other.prio
+    }
 }
 
 impl Ord for Job {
     fn cmp(&self, other: &Self) -> Ordering {
-        other.prio.cmp(&self.prio)
+        self.prio
+            .partial_cmp(&other.prio)
+            .unwrap_or(Ordering::Equal)
     }
 }
 
@@ -68,10 +78,8 @@ impl PartialOrd for Job {
     }
 }
 
-fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> i32 {
-    let dx = (spos.x - vis.cx) as i32;
-    let dz = (spos.z - vis.cz) as i32;
-    dx * dx + dz * dz - spos.y * 100
+fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> f32 {
+    vis.section_depth(spos).unwrap_or(0.0)
 }
 
 impl Mesher {
@@ -102,7 +110,7 @@ impl Mesher {
                 if !queued.insert(spos) {
                     return;
                 }
-                let prio = vis.map(|v| prio_for(v, spos)).unwrap_or(i32::MAX);
+                let prio = vis.map(|v| prio_for(v, spos)).unwrap_or(f32::MAX);
                 queue.push(Job { prio, spos });
             }
 
@@ -159,8 +167,8 @@ impl Mesher {
                             if let Some(old_vis) = &current_visibility {
                                 let side = new_vis.radius * 2 + 1;
                                 for (i, &entry) in new_vis.data.iter().enumerate() {
-                                    if entry == 0 {
-                                        continue; // not visible
+                                    if entry == 0.0 {
+                                        continue;
                                     }
 
                                     let y = i / (side as usize * side as usize);

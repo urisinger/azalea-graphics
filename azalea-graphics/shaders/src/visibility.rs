@@ -17,7 +17,7 @@ pub struct PushConstants {
 pub fn cull_chunks(
     #[spirv(push_constant)] pc: &PushConstants,
 
-    #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] visible: &mut [u32],
+    #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] visible: &mut [f32],
     #[spirv(descriptor_set = 1, binding = 0)] hiz: &SampledImage<Image!(2D, type=f32, sampled)>,
     #[spirv(global_invocation_id)] gid: IVec3,
 ) {
@@ -80,7 +80,7 @@ pub fn cull_chunks(
             }
         }
         if all_outside {
-            visible[index as usize] = 0;
+            visible[index as usize] = 0.0;
             return;
         }
     }
@@ -108,13 +108,13 @@ pub fn cull_chunks(
     min_xy = min_xy.clamp(Vec2::splat(0.0), Vec2::splat(1.0));
     max_xy = max_xy.clamp(Vec2::splat(0.0), Vec2::splat(1.0));
     if !any_valid {
-        visible[index as usize] = 0;
+        visible[index as usize] = 0.0;
         return;
     }
 
     let extent = max_xy - min_xy;
     if extent.x <= 0.0 || extent.y <= 0.0 {
-        visible[index as usize] = 1;
+        visible[index as usize] = 0.0;
         return;
     }
 
@@ -130,5 +130,5 @@ pub fn cull_chunks(
     let sample4 = hiz.sample_by_lod(rect.zw(), mip).x;
     let max_z = sample1.min(sample2).min(sample3.min(sample4));
 
-    visible[index as usize] = if near_depth > max_z { 1 } else { 0 };
+    visible[index as usize] = if near_depth > max_z { near_depth } else { 0.0 };
 }

@@ -155,7 +155,7 @@ def generate_blocks(
         if force_solid is not None:
             behavior_constructor += f".force_solid({force_solid})"
 
-        if block_data_burger.get("can_occlude"):
+        if block_data_burger.get("can_occlude") == False:
             behavior_constructor += ".no_occlude()"
 
         # TODO: use burger to generate the blockbehavior

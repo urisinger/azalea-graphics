@@ -2,36 +2,47 @@ pub(crate) mod buffers;
 pub(crate) mod compute;
 
 pub fn aabb_visible(view_proj: glam::Mat4, min: glam::Vec3, max: glam::Vec3) -> bool {
-    let corners = [
-        glam::vec3(min.x, min.y, min.z),
-        glam::vec3(max.x, min.y, min.z),
-        glam::vec3(min.x, max.y, min.z),
-        glam::vec3(max.x, max.y, min.z),
-        glam::vec3(min.x, min.y, max.z),
-        glam::vec3(max.x, min.y, max.z),
-        glam::vec3(min.x, max.y, max.z),
-        glam::vec3(max.x, max.y, max.z),
+    // Precompute the 8 corners in clip space
+    let corners: [glam::Vec4; 8] = [
+        view_proj * min.extend(1.0),
+        view_proj * glam::vec3(max.x, min.y, min.z).extend(1.0),
+        view_proj * glam::vec3(min.x, max.y, min.z).extend(1.0),
+        view_proj * glam::vec3(max.x, max.y, min.z).extend(1.0),
+        view_proj * glam::vec3(min.x, min.y, max.z).extend(1.0),
+        view_proj * glam::vec3(max.x, min.y, max.z).extend(1.0),
+        view_proj * glam::vec3(min.x, max.y, max.z).extend(1.0),
+        view_proj * max.extend(1.0),
     ];
 
-    let mut all_outside = true;
+    // Check each frustum plane
+    for plane in 0..6 {
+        let mut all_outside = true;
 
-    for c in corners {
-        let clip = view_proj * c.extend(1.0);
-        if clip.w <= 0.0 {
-            continue;
+        for &clip in &corners {
+            if clip.w <= 0.0 {
+                continue;
+            }
+
+            let inside = match plane {
+                0 => clip.x >= -clip.w, // left
+                1 => clip.x <= clip.w,  // right
+                2 => clip.y >= -clip.w, // bottom
+                3 => clip.y <= clip.w,  // top
+                4 => clip.z <= clip.w,  // near
+                5 => clip.z >= 0.0,     // far
+                _ => unreachable!(),
+            };
+
+            if inside {
+                all_outside = false;
+                break;
+            }
         }
-        let ndc = clip.truncate() / clip.w;
 
-        if ndc.x >= -1.0
-            || ndc.x <= 1.0
-            || ndc.y >= -1.0
-            || ndc.y <= 1.0
-            || ndc.z >= 0.0
-            || ndc.z <= 1.0
-        {
-            all_outside = false;
+        if all_outside {
+            return false;
         }
     }
 
-    !all_outside
+    true
 }

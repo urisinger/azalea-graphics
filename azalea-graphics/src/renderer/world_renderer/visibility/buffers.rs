@@ -12,11 +12,10 @@ use crate::renderer::vulkan::{
 pub struct VisibilitySnapshot {
     pub radius: i32,
     pub height: i32,
-    pub data: Vec<u32>,
+    pub data: Vec<f32>,
 
     pub cx: i32,
     pub cz: i32,
-    pub cy: i32,
     pub min_y: i32,
 }
 
@@ -40,9 +39,13 @@ impl VisibilitySnapshot {
         Some((y * side as usize * side as usize) + (z * side as usize) + x)
     }
 
+    pub fn get_depth(&self, dx: i32, dy: i32, dz: i32) -> Option<f32> {
+        self.index(dx, dy, dz).map(|i| self.data[i])
+    }
+
     pub fn is_visible(&self, dx: i32, dy: i32, dz: i32) -> bool {
         self.index(dx, dy, dz)
-            .map(|i| self.data[i] != 0)
+            .map(|i| self.data[i] != 0.0)
             .unwrap_or(false)
     }
 
@@ -51,6 +54,12 @@ impl VisibilitySnapshot {
         let dy = spos.y - (self.min_y / 16);
         let dz = spos.z - self.cz;
         self.is_visible(dx, dy, dz)
+    }
+    pub fn section_depth(&self, spos: ChunkSectionPos) -> Option<f32> {
+        let dx = spos.x - self.cx;
+        let dy = spos.y - (self.min_y / 16);
+        let dz = spos.z - self.cz;
+        self.get_depth(dx, dy, dz)
     }
 }
 
@@ -145,26 +154,24 @@ impl VisibilityBuffers {
         ctx: &VkContext,
         frame_idx: usize,
         cx: i32,
-        cy: i32,
         cz: i32,
         min_y: i32,
     ) -> VisibilitySnapshot {
         let allocator = ctx.allocator();
-        let mut data = vec![0u32; self.entry_count];
+        let mut data = vec![0.0; self.entry_count];
         unsafe {
             let ptr = allocator
                 .map_memory(&mut self.readbacks[frame_idx].allocation)
                 .unwrap();
-            std::ptr::copy_nonoverlapping(ptr as *const u32, data.as_mut_ptr(), self.entry_count);
+            std::ptr::copy_nonoverlapping(ptr as *const f32, data.as_mut_ptr(), self.entry_count);
             allocator.unmap_memory(&mut self.readbacks[frame_idx].allocation);
         }
         VisibilitySnapshot {
             radius: self.radius,
             height: self.height,
-            data,
             cx,
-            cy,
             cz,
+            data,
             min_y,
         }
     }
