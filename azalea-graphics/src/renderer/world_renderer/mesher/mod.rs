@@ -16,7 +16,7 @@ use azalea::{
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use glam::IVec3;
 use log::error;
-use parking_lot::{RawMutex, RwLock, lock_api::Mutex};
+use parking_lot::{RwLock, Mutex};
 use simdnbt::Deserialize;
 
 use crate::renderer::{
@@ -47,7 +47,7 @@ pub struct Mesher {
     visibility_tx: Sender<VisibilitySnapshot>,
 
     pub world: Arc<RwLock<azalea::world::Instance>>,
-    dirty: Arc<Mutex<RawMutex, HashSet<ChunkSectionPos>>>,
+    dirty: Arc<Mutex<HashSet<ChunkSectionPos>>>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -82,49 +82,154 @@ fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> f32 {
     vis.section_depth(spos).unwrap_or(0.0)
 }
 
+struct SharedQueue {
+    queue: Mutex<BinaryHeap<Job>>,
+    queued: Mutex<HashSet<ChunkSectionPos>>,
+}
+
+impl SharedQueue {
+    fn new() -> Self {
+        Self {
+            queue: Mutex::new(BinaryHeap::new()),
+            queued: Mutex::new(HashSet::new()),
+        }
+    }
+
+    fn push(&self, job: Job) {
+        let mut queued = self.queued.lock();
+        if queued.insert(job.spos) {
+            self.queue.lock().push(job);
+        }
+    }
+
+    fn pop(&self) -> Option<Job> {
+        let job = self.queue.lock().pop()?;
+        self.queued.lock().remove(&job.spos);
+        Some(job)
+    }
+
+    fn clear_and_reprioritize(&self, vis: &VisibilitySnapshot, dirty: &HashSet<ChunkSectionPos>) {
+        let mut queue = self.queue.lock();
+        let mut queued = self.queued.lock();
+
+        queue.clear();
+        queued.clear();
+
+        let side = vis.radius * 2 + 1;
+        for (i, &entry) in vis.data.iter().enumerate() {
+            if entry == 0.0 {
+                continue;
+            }
+
+            let y = i / (side as usize * side as usize);
+            let rem = i % (side as usize * side as usize);
+            let z = rem / side as usize;
+            let x = rem % side as usize;
+
+            let dx = x as i32 - vis.radius;
+            let dz = z as i32 - vis.radius;
+            let dy = y as i32;
+
+            let spos = ChunkSectionPos::new(vis.cx + dx, (vis.min_y / 16) + dy, vis.cz + dz);
+
+            if dirty.contains(&spos) {
+                let prio = prio_for(vis, spos);
+                if queued.insert(spos) {
+                    queue.push(Job { prio, spos });
+                }
+            }
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.queue.lock().is_empty()
+    }
+}
+
 impl Mesher {
     pub fn new(assets: Arc<Assets>, world: Arc<RwLock<azalea::world::Instance>>) -> Self {
+        let num_threads = num_cpus::get().max(1);
+
         let (work_tx, work_rx) = unbounded::<ChunkSectionPos>();
         let (result_tx, result_rx) = unbounded::<MeshResult>();
         let (visibility_tx, visibility_rx) = unbounded::<VisibilitySnapshot>();
 
         let dirty = Arc::new(Mutex::new(HashSet::new()));
+        let shared_queue = Arc::new(SharedQueue::new());
+        let current_visibility = Arc::new(Mutex::new(None::<VisibilitySnapshot>));
         let biome_cache = Arc::new(BiomeCache::from_registries(&world.read().registries));
 
-        let thread_world = Arc::clone(&world);
-        let thread_dirty = Arc::clone(&dirty);
-        let thread_assets = Arc::clone(&assets);
-        let thread_biome_cache = Arc::clone(&biome_cache);
+        // Coordinator thread
+        {
+            let shared_queue = Arc::clone(&shared_queue);
+            let dirty = Arc::clone(&dirty);
+            let current_visibility = Arc::clone(&current_visibility);
 
-        std::thread::spawn(move || {
-            let mut current_visibility: Option<VisibilitySnapshot> = None;
-            let mut queue: BinaryHeap<Job> = BinaryHeap::new();
-            let mut queued: HashSet<ChunkSectionPos> = HashSet::new();
+            std::thread::spawn(move || {
+                loop {
+                    crossbeam::channel::select! {
+                        recv(work_rx) -> msg => {
+                            if let Ok(spos) = msg {
+                                let vis_opt = current_visibility.lock();
+                                match &*vis_opt {
+                                    Some(vis) if vis.section_is_visible(spos) => {
+                                        let prio = prio_for(&vis, spos);
+                                        shared_queue.push(Job { prio, spos });
+                                    }
+                                    None => {
+                                        shared_queue.push(Job { prio: 0.0, spos });
+                                    }
+                                    _ => {}
+                                }
+                            } else {
+                                break;
+                            }
+                        }
 
-            fn push_job(
-                queue: &mut BinaryHeap<Job>,
-                queued: &mut HashSet<ChunkSectionPos>,
-                vis: Option<&VisibilitySnapshot>,
-                spos: ChunkSectionPos,
-            ) {
-                if !queued.insert(spos) {
-                    return;
+                        recv(visibility_rx) -> msg => {
+                            if let Ok(new_vis) = msg {
+                                let dirty_set = dirty.lock().clone();
+                                shared_queue.clear_and_reprioritize(&new_vis, &dirty_set);
+                                *current_visibility.lock() = Some(new_vis);
+                            } else {
+                                break;
+                            }
+                        }
+                    }
                 }
-                let prio = vis.map(|v| prio_for(v, spos)).unwrap_or(f32::MAX);
-                queue.push(Job { prio, spos });
-            }
+            });
+        }
 
-            loop {
-                if work_rx.is_empty() && visibility_rx.is_empty() {
-                    while let Some(job) = queue.pop() {
-                        queued.remove(&job.spos);
+        // Worker threads
+        for thread_id in 0..num_threads {
+            let thread_world = Arc::clone(&world);
+            let thread_dirty = Arc::clone(&dirty);
+            let thread_assets = Arc::clone(&assets);
+            let thread_biome_cache = Arc::clone(&biome_cache);
+            let thread_queue = Arc::clone(&shared_queue);
+            let thread_visibility = Arc::clone(&current_visibility);
+            let thread_result_tx = result_tx.clone();
 
-                        if let Some(vis) = &current_visibility {
+            std::thread::Builder::new()
+                .name(format!("mesher-worker-{}", thread_id))
+                .spawn(move || {
+                    loop {
+                        let job = match thread_queue.pop() {
+                            Some(j) => j,
+                            None => {
+                                std::thread::sleep(std::time::Duration::from_millis(10));
+                                continue;
+                            }
+                        };
+
+                        // Check visibility again
+                        if let Some(vis) = thread_visibility.lock().as_ref() {
                             if !vis.section_is_visible(job.spos) {
                                 continue;
                             }
                         }
 
+                        // Check if still dirty
                         {
                             let mut d = thread_dirty.lock();
                             if !d.remove(&job.spos) {
@@ -135,74 +240,18 @@ impl Mesher {
                         if let Some(local) = build_local_section(&thread_world, job.spos) {
                             let t0 = std::time::Instant::now();
                             let mesh = mesh_section(&local, &thread_biome_cache, &thread_assets);
-                            result_tx.send(mesh).unwrap();
-                            log::debug!("Meshed {:?} in {:?}", job.spos, t0.elapsed());
-                        }
-                        if !work_rx.is_empty() || !visibility_rx.is_empty() {
-                            break;
-                        }
-                    }
-                }
-
-                crossbeam::channel::select! {
-                    recv(work_rx) -> msg => {
-                        if let Ok(spos) = msg {
-                            match &current_visibility {
-                                Some(vis) => {
-                                    if vis.section_is_visible(spos) {
-                                        push_job(&mut queue, &mut queued, Some(vis), spos);
-                                    }
-                                }
-                                None => {
-                                    push_job(&mut queue, &mut queued, None, spos);
-                                }
-                            }
-                        } else {
-                            break;
+                            let _ = thread_result_tx.send(mesh);
+                            log::debug!(
+                                "Thread {} meshed {:?} in {:?}",
+                                thread_id,
+                                job.spos,
+                                t0.elapsed()
+                            );
                         }
                     }
-
-                    recv(visibility_rx) -> msg => {
-                        if let Ok(new_vis) = msg {
-                            if let Some(old_vis) = &current_visibility {
-                                let side = new_vis.radius * 2 + 1;
-                                for (i, &entry) in new_vis.data.iter().enumerate() {
-                                    if entry == 0.0 {
-                                        continue;
-                                    }
-
-                                    let y = i / (side as usize * side as usize);
-                                    let rem = i % (side as usize * side as usize);
-                                    let z = rem / side as usize;
-                                    let x = rem % side as usize;
-
-                                    // Convert back to relative coordinates
-                                    let dx = x as i32 - new_vis.radius;
-                                    let dz = z as i32 - new_vis.radius;
-                                    let dy = y as i32;
-
-                                    if !old_vis.is_visible(dx, dy, dz) {
-                                        let spos = ChunkSectionPos::new(
-                                            new_vis.cx + dx,
-                                            (new_vis.min_y / 16) + dy,
-                                            new_vis.cz + dz,
-                                        );
-
-                                        if thread_dirty.lock().contains(&spos) {
-                                            push_job(&mut queue, &mut queued, Some(&new_vis), spos);
-                                        }
-                                    }
-                                }
-                            }
-
-                            current_visibility = Some(new_vis);
-                        } else {
-                            break;
-                        }
-                    }
-                }
-            }
-        });
+                })
+                .unwrap();
+        }
 
         Self {
             work_tx,
@@ -216,7 +265,7 @@ impl Mesher {
     pub fn submit_section(&self, spos: ChunkSectionPos) {
         let mut dirty = self.dirty.lock();
         if dirty.insert(spos) {
-            self.work_tx.send(spos).unwrap();
+            let _ = self.work_tx.send(spos);
         }
     }
 
@@ -238,7 +287,7 @@ impl Mesher {
     }
 
     pub fn update_visibility(&self, snapshot: VisibilitySnapshot) {
-        self.visibility_tx.send(snapshot).unwrap();
+        let _ = self.visibility_tx.send(snapshot);
     }
 }
 
