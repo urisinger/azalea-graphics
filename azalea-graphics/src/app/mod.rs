@@ -1,8 +1,6 @@
 use std::{sync::Arc, time::Instant};
 
-use azalea::{
-    core::position::{ChunkPos, ChunkSectionPos},
-};
+use azalea::core::position::{ChunkPos, ChunkSectionPos};
 use clap::Parser;
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use parking_lot::RwLock;
@@ -67,7 +65,7 @@ pub struct App {
 
     is_focused: bool,
 
-    args: Args
+    args: Args,
 }
 
 impl App {
@@ -110,8 +108,14 @@ impl ApplicationHandler for App {
         let window_handle = window.window_handle().unwrap();
         let display_handle = window.display_handle().unwrap();
 
-        let renderer = Renderer::new(&window_handle, &display_handle, size, event_loop, &self.args)
-            .expect("Failed to create renderer");
+        let renderer = Renderer::new(
+            &window_handle,
+            &display_handle,
+            size,
+            event_loop,
+            &self.args,
+        )
+        .expect("Failed to create renderer");
         self.renderer = Some(renderer);
         self.window = Some(window);
     }
@@ -126,7 +130,9 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         let mut egui_consumed = false;
-        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window) && !self.is_focused {
+        if let (Some(renderer), Some(window)) = (&mut self.renderer, &self.window)
+            && !self.is_focused
+        {
             egui_consumed = renderer.handle_egui_event(window, &event);
         }
 
@@ -155,8 +161,6 @@ impl ApplicationHandler for App {
 
                         renderer.update(dt);
 
-
-
                         renderer.maybe_recreate();
                         if let Some(window) = &self.window {
                             renderer.run_debug_ui(window, ms);
@@ -175,7 +179,9 @@ impl ApplicationHandler for App {
                         if event.state == ElementState::Pressed {
                             match code {
                                 KeyCode::Escape => {
-                                    if let Some(window) = &self.window && window.set_cursor_grab(CursorGrabMode::None).is_ok(){
+                                    if let Some(window) = &self.window
+                                        && window.set_cursor_grab(CursorGrabMode::None).is_ok()
+                                    {
                                         window.set_cursor_visible(true);
                                         self.is_focused = false;
                                     }
@@ -194,7 +200,10 @@ impl ApplicationHandler for App {
                     if let Some(window) = &self.window
                         && button == MouseButton::Left
                         && state == ElementState::Pressed
-                        && window.set_cursor_grab(CursorGrabMode::Locked).or_else(|e| window.set_cursor_grab(CursorGrabMode::Confined)).is_ok()
+                        && window
+                            .set_cursor_grab(CursorGrabMode::Locked)
+                            .or_else(|e| window.set_cursor_grab(CursorGrabMode::Confined))
+                            .is_ok()
                     {
                         self.is_focused = true;
                         window.set_cursor_visible(false);
@@ -206,7 +215,7 @@ impl ApplicationHandler for App {
     }
 
     fn device_event(&mut self, _: &ActiveEventLoop, _: DeviceId, event: DeviceEvent) {
-        if !self.is_focused{
+        if !self.is_focused {
             return;
         }
         if let (Some(renderer), DeviceEvent::MouseMotion { delta }) = (&mut self.renderer, event) {

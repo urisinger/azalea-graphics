@@ -32,7 +32,6 @@ pub trait BlockTrait: Debug + Any {
     /// contain any state data.
     fn as_registry_block(&self) -> azalea_registry::Block;
 
-
     /// Returns a map of property names on this block to their values as
     /// strings.
     ///

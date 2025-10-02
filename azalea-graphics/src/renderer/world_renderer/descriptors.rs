@@ -1,4 +1,4 @@
-use ash::{vk, Device};
+use ash::{Device, vk};
 
 use crate::renderer::vulkan::texture::Texture;
 
@@ -83,5 +83,3 @@ impl Descriptors {
         }
     }
 }
-
-

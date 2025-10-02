@@ -24,8 +24,6 @@ pub struct MultipartCase {
     pub apply: Variant,
 }
 
-
-
 pub type DirectCase = HashMap<String, String>;
 
 #[derive(serde::Deserialize, Debug)]

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -16,10 +17,7 @@ impl SpriteAtlas {
 #[serde(tag = "type")]
 pub enum SpriteSource {
     #[serde(rename = "minecraft:directory")]
-    Directory {
-        source: String,
-        prefix: String,
-    },
+    Directory { source: String, prefix: String },
     #[serde(rename = "minecraft:single")]
     Single {
         resource: String,
@@ -27,9 +25,7 @@ pub enum SpriteSource {
         sprite: Option<String>,
     },
     #[serde(rename = "minecraft:filter")]
-    Filter {
-        pattern: FilterPattern,
-    },
+    Filter { pattern: FilterPattern },
     #[serde(rename = "minecraft:unstitch")]
     Unstitch {
         resource: String,
@@ -84,10 +80,10 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let atlas = SpriteAtlas::from_str(json).unwrap();
         assert_eq!(atlas.sources.len(), 1);
-        
+
         if let SpriteSource::Directory { source, prefix } = &atlas.sources[0] {
             assert_eq!(source, "block");
             assert_eq!(prefix, "block/");
@@ -107,10 +103,10 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let atlas = SpriteAtlas::from_str(json).unwrap();
         assert_eq!(atlas.sources.len(), 1);
-        
+
         if let SpriteSource::Single { resource, sprite } = &atlas.sources[0] {
             assert_eq!(resource, "item/apple");
             assert_eq!(sprite, &None);
@@ -133,10 +129,10 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let atlas = SpriteAtlas::from_str(json).unwrap();
         assert_eq!(atlas.sources.len(), 1);
-        
+
         if let SpriteSource::Filter { pattern } = &atlas.sources[0] {
             assert_eq!(pattern.namespace, Some("minecraft".to_string()));
             assert_eq!(pattern.path, Some("block/.*".to_string()));
@@ -167,11 +163,17 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let atlas = SpriteAtlas::from_str(json).unwrap();
         assert_eq!(atlas.sources.len(), 1);
-        
-        if let SpriteSource::Unstitch { resource, divisor_x, divisor_y, regions } = &atlas.sources[0] {
+
+        if let SpriteSource::Unstitch {
+            resource,
+            divisor_x,
+            divisor_y,
+            regions,
+        } = &atlas.sources[0]
+        {
             assert_eq!(resource, "font/ascii");
             assert_eq!(*divisor_x, 16.0);
             assert_eq!(*divisor_y, 16.0);
@@ -197,17 +199,29 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let atlas = SpriteAtlas::from_str(json).unwrap();
         assert_eq!(atlas.sources.len(), 1);
-        
-        if let SpriteSource::PalettedPermutations { textures, separator, palette_key, permutations } = &atlas.sources[0] {
+
+        if let SpriteSource::PalettedPermutations {
+            textures,
+            separator,
+            palette_key,
+            permutations,
+        } = &atlas.sources[0]
+        {
             assert_eq!(textures.len(), 1);
             assert_eq!(textures[0], "block/leather_boots");
             assert_eq!(separator, "_");
-            assert_eq!(palette_key, "colormap/color_palettes/leather_armor_color_key");
+            assert_eq!(
+                palette_key,
+                "colormap/color_palettes/leather_armor_color_key"
+            );
             assert_eq!(permutations.len(), 1);
-            assert_eq!(permutations.get("overlay"), Some(&"colormap/color_palettes/leather_armor_color".to_string()));
+            assert_eq!(
+                permutations.get("overlay"),
+                Some(&"colormap/color_palettes/leather_armor_color".to_string())
+            );
         } else {
             panic!("Expected PalettedPermutations source");
         }
@@ -234,7 +248,7 @@ mod tests {
                 }
             ]
         }"#;
-        
+
         let atlas = SpriteAtlas::from_str(json).unwrap();
         assert_eq!(atlas.sources.len(), 3);
     }

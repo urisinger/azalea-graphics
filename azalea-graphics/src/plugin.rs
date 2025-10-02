@@ -2,11 +2,14 @@ use std::num::NonZero;
 
 use azalea::{
     app::{App, AppExit, Plugin, Update},
-    block_update::{handle_block_update_event, QueuedServerBlockUpdates},
-    chunks::{handle_receive_chunk_event, ReceiveChunkEvent},
+    block_update::{QueuedServerBlockUpdates, handle_block_update_event},
+    chunks::{ReceiveChunkEvent, handle_receive_chunk_event},
     core::position::{ChunkPos, ChunkSectionPos},
     ecs::{
-        message::{MessageReader, MessageWriter}, query::Changed, schedule::IntoScheduleConfigs, system::{Query, Res}
+        message::{MessageReader, MessageWriter},
+        query::Changed,
+        schedule::IntoScheduleConfigs,
+        system::{Query, Res},
     },
     local_player::InstanceHolder,
     prelude::*,
@@ -36,16 +39,16 @@ impl Plugin for RendererPlugin {
                 .after(handle_block_update_event),
         );
         app.add_systems(Update, add_world.before(forward_chunk_updates));
-        app.add_systems(Update, handle_block_updates.before(handle_block_update_event));
+        app.add_systems(
+            Update,
+            handle_block_updates.before(handle_block_update_event),
+        );
         app.add_systems(Update, poll_renderer_events);
     }
 }
 
 pub fn handle_block_updates(
-    query: Query<(
-        &QueuedServerBlockUpdates,
-        &InstanceHolder,
-    )>,
+    query: Query<(&QueuedServerBlockUpdates, &InstanceHolder)>,
     renderer: Res<RendererResource>,
 ) {
     for (queued, instance_holder) in query.iter() {

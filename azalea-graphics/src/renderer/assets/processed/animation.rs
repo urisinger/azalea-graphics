@@ -20,7 +20,6 @@ impl Animation {
         let width = self.width.or(self.height).unwrap_or(min_dim);
         let height = self.height.or(self.width).unwrap_or(min_dim);
 
-        
         (width, height)
     }
 

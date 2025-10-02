@@ -181,8 +181,7 @@ pub fn create_world_render_pass(ctx: &VkContext, swapchain: &Swapchain) -> vk::R
             .dst_subpass(0)
             .src_stage_mask(vk::PipelineStageFlags::COMPUTE_SHADER)
             .src_access_mask(vk::AccessFlags::SHADER_READ)
-            .dst_stage_mask(
-                vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
+            .dst_stage_mask(vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS)
             .dst_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE),
         vk::SubpassDependency::default()
             .src_subpass(0)

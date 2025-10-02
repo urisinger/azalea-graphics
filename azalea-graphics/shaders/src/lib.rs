@@ -1,6 +1,6 @@
 #![no_std]
-pub mod terrain;
 pub mod debug;
+pub mod hiz;
+pub mod terrain;
 pub mod ui;
 pub mod visibility;
-pub mod hiz;

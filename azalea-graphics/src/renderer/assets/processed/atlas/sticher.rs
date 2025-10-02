@@ -12,7 +12,6 @@ pub struct PlacedSprite {
     pub height: u32,
 }
 
-
 #[derive(Debug)]
 pub struct Atlas {
     pub width: u32,
@@ -169,7 +168,10 @@ pub fn stitch_sprites(
     for (name, entry) in textures {
         let (w, h) = entry.size();
         if w == 0 || h == 0 || w > max_width || h > max_height {
-            return Err(StitchError::CannotFit { max_width, max_height });
+            return Err(StitchError::CannotFit {
+                max_width,
+                max_height,
+            });
         }
     }
 
@@ -208,7 +210,10 @@ pub fn stitch_sprites(
 
             split_and_prune_free_list(&mut free, pos_rect);
         } else {
-            return Err(StitchError::CannotFit { max_width, max_height });
+            return Err(StitchError::CannotFit {
+                max_width,
+                max_height,
+            });
         }
     }
 

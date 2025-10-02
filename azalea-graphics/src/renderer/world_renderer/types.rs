@@ -1,6 +1,7 @@
+use std::mem::offset_of;
+
 use ash::vk;
 use bytemuck::{NoUninit, Zeroable};
-use std::mem::offset_of;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -64,5 +65,3 @@ pub struct VisibilityPushConstants {
     pub height: i32,
     pub _padding: [i32; 2],
 }
-
-

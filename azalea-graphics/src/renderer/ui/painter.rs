@@ -8,10 +8,12 @@ use egui::{
 };
 
 use crate::renderer::{
-    mesh::Mesh as GpuMesh, ui::{passes::create_egui_render_pass, pipelines::create_egui_pipeline}, vulkan::{
+    mesh::Mesh as GpuMesh,
+    ui::{passes::create_egui_render_pass, pipelines::create_egui_pipeline},
+    vulkan::{
         context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT, swapchain::Swapchain,
-        texture::Texture, 
-    }
+        texture::Texture,
+    },
 };
 
 /// Per-frame data for egui rendering.
@@ -77,7 +79,11 @@ pub struct Painter {
 
 impl Painter {
     /// Create a new Vulkan egui painter.
-    pub fn new(ctx: &VkContext, module: vk::ShaderModule, swapchain: &Swapchain) -> anyhow::Result<Self> {
+    pub fn new(
+        ctx: &VkContext,
+        module: vk::ShaderModule,
+        swapchain: &Swapchain,
+    ) -> anyhow::Result<Self> {
         let device = ctx.device();
 
         let render_pass = create_egui_render_pass(ctx, swapchain.format);
@@ -309,20 +315,23 @@ impl Painter {
         // Create buffers for this mesh
         let mesh = GpuMesh::new_host(ctx, &mesh.vertices, &mesh.indices);
 
-
-
-
         unsafe {
-            ctx.device()
-                .cmd_bind_vertex_buffers(cmd, 0, &[mesh.buffer.buffer], &[mesh.vertex_offset]);
-            ctx.device()
-                .cmd_bind_index_buffer(cmd, mesh.buffer.buffer, mesh.index_offset, vk::IndexType::UINT32);
+            ctx.device().cmd_bind_vertex_buffers(
+                cmd,
+                0,
+                &[mesh.buffer.buffer],
+                &[mesh.vertex_offset],
+            );
+            ctx.device().cmd_bind_index_buffer(
+                cmd,
+                mesh.buffer.buffer,
+                mesh.index_offset,
+                vk::IndexType::UINT32,
+            );
             ctx.device()
                 .cmd_draw_indexed(cmd, mesh.index_count, 1, 0, 0, 0);
         }
-        self.frame_data[frame_index]
-            .meshes
-            .push(mesh);
+        self.frame_data[frame_index].meshes.push(mesh);
 
         Ok(())
     }
@@ -384,10 +393,12 @@ impl Painter {
         };
 
         let descriptor_set = self.create_descriptor_set_for_texture(ctx, &texture)?;
-        
+
         // Clean up any existing texture for this ID
         if let Some(old_texture) = self.textures.insert(tex_id, texture) {
-            self.frame_data[frame_index].textures_to_destroy.push(old_texture);
+            self.frame_data[frame_index]
+                .textures_to_destroy
+                .push(old_texture);
         }
         self.texture_descriptor_sets.insert(tex_id, descriptor_set);
 
@@ -436,7 +447,9 @@ impl Painter {
         self.assert_not_destroyed();
 
         if let Some(texture) = self.textures.remove(&tex_id) {
-            self.frame_data[frame_index].textures_to_destroy.push(texture);
+            self.frame_data[frame_index]
+                .textures_to_destroy
+                .push(texture);
         }
         self.texture_descriptor_sets.remove(&tex_id);
     }

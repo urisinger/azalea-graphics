@@ -7,7 +7,10 @@ use std::{
 use image::RgbaImage;
 use thiserror::Error;
 
-use crate::renderer::assets::{processed::animation::Animation, raw::atlas::{SpriteAtlas, SpriteSource}};
+use crate::renderer::assets::{
+    processed::animation::Animation,
+    raw::atlas::{SpriteAtlas, SpriteSource},
+};
 
 mod sticher;
 

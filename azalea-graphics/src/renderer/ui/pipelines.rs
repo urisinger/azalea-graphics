@@ -1,6 +1,6 @@
 use std::ffi::CString;
 
-use ash::{vk, Device};
+use ash::{Device, vk};
 
 fn create_shader_module(device: &Device, code: &[u8]) -> vk::ShaderModule {
     let code_aligned = ash::util::read_spv(&mut std::io::Cursor::new(code)).unwrap();
@@ -83,7 +83,6 @@ pub fn create_egui_pipeline(
     let dynamic_states = [vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
     let dynamic_state_info =
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
-
 
     let vert_entry = CString::new("ui::egui_vert").unwrap();
     let frag_entry = CString::new("ui::egui_frag").unwrap();

@@ -451,7 +451,6 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
             azalea_registry::Block::#block_name_pascal_case => BlockStates::from(#first_state_id..=#last_state_id),
         });
 
-
         let mut property_map_inner = quote! {};
         let mut get_property_inner = quote! {};
 

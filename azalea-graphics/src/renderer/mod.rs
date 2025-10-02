@@ -71,7 +71,7 @@ impl Renderer {
         display_handle: &DisplayHandle,
         size: PhysicalSize<u32>,
         event_loop: &ActiveEventLoop,
-        args: &Args
+        args: &Args,
     ) -> anyhow::Result<Self> {
         let context = VkContext::new(window_handle, display_handle, args);
         let swapchain = Swapchain::new(&context, size.width, size.height);

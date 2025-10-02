@@ -33,7 +33,7 @@ impl FrameSync {
         }
 
         let deletion_queues = [(); MAX_FRAMES_IN_FLIGHT].map(|_| Vec::new());
-        
+
         Self {
             image_available,
             in_flight,
@@ -76,7 +76,8 @@ impl FrameSync {
                 }
             }
             for i in 0..MAX_FRAMES_IN_FLIGHT {
-                ctx.device().destroy_semaphore(self.image_available[i], None);
+                ctx.device()
+                    .destroy_semaphore(self.image_available[i], None);
                 ctx.device().destroy_fence(self.in_flight[i], None);
             }
             for sempahore in &self.render_finished {

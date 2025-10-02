@@ -81,7 +81,6 @@ fn sample_colormap_at_climate(
 pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
     let path = path.into();
 
-
     let start_total = Instant::now();
 
     let start = Instant::now();
@@ -149,82 +148,84 @@ pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
         start.elapsed()
     );
 
+    let start = Instant::now();
+    let blockstate_to_models: Vec<Vec<VariantDesc>> = (0..=BlockState::MAX_STATE)
+        .map(|raw: u16| {
+            let bs = BlockState::try_from(raw).unwrap();
+            let dyn_block = Box::<dyn BlockTrait>::from(bs);
 
-let start = Instant::now();
-let blockstate_to_models: Vec<Vec<VariantDesc>> = (0..=BlockState::MAX_STATE)
-    .map(|raw: u16| {
-        let bs = BlockState::try_from(raw).unwrap();
-        let dyn_block = Box::<dyn BlockTrait>::from(bs);
+            let Some(render_state) = blockstate_defs.get(dyn_block.id()) else {
+                return vec![];
+            };
 
-        let Some(render_state) = blockstate_defs.get(dyn_block.id()) else {
-            return vec![];
-        };
-
-        match render_state {
-            BlockRenderState::Variants(variants) => {
-                let variant = variants
-                    .iter()
-                    .find(|(states, _)| {
-                        states.is_empty()
-                            || states.split(',').all(|state| {
-                                state.split_once('=').map_or(false, |(prop_name, value)| {
-                                    dyn_block.get_property(prop_name) == Some(value)
-                                })
-                            })
-                    })
-                    .map(|(_, v)| v)
-                    .unwrap_or(&variants[0].1);
-
-                match variant {
-                    Variant::Single(desc) => {
-                        let model_name = desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
-                        vec![VariantDesc {
-                            model: block_models[model_name].clone(),
-                            x_rotation: desc.x_rotation,
-                            y_rotation: desc.y_rotation,
-                            uvlock: desc.uvlock,
-                        }]
-                    }
-                    Variant::Multiple(arr) => arr
-                        .first()
+            match render_state {
+                BlockRenderState::Variants(variants) => {
+                    let variant = variants
                         .iter()
-                        .map(|desc| {
-                            let model_name = desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
-                            VariantDesc {
+                        .find(|(states, _)| {
+                            states.is_empty()
+                                || states.split(',').all(|state| {
+                                    state.split_once('=').map_or(false, |(prop_name, value)| {
+                                        dyn_block.get_property(prop_name) == Some(value)
+                                    })
+                                })
+                        })
+                        .map(|(_, v)| v)
+                        .unwrap_or(&variants[0].1);
+
+                    match variant {
+                        Variant::Single(desc) => {
+                            let model_name =
+                                desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
+                            vec![VariantDesc {
                                 model: block_models[model_name].clone(),
                                 x_rotation: desc.x_rotation,
                                 y_rotation: desc.y_rotation,
                                 uvlock: desc.uvlock,
-                            }
-                        })
-                        .collect(),
-                }
-            }
-            BlockRenderState::MultiPart(multi_part) => multi_part
-                .iter()
-                .filter(|case| {
-                    case.when
-                        .as_ref()
-                        .map_or(true, |cond| cond.matches(dyn_block.deref()))
-                })
-                .filter_map(|case| match &case.apply {
-                    Variant::Single(desc) => Some(desc),
-                    Variant::Multiple(arr) => arr.first(),
-                })
-                .map(|desc| {
-                    let model_name = desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
-                    VariantDesc {
-                        model: block_models[model_name].clone(),
-                        x_rotation: desc.x_rotation,
-                        y_rotation: desc.y_rotation,
-                        uvlock: desc.uvlock,
+                            }]
+                        }
+                        Variant::Multiple(arr) => arr
+                            .first()
+                            .iter()
+                            .map(|desc| {
+                                let model_name =
+                                    desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
+                                VariantDesc {
+                                    model: block_models[model_name].clone(),
+                                    x_rotation: desc.x_rotation,
+                                    y_rotation: desc.y_rotation,
+                                    uvlock: desc.uvlock,
+                                }
+                            })
+                            .collect(),
                     }
-                })
-                .collect(),
-        }
-    })
-    .collect();
-info!("Mapped blockstates to models in {:?}", start.elapsed());
+                }
+                BlockRenderState::MultiPart(multi_part) => multi_part
+                    .iter()
+                    .filter(|case| {
+                        case.when
+                            .as_ref()
+                            .map_or(true, |cond| cond.matches(dyn_block.deref()))
+                    })
+                    .filter_map(|case| match &case.apply {
+                        Variant::Single(desc) => Some(desc),
+                        Variant::Multiple(arr) => arr.first(),
+                    })
+                    .map(|desc| {
+                        let model_name =
+                            desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
+                        VariantDesc {
+                            model: block_models[model_name].clone(),
+                            x_rotation: desc.x_rotation,
+                            y_rotation: desc.y_rotation,
+                            uvlock: desc.uvlock,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    info!("Mapped blockstates to models in {:?}", start.elapsed());
 
     let start = Instant::now();
 
@@ -309,7 +310,6 @@ fn vk_max_texture_2d(ctx: &VkContext) -> u32 {
         props.limits.max_image_dimension2_d
     }
 }
-
 
 fn strip_namespace(model_name: &str) -> &str {
     model_name.strip_prefix("minecraft:").unwrap_or(model_name)

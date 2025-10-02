@@ -1,9 +1,12 @@
-use std::marker::PhantomData;
-use std::mem::{align_of, size_of};
+use std::{
+    marker::PhantomData,
+    mem::{align_of, size_of},
+};
+
 use ash::vk;
 use vk_mem::MemoryUsage;
 
-use crate::renderer::vulkan::{context::VkContext, buffer::Buffer};
+use crate::renderer::vulkan::{buffer::Buffer, context::VkContext};
 
 pub struct Mesh<V> {
     pub buffer: Buffer,

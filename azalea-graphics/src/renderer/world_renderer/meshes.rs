@@ -8,8 +8,8 @@ use super::{
     types::BlockVertex,
 };
 use crate::renderer::{
-    mesh::Mesh, 
-    vulkan::{context::VkContext, frame_sync::FrameSync}
+    mesh::Mesh,
+    vulkan::{context::VkContext, frame_sync::FrameSync},
 };
 
 pub struct MeshStore {

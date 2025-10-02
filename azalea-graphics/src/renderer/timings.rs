@@ -32,7 +32,10 @@ pub struct Timings {
 
 impl Timings {
     pub fn from_ticks(ticks: [u64; TIMESTAMP_COUNT], timestamp_period: f32) -> Self {
-        Self { ticks, timestamp_period }
+        Self {
+            ticks,
+            timestamp_period,
+        }
     }
 
     pub fn delta_ms(&self, start: usize, end: usize) -> f32 {

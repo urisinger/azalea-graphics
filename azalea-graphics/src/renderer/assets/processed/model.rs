@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use crate::renderer::assets::raw;
-pub(crate) use crate::renderer::assets::raw::model::Cube;
-pub(crate) use crate::renderer::assets::raw::model::Face;
+pub(crate) use crate::renderer::assets::raw::model::{Cube, Face};
 
 #[derive(Debug)]
 pub struct BlockModel {

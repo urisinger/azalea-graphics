@@ -13,7 +13,6 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
         .print_metadata(MetadataPrintout::DependencyOnly)
         .spirv_metadata(SpirvMetadata::Full);
 
-
     let spv_result = builder.build()?;
     let path_to_spv = spv_result.module.unwrap_single();
 
