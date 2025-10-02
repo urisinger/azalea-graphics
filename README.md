@@ -1,4 +1,5 @@
 # Azalea
+![Meshing GIF](images/meshing.gif)
 
 [![docs.rs](https://img.shields.io/docsrs/azalea)](https://docs.rs/azalea)
 
