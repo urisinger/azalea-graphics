@@ -22,7 +22,7 @@ use self::{
     world_renderer::{WorldRenderer, WorldRendererFeatures},
 };
 use crate::{
-    app::WorldUpdate,
+    app::{Args, WorldUpdate},
     renderer::{
         timings::Timings, vulkan::timestamp::TimestampQueryPool,
         world_renderer::WorldRendererConfig,
@@ -71,8 +71,9 @@ impl Renderer {
         display_handle: &DisplayHandle,
         size: PhysicalSize<u32>,
         event_loop: &ActiveEventLoop,
+        args: &Args
     ) -> anyhow::Result<Self> {
-        let context = VkContext::new(window_handle, display_handle);
+        let context = VkContext::new(window_handle, display_handle, args);
         let swapchain = Swapchain::new(&context, size.width, size.height);
 
         let assets = assets::load_assets(&context, "assets/minecraft");
@@ -108,7 +109,7 @@ impl Renderer {
 
         let module = unsafe { context.device().destroy_shader_module(module, None) };
 
-        let timestamp_pools = if context.features().timestamp_queries {
+        let timestamp_pools = if context.features().timestamp_queries && args.timestamps {
             Some([(); MAX_FRAMES_IN_FLIGHT].map(|_| {
                 TimestampQueryPool::new(context.device(), timings::TIMESTAMP_COUNT as u32)
                     .expect("Failed creating timestamp query pool")

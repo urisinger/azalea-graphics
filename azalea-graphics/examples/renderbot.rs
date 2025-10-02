@@ -1,13 +1,23 @@
-use std::{env, thread};
+use std::{net::SocketAddr, thread};
 
 use azalea::{ClientInformation, prelude::*};
 use azalea_graphics::{
-    app::{App, RendererHandle},
+    app::{App, Args as RendererArgs, RendererHandle},
     plugin::RendererPlugin,
 };
+use clap::Parser;
 use tokio::runtime::Runtime;
 
-async fn run_azalea(render_handle: RendererHandle, server_address: String) {
+#[derive(clap::Parser)]
+struct Args {
+    #[command(flatten)]
+    renderer: RendererArgs,
+
+    #[arg(long, short, default_value = "127.0.0.1:25565")]
+    addr: SocketAddr,
+}
+
+async fn run_azalea(render_handle: RendererHandle, server_address: SocketAddr) {
     let account = Account::offline("bot");
 
     ClientBuilder::new()
@@ -23,21 +33,12 @@ async fn run_azalea(render_handle: RendererHandle, server_address: String) {
 fn main() {
     env_logger::init();
 
-    let args: Vec<String> = env::args().collect();
+    let args = Args::parse();
 
-    let server_address = if args.len() >= 2 {
-        if args[1].parse::<u16>().is_ok() {
-            format!("localhost:{}", args[1])
-        } else {
-            args[1].clone()
-        }
-    } else {
-        "localhost:25565".to_string()
-    };
-
+    let server_address = args.addr;
     println!("Connecting to: {}", server_address);
 
-    let (handle, app) = App::new();
+    let (handle, app) = App::new(args.renderer);
     let azalea_thread = thread::spawn(move || {
         let rt = Runtime::new().unwrap();
         rt.block_on(run_azalea(handle, server_address));
@@ -53,11 +54,14 @@ struct State;
 
 async fn handle(bot: Client, event: azalea::Event, _state: State) -> anyhow::Result<()> {
     match event {
-        azalea::Event::Init => bot.set_client_information(ClientInformation {
-            view_distance: 32,
-            ..Default::default()
-        }).await,
+        azalea::Event::Init => {
+            bot.set_client_information(ClientInformation {
+                view_distance: 32,
+                ..Default::default()
+            })
+            .await
+        }
         _ => {}
-    };
+    }
     Ok(())
 }

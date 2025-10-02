@@ -185,6 +185,7 @@ impl WorldRenderer {
                 }
             }
             WorldUpdate::WorldAdded(world) => {
+                unsafe { ctx.device().queue_wait_idle(ctx.graphics_queue()).unwrap() };
                 let world_read = world.read();
                 let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
                 drop(world_read);
@@ -225,6 +226,7 @@ impl WorldRenderer {
 
             if let Some(vb) = &mut self.visibility_buffers {
                 if vb.radius != radius || vb.height != height {
+                    unsafe { ctx.device().queue_wait_idle(ctx.graphics_queue()).unwrap() };
                     vb.recreate(ctx, radius, height);
 
                     for f in 0..MAX_FRAMES_IN_FLIGHT {

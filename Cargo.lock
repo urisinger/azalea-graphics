@@ -597,6 +597,7 @@ dependencies = [
  "azalea",
  "bytemuck",
  "cargo-gpu",
+ "clap",
  "crossbeam",
  "egui",
  "egui-winit",

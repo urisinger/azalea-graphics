@@ -3,6 +3,7 @@ use std::{sync::Arc, time::Instant};
 use azalea::{
     core::position::{ChunkPos, ChunkSectionPos},
 };
+use clap::Parser;
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use parking_lot::RwLock;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
@@ -46,6 +47,15 @@ impl RendererHandle {
     }
 }
 
+#[derive(Debug, clap::Parser)]
+pub struct Args {
+    #[arg(short, long)]
+    pub debug: bool,
+
+    #[arg(short, long)]
+    pub timestamps: bool,
+}
+
 pub struct App {
     window: Option<Window>,
     cmd_rx: Receiver<WorldUpdate>,
@@ -56,10 +66,12 @@ pub struct App {
     last_frame_time: Instant,
 
     is_focused: bool,
+
+    args: Args
 }
 
 impl App {
-    pub fn new() -> (RendererHandle, App) {
+    pub fn new(args: Args) -> (RendererHandle, App) {
         let (cmd_tx, cmd_rx) = unbounded();
         let (evt_tx, evt_rx) = unbounded();
 
@@ -69,6 +81,7 @@ impl App {
         };
         let app = App {
             window: None,
+            args,
             cmd_rx,
             evt_tx,
             renderer: None,
@@ -97,7 +110,7 @@ impl ApplicationHandler for App {
         let window_handle = window.window_handle().unwrap();
         let display_handle = window.display_handle().unwrap();
 
-        let renderer = Renderer::new(&window_handle, &display_handle, size, event_loop)
+        let renderer = Renderer::new(&window_handle, &display_handle, size, event_loop, &self.args)
             .expect("Failed to create renderer");
         self.renderer = Some(renderer);
         self.window = Some(window);

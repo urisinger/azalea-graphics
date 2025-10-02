@@ -13,6 +13,8 @@ use ash::{
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vk_mem::{Allocator, AllocatorCreateInfo};
 
+use crate::app::Args;
+
 #[derive(Clone, Copy)]
 pub struct QueueFamiliesIndices {
     pub graphics_index: u32,
@@ -22,7 +24,7 @@ pub struct QueueFamiliesIndices {
 #[derive(Clone, Copy, Debug)]
 pub struct DeviceFeatures {
     pub fill_mode_non_solid: bool,
-    pub timestamp_queries: bool
+    pub timestamp_queries: bool,
 }
 
 pub struct Debug {
@@ -50,9 +52,9 @@ pub struct VkContext {
 }
 
 impl VkContext {
-    pub fn new(window: &WindowHandle, display: &DisplayHandle) -> Self {
+    pub fn new(window: &WindowHandle, display: &DisplayHandle, args: &Args) -> Self {
         let entry = unsafe { Entry::load().expect("Failed to load Vulkan entry.") };
-        let instance = Self::create_instance(&entry, display);
+        let instance = Self::create_instance(&entry, display, args.debug);
         let surface = surface::Instance::new(&entry, &instance);
         let surface_khr = unsafe {
             ash_window::create_surface(&entry, &instance, display.as_raw(), window.as_raw(), None)
@@ -60,7 +62,7 @@ impl VkContext {
         };
 
         // Instance-level messenger first
-        let debug_utils = if ENABLE_VALIDATION_LAYERS {
+        let debug_utils = if args.debug {
             Some(debug_utils::Instance::new(&entry, &instance))
         } else {
             None
@@ -71,8 +73,12 @@ impl VkContext {
 
         let (physical_device, queue_families) =
             Self::pick_physical_device(&instance, &surface, surface_khr);
-        let (device, graphics_queue, present_queue, features) =
-            Self::create_logical_device(&instance, physical_device, queue_families);
+        let (device, graphics_queue, present_queue, features) = Self::create_logical_device(
+            &instance,
+            physical_device,
+            queue_families,
+            args.timestamps,
+        );
 
         let allocator = ManuallyDrop::new(unsafe {
             Allocator::new(AllocatorCreateInfo::new(
@@ -243,7 +249,7 @@ impl VkContext {
         }
     }
 
-    fn create_instance(entry: &Entry, display: &DisplayHandle) -> Instance {
+    fn create_instance(entry: &Entry, display: &DisplayHandle, debug: bool) -> Instance {
         let app_name = CString::new("Azalea Renderer").unwrap();
         let engine_name = CString::new("Custom").unwrap();
 
@@ -257,7 +263,7 @@ impl VkContext {
         let mut extensions = ash_window::enumerate_required_extensions(display.as_raw())
             .unwrap()
             .to_vec();
-        if cfg!(debug_assertions) {
+        if debug {
             extensions.push(debug_utils::NAME.as_ptr());
         }
 
@@ -266,7 +272,7 @@ impl VkContext {
             .application_info(&app_info)
             .enabled_extension_names(&extensions);
 
-        if cfg!(debug_assertions) {
+        if debug {
             check_validation_layer_support(entry);
             create_info = create_info.enabled_layer_names(&layer_ptrs);
         }
@@ -329,6 +335,7 @@ impl VkContext {
         instance: &Instance,
         physical: vk::PhysicalDevice,
         families: QueueFamiliesIndices,
+        use_timestamps: bool,
     ) -> (Device, vk::Queue, vk::Queue, DeviceFeatures) {
         let priorities = [1.0f32];
         let mut unique_indices = vec![families.graphics_index, families.present_index];
@@ -345,7 +352,8 @@ impl VkContext {
 
         let base_features = unsafe { instance.get_physical_device_features(physical) };
         let properties = unsafe { instance.get_physical_device_properties(physical) };
-        let family_props = unsafe { instance.get_physical_device_queue_family_properties(physical) };
+        let family_props =
+            unsafe { instance.get_physical_device_queue_family_properties(physical) };
         let graphics_family_props = family_props[families.graphics_index as usize];
 
         let fill_mode_non_solid = base_features.fill_mode_non_solid == vk::TRUE;
@@ -353,6 +361,7 @@ impl VkContext {
         let timestamp_queries = properties.limits.timestamp_compute_and_graphics == vk::TRUE
             && properties.limits.timestamp_period > 0.0
             && queue_supports_timestamps;
+
         if fill_mode_non_solid {
             log::info!("fillModeNonSolid supported, wireframe mode available");
         } else {
@@ -366,11 +375,19 @@ impl VkContext {
                 graphics_family_props.timestamp_valid_bits
             );
         } else {
-            log::warn!(
-                "Timestamp queries not supported (period: {} ns, queue timestampValidBits: {})",
-                properties.limits.timestamp_period,
-                graphics_family_props.timestamp_valid_bits
-            );
+            if use_timestamps {
+                panic!(
+                    "Timestamps explicitly required, but this GPU/queue does not support them \
+                 (period: {} ns, queue timestampValidBits: {})",
+                    properties.limits.timestamp_period, graphics_family_props.timestamp_valid_bits
+                );
+            } else {
+                log::warn!(
+                    "Timestamp queries not supported (period: {} ns, queue timestampValidBits: {})",
+                    properties.limits.timestamp_period,
+                    graphics_family_props.timestamp_valid_bits
+                );
+            }
         }
 
         let device_features = DeviceFeatures {
@@ -423,11 +440,6 @@ impl Drop for VkContext {
         }
     }
 }
-
-#[cfg(debug_assertions)]
-pub const ENABLE_VALIDATION_LAYERS: bool = true;
-#[cfg(not(debug_assertions))]
-pub const ENABLE_VALIDATION_LAYERS: bool = false;
 
 const REQUIRED_LAYERS: [&str; 1] = ["VK_LAYER_KHRONOS_validation"];
 

@@ -39,7 +39,6 @@ pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
                         }
                     }
 
-                    // uv mapping
                     let uvs = generate_uv(face.dir, model_face.uv);
 
 

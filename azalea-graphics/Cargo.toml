@@ -33,6 +33,7 @@ regex.workspace = true
 simdnbt.workspace = true
 anyhow.workspace = true
 bytemuck = "1.23.2"
+clap = {version = "4.5.48", features=["derive"]}
 
 
 [dev-dependencies]
