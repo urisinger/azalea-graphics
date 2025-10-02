@@ -89,7 +89,7 @@ impl Default for WorldRendererConfig {
             wireframe_mode: false,
             render_aabbs: false,
             disable_visibilty: false,
-            render_distance: 10,
+            render_distance: 32,
         }
     }
 }

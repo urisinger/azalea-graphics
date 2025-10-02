@@ -15,20 +15,14 @@ use crate::renderer::{
         BlockVertex,
         mesher::{
             MeshBuilder,
-            helpers::{
-                 FACES, compute_ao, generate_uv, offset_to_coord,
-                remap_uv_to_atlas
-            },
+            helpers::{FACES, compute_ao, generate_uv, offset_to_coord, remap_uv_to_atlas},
         },
     },
 };
 
 pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
     for desc in builder.assets.get_variant_descs(block) {
-        let model = builder
-            .assets
-            .get_block_model(&desc.model)
-            .expect("all block models must be loaded");
+        let model = desc.model.clone();
 
         for element in &model.elements {
             for face in FACES {
@@ -41,7 +35,6 @@ pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
 
                     let uvs = generate_uv(face.dir, model_face.uv);
 
-
                     let tint = builder.block_colors.get_color(
                         block,
                         builder.section,
@@ -51,10 +44,7 @@ pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
                         builder.assets,
                     );
 
-                    let sprite_name = builder
-                        .assets
-                        .get_block_model(&desc.model)
-                        .unwrap()
+                    let sprite_name = model
                         .resolve_texture(&model_face.texture)
                         .unwrap_or("empty");
 
@@ -85,8 +75,7 @@ pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
                             quad[i] = BlockVertex {
                                 position: (local_pos + world_pos).into(),
                                 ao: if model.ambient_occlusion {
-                                    compute_ao(local, offset, face.dir, builder.section)
-                                        as f32
+                                    compute_ao(local, offset, face.dir, builder.section) as f32
                                 } else {
                                     3.0
                                 },
@@ -153,8 +142,9 @@ fn face_is_occluded(local: IVec3, cull_dir: Direction, section: &LocalSection) -
         return true;
     }
 
-    let neighbor_state =
-        section.blocks[neighbor_pos.x as usize][neighbor_pos.y as usize][neighbor_pos.z as usize].unwrap_or(BlockState::AIR);
+    let neighbor_state = section.blocks[neighbor_pos.x as usize][neighbor_pos.y as usize]
+        [neighbor_pos.z as usize]
+        .unwrap_or(BlockState::AIR);
 
     if neighbor_state.is_air() {
         return false;

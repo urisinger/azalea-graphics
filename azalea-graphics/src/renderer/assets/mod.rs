@@ -1,6 +1,6 @@
 pub(crate) mod processed;
 mod raw;
-use std::{collections::HashMap, fs, ops::Deref, path::PathBuf, time::Instant};
+use std::{collections::HashMap, fs, ops::Deref, path::PathBuf, sync::Arc, time::Instant};
 
 use azalea::blocks::{BlockState, BlockTrait};
 use log::*;
@@ -13,14 +13,13 @@ use self::{
     processed::{
         VariantDesc,
         atlas::{Atlas, PlacedSprite, build_atlas, stitch_sprites},
-        model::BlockModel as ResolvedBlockModel,
+        model,
     },
     raw::atlas::SpriteAtlas,
 };
 use crate::renderer::{assets::processed::atlas::TextureEntry, vulkan::context::VkContext};
 
 pub struct Assets {
-    block_models: HashMap<String, ResolvedBlockModel>,
     blockstate_to_models: Vec<Vec<VariantDesc>>,
 
     pub block_atlas: Atlas,
@@ -34,11 +33,6 @@ impl Assets {
     pub fn get_variant_descs(&self, state: BlockState) -> &[VariantDesc] {
         let id = state.id();
         &self.blockstate_to_models[id as usize]
-    }
-
-    pub fn get_block_model(&self, path: &str) -> Option<&ResolvedBlockModel> {
-        let key = path.strip_prefix("minecraft:").unwrap_or(path);
-        self.block_models.get(key)
     }
 
     pub fn get_sprite_rect(&self, name: &str) -> Option<&PlacedSprite> {
@@ -87,6 +81,7 @@ fn sample_colormap_at_climate(
 pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
     let path = path.into();
 
+
     let start_total = Instant::now();
 
     let start = Instant::now();
@@ -122,8 +117,8 @@ pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
     let start = Instant::now();
     let mut block_models = HashMap::new();
     for (name, raw) in &raw_models {
-        let resolved = ResolvedBlockModel::resolve(raw, &raw_models);
-        block_models.insert(name.clone(), resolved);
+        let resolved = model::BlockModel::resolve(raw, &raw_models);
+        block_models.insert(name.clone(), Arc::new(resolved));
     }
     info!(
         "Resolved {} block models in {:?}",
@@ -154,52 +149,82 @@ pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
         start.elapsed()
     );
 
-    let start = Instant::now();
-    let blockstate_to_models: Vec<Vec<VariantDesc>> = (0..=BlockState::MAX_STATE)
-        .map(|raw: u16| {
-            let bs = BlockState::try_from(raw).unwrap();
-            let dyn_block = Box::<dyn BlockTrait>::from(bs);
 
-            let Some(render_state) = blockstate_defs.get(dyn_block.id()) else {
-                return vec![];
-            };
+let start = Instant::now();
+let blockstate_to_models: Vec<Vec<VariantDesc>> = (0..=BlockState::MAX_STATE)
+    .map(|raw: u16| {
+        let bs = BlockState::try_from(raw).unwrap();
+        let dyn_block = Box::<dyn BlockTrait>::from(bs);
 
-            match render_state {
-                BlockRenderState::Variants(variants) => {
-                    let variant = variants
-                        .iter()
-                        .find(|(states, _)| {
-                            states.is_empty()
-                                || states.split(',').all(|state| {
-                                    state.split_once('=').map_or(false, |(prop_name, value)| {
-                                        dyn_block.get_property(prop_name) == Some(value)
-                                    })
-                                })
-                        })
-                        .map(|(_, v)| v)
-                        .unwrap_or(&variants[0].1);
+        let Some(render_state) = blockstate_defs.get(dyn_block.id()) else {
+            return vec![];
+        };
 
-                    match variant {
-                        Variant::Single(desc) => vec![desc.clone()],
-                        Variant::Multiple(arr) => arr.first().cloned().into_iter().collect(),
-                    }
-                }
-                BlockRenderState::MultiPart(multi_part) => multi_part
+        match render_state {
+            BlockRenderState::Variants(variants) => {
+                let variant = variants
                     .iter()
-                    .filter(|case| {
-                        case.when
-                            .as_ref()
-                            .map_or(true, |cond| cond.matches(dyn_block.deref()))
+                    .find(|(states, _)| {
+                        states.is_empty()
+                            || states.split(',').all(|state| {
+                                state.split_once('=').map_or(false, |(prop_name, value)| {
+                                    dyn_block.get_property(prop_name) == Some(value)
+                                })
+                            })
                     })
-                    .filter_map(|case| match &case.apply {
-                        Variant::Single(desc) => Some(desc.clone()),
-                        Variant::Multiple(arr) => arr.first().cloned(),
-                    })
-                    .collect(),
+                    .map(|(_, v)| v)
+                    .unwrap_or(&variants[0].1);
+
+                match variant {
+                    Variant::Single(desc) => {
+                        let model_name = desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
+                        vec![VariantDesc {
+                            model: block_models[model_name].clone(),
+                            x_rotation: desc.x_rotation,
+                            y_rotation: desc.y_rotation,
+                            uvlock: desc.uvlock,
+                        }]
+                    }
+                    Variant::Multiple(arr) => arr
+                        .first()
+                        .iter()
+                        .map(|desc| {
+                            let model_name = desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
+                            VariantDesc {
+                                model: block_models[model_name].clone(),
+                                x_rotation: desc.x_rotation,
+                                y_rotation: desc.y_rotation,
+                                uvlock: desc.uvlock,
+                            }
+                        })
+                        .collect(),
+                }
             }
-        })
-        .collect();
-    info!("Mapped blockstates to models in {:?}", start.elapsed());
+            BlockRenderState::MultiPart(multi_part) => multi_part
+                .iter()
+                .filter(|case| {
+                    case.when
+                        .as_ref()
+                        .map_or(true, |cond| cond.matches(dyn_block.deref()))
+                })
+                .filter_map(|case| match &case.apply {
+                    Variant::Single(desc) => Some(desc),
+                    Variant::Multiple(arr) => arr.first(),
+                })
+                .map(|desc| {
+                    let model_name = desc.model.strip_prefix("minecraft:").unwrap_or(&desc.model);
+                    VariantDesc {
+                        model: block_models[model_name].clone(),
+                        x_rotation: desc.x_rotation,
+                        y_rotation: desc.y_rotation,
+                        uvlock: desc.uvlock,
+                    }
+                })
+                .collect(),
+        }
+    })
+    .collect();
+info!("Mapped blockstates to models in {:?}", start.elapsed());
 
     let start = Instant::now();
 
@@ -246,7 +271,6 @@ pub fn load_assets(ctx: &VkContext, path: impl Into<PathBuf>) -> Assets {
     info!("Total asset load time: {:?}", start_total.elapsed());
 
     Assets {
-        block_models,
         blockstate_to_models,
         block_atlas: packed_atlas,
         grass_colormap,
@@ -284,4 +308,9 @@ fn vk_max_texture_2d(ctx: &VkContext) -> u32 {
             .get_physical_device_properties(ctx.physical_device());
         props.limits.max_image_dimension2_d
     }
+}
+
+
+fn strip_namespace(model_name: &str) -> &str {
+    model_name.strip_prefix("minecraft:").unwrap_or(model_name)
 }

@@ -194,7 +194,7 @@ impl Renderer {
                         ui.label(format!("Total GPU: {:.2}ms", timings.frame_time()));
                     });
                 } else {
-                    ui.label("GPU timings: Not supported on this device");
+                    ui.label("GPU timings: Not enabled");
                 }
 
                 ui.separator();
