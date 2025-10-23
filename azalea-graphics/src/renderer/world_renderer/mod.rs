@@ -81,6 +81,7 @@ pub struct WorldRendererConfig {
     pub render_aabbs: bool,
     pub disable_visibilty: bool,
     pub render_distance: u32,
+    pub worker_threads: u32,
 }
 
 impl Default for WorldRendererConfig {
@@ -90,6 +91,7 @@ impl Default for WorldRendererConfig {
             render_aabbs: false,
             disable_visibilty: false,
             render_distance: 32,
+            worker_threads: num_cpus::get() as u32 / 2,
         }
     }
 }
@@ -238,6 +240,12 @@ impl WorldRenderer {
                         .recreate_descriptor_sets(ctx.device(), &vb.outputs);
                 }
             }
+        }
+    }
+
+    pub fn set_worker_threads(&mut self, ctx: &VkContext, new_thread_count: u32) {
+        if let Some(mesher) = &mut self.mesher {
+            mesher.set_worker_threads(new_thread_count);
         }
     }
 

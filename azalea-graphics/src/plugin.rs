@@ -54,7 +54,6 @@ pub fn handle_block_updates(
     for (queued, instance_holder) in query.iter() {
         let world = instance_holder.instance.read();
         for (pos, block_state) in &queued.list {
-            let pos = pos.with_y(pos.y - world.chunks.min_y);
             renderer.handle.send_section(ChunkSectionPos::from(pos));
         }
     }

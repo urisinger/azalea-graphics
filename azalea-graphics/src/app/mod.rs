@@ -46,7 +46,7 @@ impl RendererHandle {
 }
 
 #[derive(Debug, clap::Parser)]
-pub struct Args {
+pub struct RendererArgs {
     #[arg(short, long)]
     pub debug: bool,
 
@@ -65,11 +65,11 @@ pub struct App {
 
     is_focused: bool,
 
-    args: Args,
+    args: RendererArgs,
 }
 
 impl App {
-    pub fn new(args: Args) -> (RendererHandle, App) {
+    pub fn new(args: RendererArgs) -> (RendererHandle, App) {
         let (cmd_tx, cmd_rx) = unbounded();
         let (evt_tx, evt_rx) = unbounded();
 

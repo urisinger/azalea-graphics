@@ -22,7 +22,7 @@ use self::{
     world_renderer::{WorldRenderer, WorldRendererFeatures},
 };
 use crate::{
-    app::{Args, WorldUpdate},
+    app::{RendererArgs, WorldUpdate},
     renderer::{
         timings::Timings, vulkan::timestamp::TimestampQueryPool,
         world_renderer::WorldRendererConfig,
@@ -71,7 +71,7 @@ impl Renderer {
         display_handle: &DisplayHandle,
         size: PhysicalSize<u32>,
         event_loop: &ActiveEventLoop,
-        args: &Args,
+        args: &RendererArgs,
     ) -> anyhow::Result<Self> {
         let context = VkContext::new(window_handle, display_handle, args);
         let swapchain = Swapchain::new(&context, size.width, size.height);
@@ -226,6 +226,16 @@ impl Renderer {
                 if response.changed() {
                     self.world
                         .set_render_distance(&self.context, self.renderer_config.render_distance);
+                }
+                let worker_threads = self.renderer_config.worker_threads;
+                let response = ui.add(
+                    egui::Slider::new(&mut self.renderer_config.worker_threads, 1..=num_cpus::get() as u32)
+                        .text(format!("Worker threads (current: {})", worker_threads)),
+                );
+
+                if response.changed() {
+                    self.world
+                        .set_worker_threads(&self.context, self.renderer_config.worker_threads);
                 }
             });
         });

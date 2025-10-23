@@ -9,6 +9,7 @@ use crate::renderer::vulkan::{
     frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
 };
 
+#[derive(Clone)]
 pub struct VisibilitySnapshot {
     pub radius: i32,
     pub height: i32,
@@ -57,7 +58,7 @@ impl VisibilitySnapshot {
     }
     pub fn section_depth(&self, spos: ChunkSectionPos) -> Option<f32> {
         let dx = spos.x - self.cx;
-        let dy = spos.y - (self.min_y / 16);
+        let dy = spos.y - (self.min_y);
         let dz = spos.z - self.cz;
         self.get_depth(dx, dy, dz)
     }
@@ -171,8 +172,8 @@ impl VisibilityBuffers {
             height: self.height,
             cx,
             cz,
+            min_y: min_y / 16,
             data,
-            min_y,
         }
     }
 

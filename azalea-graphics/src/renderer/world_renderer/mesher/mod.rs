@@ -1,8 +1,12 @@
 use std::{
     cmp::Ordering,
-    collections::{BinaryHeap, HashSet},
+    collections::HashSet,
     io::Cursor,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},
+    },
+    time::Instant,
 };
 
 use azalea::{
@@ -16,7 +20,7 @@ use azalea::{
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use glam::IVec3;
 use log::error;
-use parking_lot::{RwLock, Mutex};
+use parking_lot::{Mutex, RwLock};
 use simdnbt::Deserialize;
 
 use crate::renderer::{
@@ -40,14 +44,28 @@ pub struct MeshData {
     pub section_pos: ChunkSectionPos,
 }
 
-pub struct Mesher {
-    work_tx: Sender<ChunkSectionPos>,
-    result_rx: Receiver<MeshResult>,
+struct WorkerContext {
+    world: Arc<RwLock<azalea::world::Instance>>,
+    dirty: Arc<Mutex<HashSet<ChunkSectionPos>>>,
+    assets: Arc<Assets>,
+    biome_cache: BiomeCache,
+    shared_queue: SharedQueue,
+    current_visibility: Mutex<Option<VisibilitySnapshot>>,
+    result_tx: Sender<MeshResult>,
+    should_stop: AtomicBool,
+}
 
+pub struct Mesher {
+    result_rx: Receiver<MeshResult>,
     visibility_tx: Sender<VisibilitySnapshot>,
 
     pub world: Arc<RwLock<azalea::world::Instance>>,
     dirty: Arc<Mutex<HashSet<ChunkSectionPos>>>,
+    assets: Arc<Assets>,
+
+    worker_ctx: Arc<WorkerContext>,
+
+    worker_count: u32,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -56,66 +74,62 @@ struct Job {
     spos: ChunkSectionPos,
 }
 
-impl Eq for Job {}
-
-impl PartialEq for Job {
-    fn eq(&self, other: &Self) -> bool {
-        self.spos == other.spos && self.prio == other.prio
-    }
-}
-
-impl Ord for Job {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.prio
-            .partial_cmp(&other.prio)
-            .unwrap_or(Ordering::Equal)
-    }
-}
-
-impl PartialOrd for Job {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 fn prio_for(vis: &VisibilitySnapshot, spos: ChunkSectionPos) -> f32 {
     vis.section_depth(spos).unwrap_or(0.0)
 }
 
 struct SharedQueue {
-    queue: Mutex<BinaryHeap<Job>>,
-    queued: Mutex<HashSet<ChunkSectionPos>>,
+    jobs: RwLock<Arc<Vec<Job>>>,
+    next_job_index: AtomicUsize,
+    parked_threads: Mutex<Vec<std::thread::Thread>>,
 }
 
 impl SharedQueue {
     fn new() -> Self {
         Self {
-            queue: Mutex::new(BinaryHeap::new()),
-            queued: Mutex::new(HashSet::new()),
+            jobs: RwLock::new(Arc::new(Vec::new())),
+            next_job_index: AtomicUsize::new(0),
+            parked_threads: Mutex::new(Vec::new()),
         }
     }
 
-    fn push(&self, job: Job) {
-        let mut queued = self.queued.lock();
-        if queued.insert(job.spos) {
-            self.queue.lock().push(job);
-        }
-    }
+    fn pop(&self, should_stop: &AtomicBool) -> Option<Job> {
+        loop {
+            if should_stop.load(AtomicOrdering::Acquire) {
+                return None;
+            }
 
-    fn pop(&self) -> Option<Job> {
-        let job = self.queue.lock().pop()?;
-        self.queued.lock().remove(&job.spos);
-        Some(job)
+            let idx = self.next_job_index.fetch_add(1, AtomicOrdering::Relaxed);
+
+            let jobs = self.jobs.read();
+
+            if idx < jobs.len() {
+                return Some(jobs[idx]);
+            }
+
+            drop(jobs);
+
+            let idx = self.next_job_index.load(AtomicOrdering::Relaxed);
+            let jobs = self.jobs.read();
+            if idx < jobs.len() {
+                drop(jobs);
+                continue;
+            }
+            drop(jobs);
+
+            if should_stop.load(AtomicOrdering::Acquire) {
+                return None;
+            }
+
+            self.parked_threads.lock().push(std::thread::current());
+            std::thread::park();
+        }
     }
 
     fn clear_and_reprioritize(&self, vis: &VisibilitySnapshot, dirty: &HashSet<ChunkSectionPos>) {
-        let mut queue = self.queue.lock();
-        let mut queued = self.queued.lock();
-
-        queue.clear();
-        queued.clear();
-
+        let mut jobs = Vec::new();
         let side = vis.radius * 2 + 1;
+
         for (i, &entry) in vis.data.iter().enumerate() {
             if entry == 0.0 {
                 continue;
@@ -130,155 +144,101 @@ impl SharedQueue {
             let dz = z as i32 - vis.radius;
             let dy = y as i32;
 
-            let spos = ChunkSectionPos::new(vis.cx + dx, (vis.min_y / 16) + dy, vis.cz + dz);
+            let spos = ChunkSectionPos::new(vis.cx + dx, vis.min_y + dy, vis.cz + dz);
 
             if dirty.contains(&spos) {
                 let prio = prio_for(vis, spos);
-                if queued.insert(spos) {
-                    queue.push(Job { prio, spos });
-                }
+                jobs.push(Job { prio, spos });
             }
+        }
+
+        jobs.sort_unstable_by(|a, b| b.prio.partial_cmp(&a.prio).unwrap_or(Ordering::Equal));
+
+        let mut guard = self.jobs.write();
+        *guard = Arc::new(jobs);
+        self.next_job_index.store(0, AtomicOrdering::Release);
+        drop(guard);
+
+        let mut parked = self.parked_threads.lock();
+        for thread in parked.drain(..) {
+            thread.unpark();
         }
     }
 
     fn is_empty(&self) -> bool {
-        self.queue.lock().is_empty()
+        let idx = self.next_job_index.load(AtomicOrdering::Relaxed);
+        let jobs = self.jobs.read();
+        idx >= jobs.len()
     }
 }
 
 impl Mesher {
     pub fn new(assets: Arc<Assets>, world: Arc<RwLock<azalea::world::Instance>>) -> Self {
-        let num_threads = num_cpus::get().max(1);
+        let num_threads = num_cpus::get().max(1) as u32 / 2;
 
-        let (work_tx, work_rx) = unbounded::<ChunkSectionPos>();
         let (result_tx, result_rx) = unbounded::<MeshResult>();
         let (visibility_tx, visibility_rx) = unbounded::<VisibilitySnapshot>();
 
         let dirty = Arc::new(Mutex::new(HashSet::new()));
-        let shared_queue = Arc::new(SharedQueue::new());
-        let current_visibility = Arc::new(Mutex::new(None::<VisibilitySnapshot>));
-        let biome_cache = Arc::new(BiomeCache::from_registries(&world.read().registries));
+        let shared_queue = SharedQueue::new();
+        let current_visibility = Mutex::new(None::<VisibilitySnapshot>);
+        let biome_cache = BiomeCache::from_registries(&world.read().registries);
+        let should_stop = AtomicBool::new(false);
 
-        // Coordinator thread
+        let worker_ctx = Arc::new(WorkerContext {
+            world: Arc::clone(&world),
+            dirty: Arc::clone(&dirty),
+            assets: Arc::clone(&assets),
+            biome_cache,
+            shared_queue,
+            current_visibility,
+            result_tx,
+            should_stop,
+        });
+
         {
-            let shared_queue = Arc::clone(&shared_queue);
-            let dirty = Arc::clone(&dirty);
-            let current_visibility = Arc::clone(&current_visibility);
-
+            let ctx = Arc::clone(&worker_ctx);
             std::thread::spawn(move || {
                 loop {
-                    crossbeam::channel::select! {
-                        recv(work_rx) -> msg => {
-                            if let Ok(spos) = msg {
-                                let vis_opt = current_visibility.lock();
-                                match &*vis_opt {
-                                    Some(vis) if vis.section_is_visible(spos) => {
-                                        let prio = prio_for(&vis, spos);
-                                        shared_queue.push(Job { prio, spos });
-                                    }
-                                    None => {
-                                        shared_queue.push(Job { prio: 0.0, spos });
-                                    }
-                                    _ => {}
-                                }
-                            } else {
-                                break;
-                            }
+                    match visibility_rx.recv() {
+                        Ok(new_vis) => {
+                            let dirty_set = ctx.dirty.lock().clone();
+                            ctx.shared_queue
+                                .clear_and_reprioritize(&new_vis, &dirty_set);
+                            *ctx.current_visibility.lock() = Some(new_vis);
                         }
-
-                        recv(visibility_rx) -> msg => {
-                            if let Ok(new_vis) = msg {
-                                let dirty_set = dirty.lock().clone();
-                                shared_queue.clear_and_reprioritize(&new_vis, &dirty_set);
-                                *current_visibility.lock() = Some(new_vis);
-                            } else {
-                                break;
-                            }
-                        }
+                        Err(_) => break,
                     }
                 }
             });
         }
 
-        // Worker threads
-        for thread_id in 0..num_threads {
-            let thread_world = Arc::clone(&world);
-            let thread_dirty = Arc::clone(&dirty);
-            let thread_assets = Arc::clone(&assets);
-            let thread_biome_cache = Arc::clone(&biome_cache);
-            let thread_queue = Arc::clone(&shared_queue);
-            let thread_visibility = Arc::clone(&current_visibility);
-            let thread_result_tx = result_tx.clone();
-
-            std::thread::Builder::new()
-                .name(format!("mesher-worker-{}", thread_id))
-                .spawn(move || {
-                    loop {
-                        let job = match thread_queue.pop() {
-                            Some(j) => j,
-                            None => {
-                                std::thread::sleep(std::time::Duration::from_millis(10));
-                                continue;
-                            }
-                        };
-
-                        // Check visibility again
-                        if let Some(vis) = thread_visibility.lock().as_ref() {
-                            if !vis.section_is_visible(job.spos) {
-                                continue;
-                            }
-                        }
-
-                        // Check if still dirty
-                        {
-                            let mut d = thread_dirty.lock();
-                            if !d.remove(&job.spos) {
-                                continue;
-                            }
-                        }
-
-                        if let Some(local) = build_local_section(&thread_world, job.spos) {
-                            let t0 = std::time::Instant::now();
-                            let mesh = mesh_section(&local, &thread_biome_cache, &thread_assets);
-                            let _ = thread_result_tx.send(mesh);
-                            log::debug!(
-                                "Thread {} meshed {:?} in {:?}",
-                                thread_id,
-                                job.spos,
-                                t0.elapsed()
-                            );
-                        }
-                    }
-                })
-                .unwrap();
+        for i in 0..num_threads {
+            Self::spawn_worker(i, Arc::clone(&worker_ctx));
         }
 
         Self {
-            work_tx,
             result_rx,
             visibility_tx,
             world,
             dirty,
+            assets,
+            worker_ctx,
+            worker_count: num_threads,
         }
     }
 
     pub fn submit_section(&self, spos: ChunkSectionPos) {
-        let mut dirty = self.dirty.lock();
-        if dirty.insert(spos) {
-            let _ = self.work_tx.send(spos);
-        }
+        self.dirty.lock().insert(spos);
     }
 
     pub fn submit_chunk(&self, pos: ChunkPos) {
         let world = self.world.read();
-        if let Some(chunk) = world.chunks.get(&pos) {
-            let chunk = chunk.read();
-            for (i, section) in chunk.sections.iter().enumerate() {
-                if section.block_count > 0 {
-                    let spos = ChunkSectionPos::new(pos.x, i as i32, pos.z);
-                    self.submit_section(spos);
-                }
-            }
+        let min = world.chunks.min_y / 16;
+        let max = min + world.chunks.height as i32 / 16;
+        for y in min..max {
+            let spos = ChunkSectionPos::new(pos.x, y, pos.z);
+            self.submit_section(spos);
         }
     }
 
@@ -288,6 +248,59 @@ impl Mesher {
 
     pub fn update_visibility(&self, snapshot: VisibilitySnapshot) {
         let _ = self.visibility_tx.send(snapshot);
+    }
+
+    fn spawn_worker(id: u32, ctx: Arc<WorkerContext>) {
+        std::thread::Builder::new()
+            .name(format!("mesher-worker-{}", id))
+            .spawn(move || {
+                loop {
+                    let job = match ctx.shared_queue.pop(&ctx.should_stop) {
+                        Some(j) => j,
+                        None => break,
+                    };
+
+                    {
+                        let mut d = ctx.dirty.lock();
+                        if !d.remove(&job.spos) {
+                            continue;
+                        }
+                    }
+
+                    if let Some(local) = build_local_section(&ctx.world, job.spos) {
+                        let t0 = std::time::Instant::now();
+                        let mesh = mesh_section(&local, &ctx.biome_cache, &ctx.assets);
+                        let _ = ctx.result_tx.send(mesh);
+                        log::debug!("Thread {} meshed {:?} in {:?}", id, job.spos, t0.elapsed());
+                    }
+                }
+            })
+            .unwrap();
+    }
+
+    pub fn set_worker_threads(&mut self, new_thread_count: u32) {
+        let current = self.worker_count;
+
+        if new_thread_count == current {
+            return;
+        }
+
+        if new_thread_count > current {
+            for i in current..new_thread_count {
+                Self::spawn_worker(i, Arc::clone(&self.worker_ctx));
+            }
+        }
+
+        self.worker_count = new_thread_count;
+        log::info!(
+            "Worker thread count changed from {} to {}",
+            current,
+            new_thread_count
+        );
+    }
+
+    pub fn get_worker_thread_count(&self) -> u32 {
+        self.worker_count
     }
 }
 
@@ -321,9 +334,12 @@ fn build_local_section(
             .get(&ChunkPos::new(spos.x - 1, spos.z + 1)), // SW
     ];
 
+    let local_chunk = LocalChunk {
+        center,
+        neighbors,
+        min_y: world_guard.chunks.min_y / 16,
+    };
     drop(world_guard);
-
-    let local_chunk = LocalChunk { center, neighbors };
 
     Some(local_chunk.borrow_chunks().build_local_section(spos))
 }

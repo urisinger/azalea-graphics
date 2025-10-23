@@ -2,7 +2,7 @@ use std::{net::SocketAddr, thread};
 
 use azalea::{ClientInformation, prelude::*};
 use azalea_graphics::{
-    app::{App, Args as RendererArgs, RendererHandle},
+    app::{App, RendererArgs, RendererHandle},
     plugin::RendererPlugin,
 };
 use clap::Parser;

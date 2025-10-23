@@ -13,7 +13,7 @@ use ash::{
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vk_mem::{Allocator, AllocatorCreateInfo};
 
-use crate::app::Args;
+use crate::app::RendererArgs;
 
 #[derive(Clone, Copy)]
 pub struct QueueFamiliesIndices {
@@ -52,7 +52,7 @@ pub struct VkContext {
 }
 
 impl VkContext {
-    pub fn new(window: &WindowHandle, display: &DisplayHandle, args: &Args) -> Self {
+    pub fn new(window: &WindowHandle, display: &DisplayHandle, args: &RendererArgs) -> Self {
         let entry = unsafe { Entry::load().expect("Failed to load Vulkan entry.") };
         let instance = Self::create_instance(&entry, display, args.debug);
         let surface = surface::Instance::new(&entry, &instance);

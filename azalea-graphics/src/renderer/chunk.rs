@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use azalea::{
     blocks::BlockState,
-    core::position::{ChunkPos, ChunkSectionBiomePos, ChunkSectionBlockPos, ChunkSectionPos},
+    core::position::{ChunkSectionBiomePos, ChunkSectionBlockPos, ChunkSectionPos},
     registry::Biome,
     world::Chunk,
 };
@@ -26,11 +26,15 @@ const SW: usize = 7;
 pub struct LocalChunk {
     pub center: Arc<RwLock<Chunk>>,
     pub neighbors: [Option<Arc<RwLock<Chunk>>>; 8],
+
+    pub min_y: i32,
 }
 
 pub struct BorrowedChunks<'a> {
     pub center: parking_lot::RwLockReadGuard<'a, Chunk>,
     pub neighbors: [Option<parking_lot::RwLockReadGuard<'a, Chunk>>; 8],
+
+    pub min_y: i32,
 }
 
 impl LocalChunk {
@@ -47,33 +51,11 @@ impl LocalChunk {
             self.neighbors[SW].as_ref().map(|c| c.read()),
         ];
 
-        BorrowedChunks { center, neighbors }
-    }
-
-    pub fn local_sections(&self, chunk_pos: ChunkPos) -> Vec<LocalSection> {
-        let borrowed = self.borrow_chunks();
-        borrowed.local_sections(chunk_pos)
+        BorrowedChunks { center, neighbors, min_y: self.min_y }
     }
 }
 
 impl<'a> BorrowedChunks<'a> {
-    pub fn local_sections(&self, chunk_pos: ChunkPos) -> Vec<LocalSection> {
-        let mut sections = Vec::new();
-
-        for (i, section) in self.center.sections.iter().enumerate() {
-            if section.block_count == 0 {
-                continue;
-            }
-
-            let spos = ChunkSectionPos::new(chunk_pos.x, i as i32, chunk_pos.z);
-
-            let local_section = self.build_local_section(spos);
-            sections.push(local_section);
-        }
-
-        sections
-    }
-
     /// Build a single local section with 18x18x18 extended block data
     pub fn build_local_section(&self, spos: ChunkSectionPos) -> LocalSection {
         let mut blocks = Box::new([[[None; 18]; 18]; 18]);
@@ -86,13 +68,13 @@ impl<'a> BorrowedChunks<'a> {
                     let iy = (ly + 1) as usize;
                     let iz = (lz + 1) as usize;
 
-                    blocks[ix][iy][iz] = self.get_block_local(spos.y, lx, ly, lz);
+                    blocks[ix][iy][iz] = self.get_block_local(spos.y - self.min_y, lx, ly, lz);
                 }
             }
         }
 
         // Copy biome data from the center chunk section
-        if let Some(section) = self.center.sections.get(spos.y as usize) {
+        if let Some(section) = self.center.sections.get((spos.y - self.min_y) as usize) {
             for x in 0..4 {
                 for y in 0..4 {
                     for z in 0..4 {
@@ -134,7 +116,7 @@ impl<'a> BorrowedChunks<'a> {
         };
 
         if let Some(chunk) = chunk_ref {
-            let section_index = (base_y + cy_off) as usize;
+            let section_index = (base_y + cy_off ) as usize;
             if let Some(section) = chunk.sections.get(section_index) {
                 return Some(section.get_block_state(ChunkSectionBlockPos {
                     x: sx,
