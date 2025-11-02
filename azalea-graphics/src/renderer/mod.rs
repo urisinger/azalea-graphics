@@ -24,18 +24,19 @@ use self::{
 use crate::{
     app::{RendererArgs, WorldUpdate},
     renderer::{
-        timings::Timings, vulkan::timestamp::TimestampQueryPool,
+        frame_ctx::FrameCtx, timings::Timings, vulkan::timestamp::TimestampQueryPool,
         world_renderer::WorldRendererConfig,
     },
 };
 
 mod camera;
-pub(crate) mod chunk;
+pub mod chunk;
+mod frame_ctx;
 mod mesh;
-pub mod timings;
+mod timings;
 mod ui;
-pub(crate) mod vulkan;
-pub(crate) mod world_renderer;
+pub mod vulkan;
+pub mod world_renderer;
 
 mod assets;
 
@@ -229,8 +230,11 @@ impl Renderer {
                 }
                 let worker_threads = self.renderer_config.worker_threads;
                 let response = ui.add(
-                    egui::Slider::new(&mut self.renderer_config.worker_threads, 1..=num_cpus::get() as u32)
-                        .text(format!("Worker threads (current: {})", worker_threads)),
+                    egui::Slider::new(
+                        &mut self.renderer_config.worker_threads,
+                        1..=num_cpus::get() as u32,
+                    )
+                    .text(format!("Worker threads (current: {})", worker_threads)),
                 );
 
                 if response.changed() {
@@ -335,18 +339,20 @@ impl Renderer {
             );
         }
 
-        self.world.render(
-            &self.context,
+        let mut frame_ctx = FrameCtx {
+            ctx: &self.context,
             cmd,
             image_index,
-            self.swapchain.extent,
-            self.projection.calc_proj() * self.camera.calc_view(),
-            self.camera.position,
-            frame,
-            self.renderer_config,
-            self.timestamp_pools.as_ref().map(|arr| &arr[frame]),
-            &mut self.sync,
-        );
+            extent: self.swapchain.extent,
+            view_proj: self.projection.calc_proj() * self.camera.calc_view(),
+            camera_pos: self.camera.position,
+            frame_index: frame,
+            config: self.renderer_config,
+            timestamps: self.timestamp_pools.as_ref().map(|arr| &arr[frame]),
+            frame_sync: &mut self.sync,
+        };
+
+        self.world.render(&mut frame_ctx);
         if let Some(timestamps) = &self.timestamp_pools {
             timestamps[frame].write_timestamp(
                 self.context.device(),

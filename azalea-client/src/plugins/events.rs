@@ -54,12 +54,16 @@ use crate::{
 #[non_exhaustive]
 pub enum Event {
     /// Happens right after the bot switches into the Game state, but before
-    /// it's actually spawned. This can be useful for setting the client
-    /// information with `Client::set_client_information`, so the packet
-    /// doesn't have to be sent twice.
+    /// it's actually spawned.
+    ///
+    /// This can be useful for setting the client information with
+    /// [`Client::set_client_information`], so the packet doesn't have to be
+    /// sent twice.
     ///
     /// You may want to use [`Event::Spawn`] instead to wait for the bot to be
     /// in the world.
+    ///
+    /// [`Client::set_client_information`]: crate::Client::set_client_information
     Init,
     /// Fired when we receive a login packet, which is after [`Event::Init`] but
     /// before [`Event::Spawn`]. You usually want [`Event::Spawn`] instead.
@@ -123,8 +127,9 @@ pub enum Event {
 }
 
 /// A component that contains an event sender for events that are only
-/// received by local players. The receiver for this is returned by
-/// [`Client::start_client`].
+/// received by local players.
+///
+/// The receiver for this is returned by [`Client::start_client`].
 ///
 /// [`Client::start_client`]: crate::Client::start_client
 #[derive(Component, Deref, DerefMut)]
@@ -230,10 +235,9 @@ pub fn add_player_listener(
     mut events: MessageReader<AddPlayerEvent>,
 ) {
     for event in events.read() {
-        let local_player_events = query
-            .get(event.entity)
-            .expect("Non-local entities shouldn't be able to receive add player events");
-        let _ = local_player_events.send(Event::AddPlayer(event.info.clone()));
+        if let Ok(local_player_events) = query.get(event.entity) {
+            let _ = local_player_events.send(Event::AddPlayer(event.info.clone()));
+        }
     }
 }
 
@@ -242,10 +246,9 @@ pub fn update_player_listener(
     mut events: MessageReader<UpdatePlayerEvent>,
 ) {
     for event in events.read() {
-        let local_player_events = query
-            .get(event.entity)
-            .expect("Non-local entities shouldn't be able to receive update player events");
-        let _ = local_player_events.send(Event::UpdatePlayer(event.info.clone()));
+        if let Ok(local_player_events) = query.get(event.entity) {
+            let _ = local_player_events.send(Event::UpdatePlayer(event.info.clone()));
+        }
     }
 }
 
@@ -254,10 +257,9 @@ pub fn remove_player_listener(
     mut events: MessageReader<RemovePlayerEvent>,
 ) {
     for event in events.read() {
-        let local_player_events = query
-            .get(event.entity)
-            .expect("Non-local entities shouldn't be able to receive remove player events");
-        let _ = local_player_events.send(Event::RemovePlayer(event.info.clone()));
+        if let Ok(local_player_events) = query.get(event.entity) {
+            let _ = local_player_events.send(Event::RemovePlayer(event.info.clone()));
+        }
     }
 }
 
@@ -283,10 +285,9 @@ pub fn keepalive_listener(
     mut events: MessageReader<KeepAliveEvent>,
 ) {
     for event in events.read() {
-        let local_player_events = query
-            .get(event.entity)
-            .expect("Non-local entities shouldn't be able to receive keepalive events");
-        let _ = local_player_events.send(Event::KeepAlive(event.id));
+        if let Ok(local_player_events) = query.get(event.entity) {
+            let _ = local_player_events.send(Event::KeepAlive(event.id));
+        }
     }
 }
 

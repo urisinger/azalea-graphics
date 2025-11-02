@@ -78,9 +78,11 @@ pub struct Client {
     /// The entity for this client in the ECS.
     pub entity: Entity,
 
-    /// The entity component system. You probably don't need to access this
-    /// directly. Note that if you're using a shared world (i.e. a swarm), this
-    /// will contain all entities in all worlds.
+    /// A mutually exclusive reference to the entity component system (ECS).
+    ///
+    /// You probably don't need to access this directly. Note that if you're
+    /// using a shared world (i.e. a swarm), the ECS will contain all entities
+    /// in all instances/dimensions.
     pub ecs: Arc<Mutex<World>>,
 }
 
@@ -261,12 +263,13 @@ impl Client {
     /// return it.
     ///
     ///
-    /// If the component can't be cloned, try [`Self::map_component`] instead.
-    /// If it isn't guaranteed to be present, use [`Self::get_component`] or
-    /// [`Self::map_get_component`].
+    /// If the component can't be cloned, try [`Self::query_self`] instead.
+    /// If it isn't guaranteed to be present, you can use
+    /// [`Self::get_component`] or [`Self::query_self`].
     ///
-    /// You may also use [`Self::ecs`] and [`Self::query`] directly if you need
-    /// more control over when the ECS is locked.
+    ///
+    /// You may also use [`Self::ecs`] directly if you need more control over
+    /// when the ECS is locked.
     ///
     /// # Panics
     ///
@@ -285,9 +288,10 @@ impl Client {
 
     /// Get a component from this client, or `None` if it doesn't exist.
     ///
-    /// If the component can't be cloned, try [`Self::map_component`] instead.
+    /// If the component can't be cloned, consider using [`Self::query_self`]
+    /// with `Option<&T>` instead.
     ///
-    /// You may also have to use [`Self::with_query`] directly.
+    /// You may also have to use [`Self::query_self`] directly.
     pub fn get_component<T: Component + Clone>(&self) -> Option<T> {
         self.query_self::<Option<&T>, _>(|t| t.cloned())
     }
@@ -373,7 +377,9 @@ impl Client {
     /// This is a shortcut for
     /// `bot.position().up(bot.dimensions().eye_height)`.
     pub fn eye_position(&self) -> Vec3 {
-        self.position().up(self.dimensions().eye_height as f64)
+        self.query_self::<(&Position, &EntityDimensions), _>(|(pos, dim)| {
+            pos.up(dim.eye_height as f64)
+        })
     }
 
     /// Get the health of this client.
@@ -520,8 +526,9 @@ pub struct LocalPlayerBundle {
 }
 
 /// A bundle for the components that are present on a local player that is
-/// currently in the `game` protocol state. If you want to filter for this, use
-/// [`InGameState`].
+/// currently in the `game` protocol state.
+///
+/// If you want to filter for this, use [`InGameState`].
 #[derive(Bundle, Default)]
 pub struct JoinedClientBundle {
     // note that InstanceHolder isn't here because it's set slightly before we fully join the world

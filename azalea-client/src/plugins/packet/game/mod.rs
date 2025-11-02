@@ -7,8 +7,8 @@ use azalea_core::{
     position::{ChunkPos, Vec3},
 };
 use azalea_entity::{
-    Dead, EntityBundle, EntityKindComponent, HasClientLoaded, LoadedBy, LocalEntity, LookDirection,
-    Physics, PlayerAbilities, Position, RelativeEntityUpdate,
+    ActiveEffects, Dead, EntityBundle, EntityKindComponent, HasClientLoaded, LoadedBy, LocalEntity,
+    LookDirection, Physics, PlayerAbilities, Position, RelativeEntityUpdate,
     indexing::{EntityIdIndex, EntityUuidIndex},
     metadata::{Health, apply_metadata},
 };
@@ -182,6 +182,11 @@ pub fn process_packet(ecs: &mut World, player: Entity, packet: &ClientboundGameP
             waypoint,
             clear_dialog,
             show_dialog,
+            debug_block_value,
+            debug_chunk_value,
+            debug_entity_value,
+            debug_event,
+            game_test_highlight_pos,
         ]
     );
 }
@@ -730,11 +735,7 @@ impl GamePacketHandler<'_> {
                 // this is to make sure the same entity velocity update doesn't get sent
                 // multiple times when in swarms
 
-                let knockback = KnockbackType::Set(Vec3 {
-                    x: p.delta.xa as f64 / 8000.,
-                    y: p.delta.ya as f64 / 8000.,
-                    z: p.delta.za as f64 / 8000.,
-                });
+                let knockback = KnockbackType::Set(p.delta.to_vec3());
 
                 commands.entity(entity).queue(RelativeEntityUpdate::new(
                     instance_holder.partial_instance.clone(),
@@ -1105,6 +1106,40 @@ impl GamePacketHandler<'_> {
 
     pub fn update_mob_effect(&mut self, p: &ClientboundUpdateMobEffect) {
         debug!("Got update mob effect packet {p:?}");
+
+        let mob_effect = p.mob_effect;
+        let effect_data = &p.data;
+
+        as_system::<(Commands, Query<(&EntityIdIndex, &InstanceHolder)>)>(
+            self.ecs,
+            |(mut commands, query)| {
+                let (entity_id_index, instance_holder) = query.get(self.player).unwrap();
+
+                let Some(entity) = entity_id_index.get_by_minecraft_entity(p.entity_id) else {
+                    debug!(
+                        "Got update mob effect packet for unknown entity id {}",
+                        p.entity_id
+                    );
+                    return;
+                };
+
+                let partial_instance = instance_holder.partial_instance.clone();
+                let mob_effect = mob_effect;
+                let effect_data = effect_data.clone();
+                commands.entity(entity).queue(RelativeEntityUpdate::new(
+                    partial_instance,
+                    move |entity| {
+                        if let Some(mut active_effects) = entity.get_mut::<ActiveEffects>() {
+                            active_effects.insert(mob_effect, effect_data.clone());
+                        } else {
+                            let mut active_effects = ActiveEffects::default();
+                            active_effects.insert(mob_effect, effect_data.clone());
+                            entity.insert(active_effects);
+                        }
+                    },
+                ));
+            },
+        );
     }
 
     pub fn award_stats(&mut self, _p: &ClientboundAwardStats) {}
@@ -1228,7 +1263,7 @@ impl GamePacketHandler<'_> {
         trace!("Got explode packet {p:?}");
 
         as_system::<MessageWriter<_>>(self.ecs, |mut knockback_events| {
-            if let Some(knockback) = p.knockback {
+            if let Some(knockback) = p.player_knockback {
                 knockback_events.write(KnockbackEvent {
                     entity: self.player,
                     knockback: KnockbackType::Set(knockback),
@@ -1313,7 +1348,36 @@ impl GamePacketHandler<'_> {
 
     pub fn player_look_at(&mut self, _p: &ClientboundPlayerLookAt) {}
 
-    pub fn remove_mob_effect(&mut self, _p: &ClientboundRemoveMobEffect) {}
+    pub fn remove_mob_effect(&mut self, p: &ClientboundRemoveMobEffect) {
+        debug!("Got remove mob effect packet {p:?}");
+
+        let mob_effect = p.effect;
+
+        as_system::<(Commands, Query<(&EntityIdIndex, &InstanceHolder)>)>(
+            self.ecs,
+            |(mut commands, query)| {
+                let (entity_id_index, instance_holder) = query.get(self.player).unwrap();
+
+                let Some(entity) = entity_id_index.get_by_minecraft_entity(p.entity_id) else {
+                    debug!(
+                        "Got remove mob effect packet for unknown entity id {}",
+                        p.entity_id
+                    );
+                    return;
+                };
+
+                let partial_instance = instance_holder.partial_instance.clone();
+                commands.entity(entity).queue(RelativeEntityUpdate::new(
+                    partial_instance,
+                    move |entity| {
+                        if let Some(mut active_effects) = entity.get_mut::<ActiveEffects>() {
+                            active_effects.remove(mob_effect);
+                        }
+                    },
+                ));
+            },
+        );
+    }
 
     pub fn resource_pack_push(&mut self, p: &ClientboundResourcePackPush) {
         debug!("Got resource pack packet {p:?}");
@@ -1563,5 +1627,22 @@ impl GamePacketHandler<'_> {
     }
     pub fn show_dialog(&mut self, p: &ClientboundShowDialog) {
         debug!("Got show dialog packet {p:?}");
+    }
+
+    pub fn debug_block_value(&mut self, p: &ClientboundDebugBlockValue) {
+        debug!("Got debug block value packet {p:?}");
+    }
+    pub fn debug_chunk_value(&mut self, p: &ClientboundDebugChunkValue) {
+        debug!("Got debug chunk value packet {p:?}");
+    }
+    pub fn debug_entity_value(&mut self, p: &ClientboundDebugEntityValue) {
+        debug!("Got debug entity value packet {p:?}");
+    }
+
+    pub fn debug_event(&mut self, p: &ClientboundDebugEvent) {
+        debug!("Got debug event packet {p:?}");
+    }
+    pub fn game_test_highlight_pos(&mut self, p: &ClientboundGameTestHighlightPos) {
+        debug!("Got game test highlight pos packet {p:?}");
     }
 }

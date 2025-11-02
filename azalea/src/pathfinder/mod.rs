@@ -32,16 +32,20 @@ use std::{
 };
 
 use astar::{Edge, PathfinderTimeout};
+use azalea_block::{BlockState, BlockTrait};
 use azalea_client::{
     StartSprintEvent, StartWalkEvent,
-    inventory::{Inventory, InventorySet, SetSelectedHotbarSlotEvent},
+    inventory::{Inventory, InventorySystems},
     local_player::InstanceHolder,
-    mining::{Mining, MiningSet, StartMiningBlockEvent},
-    movement::MoveEventsSet,
+    mining::{Mining, MiningSystems, StartMiningBlockEvent},
+    movement::MoveEventsSystems,
 };
-use azalea_core::{position::BlockPos, tick::GameTick};
+use azalea_core::{
+    position::{BlockPos, Vec3},
+    tick::GameTick,
+};
 use azalea_entity::{LocalEntity, Physics, Position, metadata::Player};
-use azalea_physics::PhysicsSet;
+use azalea_physics::{PhysicsSystems, get_block_pos_below_that_affects_movement};
 use azalea_world::{InstanceContainer, InstanceName};
 use bevy_app::{PreUpdate, Update};
 use bevy_ecs::prelude::*;
@@ -95,9 +99,9 @@ impl Plugin for PathfinderPlugin {
                     recalculate_if_has_goal_but_no_path,
                 )
                     .chain()
-                    .after(PhysicsSet)
+                    .after(PhysicsSystems)
                     .after(azalea_client::movement::send_position)
-                    .after(MiningSet),
+                    .after(MiningSystems),
             )
             .add_systems(PreUpdate, add_default_pathfinder)
             .add_systems(
@@ -110,8 +114,8 @@ impl Plugin for PathfinderPlugin {
                     handle_stop_pathfinding_event,
                 )
                     .chain()
-                    .before(MoveEventsSet)
-                    .before(InventorySet),
+                    .before(MoveEventsSystems)
+                    .before(InventorySystems),
             );
     }
 }
@@ -285,7 +289,7 @@ pub fn goto_listener(
     mut events: MessageReader<GotoEvent>,
     mut query: Query<(
         &mut Pathfinder,
-        Option<&ExecutingPath>,
+        Option<&mut ExecutingPath>,
         &Position,
         &InstanceName,
         &Inventory,
@@ -303,7 +307,9 @@ pub fn goto_listener(
             continue;
         };
 
-        if event.goal.success(BlockPos::from(position)) {
+        let cur_pos = player_pos_to_block_pos(**position);
+
+        if event.goal.success(cur_pos) {
             // we're already at the goal, nothing to do
             pathfinder.goal = None;
             pathfinder.opts = None;
@@ -317,27 +323,31 @@ pub fn goto_listener(
         pathfinder.opts = Some(event.opts.clone());
         pathfinder.is_calculating = true;
 
-        let start = if let Some(executing_path) = executing_path
-            && let Some(final_node) = executing_path.path.back()
+        let start = if let Some(mut executing_path) = executing_path
+            && { !executing_path.path.is_empty() }
         {
             // if we're currently pathfinding and got a goto event, start a little ahead
+
+            let executing_path_limit = 50;
+            // truncate the executing path so we can cleanly combine the two paths later
+            executing_path.path.truncate(executing_path_limit);
+
             executing_path
                 .path
-                .get(50)
-                .unwrap_or(final_node)
+                .back()
+                .expect("path was just checked to not be empty")
                 .movement
                 .target
         } else {
-            BlockPos::from(position)
+            cur_pos
         };
 
-        if start == BlockPos::from(position) {
+        if start == cur_pos {
             info!("got goto {:?}, starting from {start:?}", event.goal);
         } else {
             info!(
-                "got goto {:?}, starting from {start:?} (currently at {:?})",
+                "got goto {:?}, starting from {start:?} (currently at {cur_pos:?})",
                 event.goal,
-                BlockPos::from(position)
             );
         }
 
@@ -374,6 +384,17 @@ pub fn goto_listener(
 
         commands.entity(event.entity).insert(ComputePath(task));
     }
+}
+
+/// Convert a player position to a block position, used internally in the
+/// pathfinder.
+///
+/// This is almost the same as `BlockPos::from(position)`, except that non-full
+/// blocks are handled correctly.
+#[inline]
+pub fn player_pos_to_block_pos(position: Vec3) -> BlockPos {
+    // 0.5 to account for non-full blocks
+    BlockPos::from(position.up(0.5))
 }
 
 pub struct CalculatePathCtx {
@@ -529,9 +550,12 @@ pub fn path_found_listener(
     mut commands: Commands,
 ) {
     for event in events.read() {
-        let (mut pathfinder, executing_path, instance_name, inventory, custom_state) = query
-            .get_mut(event.entity)
-            .expect("Path found for an entity that doesn't have a pathfinder");
+        let Ok((mut pathfinder, executing_path, instance_name, inventory, custom_state)) =
+            query.get_mut(event.entity)
+        else {
+            debug!("got path found event for an entity that can't pathfind");
+            continue;
+        };
         if let Some(path) = &event.path {
             if let Some(mut executing_path) = executing_path {
                 let mut new_path = VecDeque::new();
@@ -669,7 +693,8 @@ pub fn timeout_movement(
         {
             warn!("pathfinder timeout, trying to patch path");
             executing_path.queued_path = None;
-            executing_path.last_reached_node = BlockPos::from(position);
+            let cur_pos = player_pos_to_block_pos(**position);
+            executing_path.last_reached_node = cur_pos;
 
             let world_lock = instance_container
                 .get(instance_name)
@@ -709,11 +734,19 @@ pub fn check_node_reached(
         &mut ExecutingPath,
         &Position,
         &Physics,
+        &InstanceName,
     )>,
     mut walk_events: MessageWriter<StartWalkEvent>,
     mut commands: Commands,
+    instance_container: Res<InstanceContainer>,
 ) {
-    for (entity, mut pathfinder, mut executing_path, position, physics) in &mut query {
+    for (entity, mut pathfinder, mut executing_path, position, physics, instance_name) in &mut query
+    {
+        let Some(instance) = instance_container.get(instance_name) else {
+            warn!("entity is pathfinding but not in a valid world");
+            continue;
+        };
+
         'skip: loop {
             // we check if the goal was reached *before* actually executing the movement so
             // we don't unnecessarily execute a movement when it wasn't necessary
@@ -734,21 +767,45 @@ pub fn check_node_reached(
                     position: **position,
                     physics,
                 };
-                let extra_strict_if_last = if i == executing_path.path.len() - 1 {
+                let extra_check = if i == executing_path.path.len() - 1 {
+                    // be extra strict about the velocity and centering if we're on the last node so
+                    // we don't fall off
+
                     let x_difference_from_center = position.x - (movement.target.x as f64 + 0.5);
                     let z_difference_from_center = position.z - (movement.target.z as f64 + 0.5);
+
+                    let block_pos_below = get_block_pos_below_that_affects_movement(*position);
+
+                    let block_state_below = {
+                        let instance = instance.read();
+                        instance
+                            .chunks
+                            .get_block_state(block_pos_below)
+                            .unwrap_or(BlockState::AIR)
+                    };
+                    let block_below: Box<dyn BlockTrait> = block_state_below.into();
+                    // friction for normal blocks is 0.6, for ice it's 0.98
+                    let block_friction = block_below.behavior().friction as f64;
+
+                    // if the block has the default friction, this will multiply by 1
+                    // for blocks like ice, it'll multiply by a higher number
+                    let scaled_velocity = physics.velocity * (0.4 / (1. - block_friction));
+
+                    let x_predicted_offset = (x_difference_from_center + scaled_velocity.x).abs();
+                    let z_predicted_offset = (z_difference_from_center + scaled_velocity.z).abs();
+
                     // this is to make sure we don't fall off immediately after finishing the path
                     physics.on_ground()
-                    // 0.5 to handle non-full blocks
-                    && BlockPos::from(position.up(0.5)) == movement.target
-                    // adding the delta like this isn't a perfect solution but it helps to make
-                    // sure we don't keep going if our delta is high
-                    && (x_difference_from_center + physics.velocity.x).abs() < 0.2
-                    && (z_difference_from_center + physics.velocity.z).abs() < 0.2
+                        && player_pos_to_block_pos(**position) == movement.target
+                        // adding the delta like this isn't a perfect solution but it helps to make
+                        // sure we don't keep going if our delta is high
+                        && x_predicted_offset < 0.2
+                        && z_predicted_offset < 0.2
                 } else {
                     true
                 };
-                if (movement.data.is_reached)(is_reached_ctx) && extra_strict_if_last {
+
+                if (movement.data.is_reached)(is_reached_ctx) && extra_check {
                     executing_path.path = executing_path.path.split_off(i + 1);
                     executing_path.last_reached_node = movement.target;
                     executing_path.last_node_reached_at = Instant::now();
@@ -894,7 +951,7 @@ pub fn check_for_path_obstruction(
     }
 }
 
-/// update the given [`ExecutingPath`] to recalculate the path of the nodes in
+/// Update the given [`ExecutingPath`] to recalculate the path of the nodes in
 /// the given index range.
 ///
 /// You should avoid making the range too large, since the timeout for the A*
@@ -1064,6 +1121,7 @@ pub fn recalculate_near_end_of_path(
 
 #[allow(clippy::type_complexity)]
 pub fn tick_execute_path(
+    mut commands: Commands,
     mut query: Query<(
         Entity,
         &mut ExecutingPath,
@@ -1078,7 +1136,6 @@ pub fn tick_execute_path(
     mut walk_events: MessageWriter<StartWalkEvent>,
     mut jump_events: MessageWriter<JumpEvent>,
     mut start_mining_events: MessageWriter<StartMiningBlockEvent>,
-    mut set_selected_hotbar_slot_events: MessageWriter<SetSelectedHotbarSlotEvent>,
 ) {
     for (entity, executing_path, position, physics, mining, instance_holder, inventory_component) in
         &mut query
@@ -1094,12 +1151,12 @@ pub fn tick_execute_path(
                 instance: instance_holder.instance.clone(),
                 menu: inventory_component.inventory_menu.clone(),
 
+                commands: &mut commands,
                 look_at_events: &mut look_at_events,
                 sprint_events: &mut sprint_events,
                 walk_events: &mut walk_events,
                 jump_events: &mut jump_events,
                 start_mining_events: &mut start_mining_events,
-                set_selected_hotbar_slot_events: &mut set_selected_hotbar_slot_events,
             };
             trace!(
                 "executing move, position: {}, last_reached_node: {}",
@@ -1130,9 +1187,11 @@ pub fn recalculate_if_has_goal_but_no_path(
 #[derive(Message)]
 pub struct StopPathfindingEvent {
     pub entity: Entity,
-    /// If false, then let the current movement finish before stopping. If true,
-    /// then stop moving immediately. This might cause the bot to fall if it was
-    /// in the middle of parkouring.
+    /// Whether we should stop moving immediately without waiting for the
+    /// current movement to finish.
+    ///
+    /// This is usually set to false, since it might cause the bot to fall if it
+    /// was in the middle of parkouring.
     pub force: bool,
 }
 
@@ -1187,7 +1246,9 @@ pub fn stop_pathfinding_on_instance_change(
 }
 
 /// Checks whether the path has been obstructed, and returns Some(index) if it
-/// has been. The index is of the first obstructed node.
+/// has been.
+///
+/// The index is of the first obstructed node.
 pub fn check_path_obstructed<SuccessorsFn>(
     origin: BlockPos,
     mut current_position: RelBlockPos,
@@ -1217,7 +1278,7 @@ where
             // if the node that we're currently executing was obstructed then it's often too
             // late to change the path, so it's usually better to just ignore this case :/
             if i == 0 {
-                warn!("path obstructed at index 0, ignoring");
+                warn!("path obstructed at index 0 ({edge:?}), ignoring");
                 continue;
             }
 

@@ -11,7 +11,7 @@ A collection of Rust crates for making Minecraft bots, clients, and tools.
 
 <!-- The line below is automatically read and updated by the migrate script, so don't change it manually. -->
 
-_Currently supported Minecraft version: `1.21.8`._
+_Currently supported Minecraft version: `1.21.10`._
 
 > [!WARNING]
 > Many parts of Azalea are still unfinished and will receive breaking changes in the future. Most breaking changes will be listed in the [changelog](CHANGELOG.md).
@@ -129,6 +129,10 @@ Azalea has support for Bevy plugins, which can significantly alter its functiona
 - [azalea-rs/azalea-hax](https://github.com/azalea-rs/azalea-hax) - Anti-knockback.
 
 If you've created your own plugin for Azalea, please create a PR to add it to this list :).
+
+## Funding
+
+Azalea is currently maintained primarily by one person (mat) as a hobby project. If you appreciate Azalea, consider [donating on Ko-fi](https://ko-fi.com/matdoesdev).
 
 ## FAQ
 

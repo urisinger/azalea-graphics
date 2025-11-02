@@ -27,8 +27,14 @@ impl Plugin for ContainerPlugin {
 }
 
 pub trait ContainerClientExt {
-    /// Open a container in the world, like a chest. Use
-    /// [`Client::open_inventory`] to open your own inventory.
+    /// Open a container in the world, like a chest.
+    ///
+    /// Use [`Client::open_inventory`] to open your own inventory.
+    ///
+    /// `timeout_ticks` indicates how long the client will wait before giving
+    /// up and returning `None`. You may need to adjust it based on latency.
+    /// Setting the timeout to `None` will result in waiting potentially
+    /// forever.
     ///
     /// ```
     /// # use azalea::prelude::*;
@@ -41,15 +47,29 @@ pub trait ContainerClientExt {
     ///     bot.chat("no chest found");
     ///     return;
     /// };
-    /// let container = bot.open_container_at(target_pos).await;
+    /// let container = bot.open_container_at(target_pos, None).await;
     /// # }
     /// ```
     fn open_container_at(
         &self,
         pos: BlockPos,
+        timeout_ticks: Option<usize>,
     ) -> impl Future<Output = Option<ContainerHandle>> + Send;
-    /// Open the player's inventory. This will return None if another
-    /// container is open.
+
+    /// Wait until a container is open, up to the specified number of ticks.
+    ///
+    /// Returns `None` if the container was immediately opened and closed, or if
+    /// the timeout expires.
+    ///
+    /// If `timeout_ticks` is None, there will be no timeout.
+    fn wait_for_container_open(
+        &self,
+        timeout_ticks: Option<usize>,
+    ) -> impl Future<Output = Option<ContainerHandle>> + Send;
+
+    /// Open the player's inventory.
+    ///
+    /// This will return None if another container is open.
     ///
     /// Note that this will send a packet to the server once it's dropped. Also,
     /// due to how it's implemented, you could call this function multiple times
@@ -77,17 +97,16 @@ pub trait ContainerClientExt {
 }
 
 impl ContainerClientExt for Client {
-    async fn open_container_at(&self, pos: BlockPos) -> Option<ContainerHandle> {
+    async fn open_container_at(
+        &self,
+        pos: BlockPos,
+        timeout_ticks: Option<usize>,
+    ) -> Option<ContainerHandle> {
         let mut ticks = self.get_tick_broadcaster();
         // wait until it's not air (up to 10 ticks)
         for _ in 0..10 {
-            if !self
-                .world()
-                .read()
-                .get_block_state(pos)
-                .unwrap_or_default()
-                .is_collision_shape_empty()
-            {
+            let block = self.world().read().get_block_state(pos).unwrap_or_default();
+            if !block.is_collision_shape_empty() {
                 break;
             }
             let _ = ticks.recv().await;
@@ -99,10 +118,26 @@ impl ContainerClientExt for Client {
             .insert(WaitingForInventoryOpen);
         self.block_interact(pos);
 
+        self.wait_for_container_open(timeout_ticks).await
+    }
+
+    async fn wait_for_container_open(
+        &self,
+        timeout_ticks: Option<usize>,
+    ) -> Option<ContainerHandle> {
+        let mut ticks = self.get_tick_broadcaster();
+        let mut elapsed_ticks = 0;
         while ticks.recv().await.is_ok() {
             let ecs = self.ecs.lock();
             if ecs.get::<WaitingForInventoryOpen>(self.entity).is_none() {
                 break;
+            }
+
+            elapsed_ticks += 1;
+            if let Some(timeout_ticks) = timeout_ticks
+                && elapsed_ticks >= timeout_ticks
+            {
+                return None;
             }
         }
 
@@ -134,8 +169,10 @@ impl ContainerClientExt for Client {
     }
 }
 
-/// A handle to a container that may be open. This does not close the container
-/// when it's dropped. See [`ContainerHandle`] if that behavior is desired.
+/// A handle to a container that may be open.
+///
+/// This does not close the container when it's dropped. See [`ContainerHandle`]
+/// if that behavior is desired.
 pub struct ContainerHandleRef {
     id: i32,
     client: Client,
@@ -159,15 +196,18 @@ impl ContainerHandleRef {
         });
     }
 
-    /// Get the id of the container. If this is 0, that means it's the player's
-    /// inventory. Otherwise, the number isn't really meaningful since only one
-    /// container can be open at a time.
+    /// Get the ID of the container.
+    ///
+    /// If this is 0, that means it's the player's inventory. Otherwise, the
+    /// number isn't really meaningful since only one container can be open
+    /// at a time.
     pub fn id(&self) -> i32 {
         self.id
     }
 
-    /// Returns the menu of the container. If the container is closed, this
-    /// will return `None`.
+    /// Returns the menu of the container.
+    ///
+    /// If the container is closed, this will return `None`.
     ///
     /// Note that any modifications you make to the `Menu` you're given will not
     /// actually cause any packets to be sent. If you're trying to modify your
@@ -191,13 +231,16 @@ impl ContainerHandleRef {
     }
 
     /// Returns the item slots in the container, not including the player's
-    /// inventory. If the container is closed, this will return `None`.
+    /// inventory.
+    ///
+    /// If the container is closed, this will return `None`.
     pub fn contents(&self) -> Option<Vec<ItemStack>> {
         self.menu().map(|menu| menu.contents())
     }
 
-    /// Return the contents of the menu, including the player's inventory. If
-    /// the container is closed, this will return `None`.
+    /// Return the contents of the menu, including the player's inventory.
+    ///
+    /// If the container is closed, this will return `None`.
     pub fn slots(&self) -> Option<Vec<ItemStack>> {
         self.menu().map(|menu| menu.slots())
     }
@@ -233,8 +276,9 @@ impl ContainerHandleRef {
     }
 }
 
-/// A handle to the open container. The container will be closed once this is
-/// dropped.
+/// A handle to the open container.
+///
+/// The container will be closed once this is dropped.
 #[derive(Deref)]
 pub struct ContainerHandle(ContainerHandleRef);
 

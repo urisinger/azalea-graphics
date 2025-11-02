@@ -6,7 +6,6 @@ use std::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},
     },
-    time::Instant,
 };
 
 use azalea::{

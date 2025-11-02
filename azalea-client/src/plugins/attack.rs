@@ -3,7 +3,7 @@ use azalea_entity::{
     Attributes, Crouching, Physics, indexing::EntityIdIndex, metadata::Sprinting,
     update_bounding_box,
 };
-use azalea_physics::PhysicsSet;
+use azalea_physics::PhysicsSystems;
 use azalea_protocol::packets::game::s_interact::{self, ServerboundInteract};
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
@@ -12,7 +12,7 @@ use tracing::warn;
 
 use super::packet::game::SendGamePacketEvent;
 use crate::{
-    Client, interact::SwingArmEvent, local_player::LocalGameMode, movement::MoveEventsSet,
+    Client, interact::SwingArmEvent, local_player::LocalGameMode, movement::MoveEventsSystems,
     respawn::perform_respawn,
 };
 
@@ -24,14 +24,14 @@ impl Plugin for AttackPlugin {
                 Update,
                 handle_attack_event
                     .before(update_bounding_box)
-                    .before(MoveEventsSet)
+                    .before(MoveEventsSystems)
                     .after(perform_respawn),
             )
             .add_systems(
                 GameTick,
                 (
                     increment_ticks_since_last_attack,
-                    update_attack_strength_scale.after(PhysicsSet),
+                    update_attack_strength_scale.after(PhysicsSystems),
                     handle_attack_queued
                         .before(super::tick_end::game_tick_packet)
                         .after(super::movement::send_sprinting_if_needed)
@@ -43,7 +43,10 @@ impl Plugin for AttackPlugin {
 }
 
 impl Client {
-    /// Attack the entity with the given id.
+    /// Attack an entity in the world.
+    ///
+    /// This doesn't automatically look at the entity or perform any
+    /// range/visibility checks, so it might trigger anticheats.
     pub fn attack(&self, entity: Entity) {
         self.ecs.lock().write_message(AttackEvent {
             entity: self.entity,

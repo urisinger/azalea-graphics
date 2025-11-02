@@ -7,10 +7,7 @@ use super::{
     mesher::{MeshResult, Mesher},
     types::BlockVertex,
 };
-use crate::renderer::{
-    mesh::Mesh,
-    vulkan::{context::VkContext, frame_sync::FrameSync},
-};
+use crate::renderer::{frame_ctx::FrameCtx, mesh::Mesh, vulkan::context::VkContext};
 
 pub struct MeshStore {
     pub blocks: HashMap<ChunkSectionPos, Mesh<BlockVertex>>,
@@ -54,36 +51,33 @@ impl MeshStore {
 
     pub fn process_mesher_results(
         &mut self,
-        ctx: &VkContext,
-        cmd: ash::vk::CommandBuffer,
-        frame_index: usize,
+        frame_ctx: &mut FrameCtx,
         mesher: &Option<Mesher>,
-        frame_sync: &mut FrameSync,
     ) {
         let mut touched_buffers: Vec<vk::Buffer> = Vec::new();
 
         while let Some(MeshResult { blocks, water }) = mesher.as_ref().and_then(|m| m.poll()) {
             if !blocks.vertices.is_empty() {
-                let staging_mesh = Mesh::new_staging(ctx, &blocks.vertices, &blocks.indices);
-                let mesh = staging_mesh.upload(ctx, cmd);
-                frame_sync.add_to_deletion_queue(frame_index, Box::new(staging_mesh.buffer));
+                let staging_mesh = Mesh::new_staging(frame_ctx.ctx, &blocks.vertices, &blocks.indices);
+                let mesh = staging_mesh.upload(frame_ctx.ctx, frame_ctx.cmd);
+                frame_ctx.delete(staging_mesh.buffer);
 
                 touched_buffers.push(mesh.buffer.buffer);
 
                 if let Some(mut old_mesh) = self.insert_block(blocks.section_pos, mesh) {
-                    old_mesh.destroy(ctx);
+                    old_mesh.destroy(frame_ctx.ctx);
                 }
             }
 
             if !water.vertices.is_empty() {
-                let staging_mesh = Mesh::new_staging(ctx, &water.vertices, &water.indices);
-                let mesh = staging_mesh.upload(ctx, cmd);
-                frame_sync.add_to_deletion_queue(frame_index, Box::new(staging_mesh.buffer));
+                let staging_mesh = Mesh::new_staging(frame_ctx.ctx, &water.vertices, &water.indices);
+                let mesh = staging_mesh.upload(frame_ctx.ctx, frame_ctx.cmd);
+                frame_ctx.delete(staging_mesh.buffer);
 
                 touched_buffers.push(mesh.buffer.buffer);
 
                 if let Some(mut old_mesh) = self.insert_water(water.section_pos, mesh) {
-                    old_mesh.destroy(ctx);
+                    old_mesh.destroy(frame_ctx.ctx);
                 }
             }
         }
@@ -103,17 +97,12 @@ impl MeshStore {
                 })
                 .collect();
 
-            unsafe {
-                ctx.device().cmd_pipeline_barrier(
-                    cmd,
-                    vk::PipelineStageFlags::TRANSFER,
-                    vk::PipelineStageFlags::VERTEX_INPUT,
-                    vk::DependencyFlags::empty(),
-                    &[],
-                    &barriers,
-                    &[],
-                );
-            }
+            frame_ctx.pipeline_barrier(
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::VERTEX_INPUT,
+                &barriers,
+                &[],
+            );
         }
     }
 }

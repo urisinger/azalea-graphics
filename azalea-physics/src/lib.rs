@@ -16,11 +16,11 @@ use azalea_core::{
     tick::GameTick,
 };
 use azalea_entity::{
-    Attributes, EntityKindComponent, HasClientLoaded, Jumping, LocalEntity, LookDirection,
-    OnClimbable, Physics, Pose, Position, dimensions::EntityDimensions, metadata::Sprinting,
-    move_relative,
+    ActiveEffects, Attributes, EntityKindComponent, HasClientLoaded, Jumping, LocalEntity,
+    LookDirection, OnClimbable, Physics, Pose, Position, dimensions::EntityDimensions,
+    metadata::Sprinting, move_relative,
 };
-use azalea_registry::{Block, EntityKind};
+use azalea_registry::{Block, EntityKind, MobEffect};
 use azalea_world::{Instance, InstanceContainer, InstanceName};
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
@@ -31,7 +31,7 @@ use crate::collision::{MoveCtx, entity_collisions::update_last_bounding_box};
 
 /// A Bevy [`SystemSet`] for running physics that makes entities do things.
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-pub struct PhysicsSet;
+pub struct PhysicsSystems;
 
 pub struct PhysicsPlugin;
 impl Plugin for PhysicsPlugin {
@@ -47,7 +47,7 @@ impl Plugin for PhysicsPlugin {
                 apply_effects_from_blocks,
             )
                 .chain()
-                .in_set(PhysicsSet)
+                .in_set(PhysicsSystems)
                 .after(azalea_entity::update_in_loaded_chunk),
         )
         // we want this to happen after packets are handled but before physics
@@ -70,6 +70,7 @@ pub fn ai_step(
             &Position,
             &LookDirection,
             &Sprinting,
+            &ActiveEffects,
             &InstanceName,
             &EntityKindComponent,
         ),
@@ -77,8 +78,16 @@ pub fn ai_step(
     >,
     instance_container: Res<InstanceContainer>,
 ) {
-    for (mut physics, jumping, position, look_direction, sprinting, instance_name, entity_kind) in
-        &mut query
+    for (
+        mut physics,
+        jumping,
+        position,
+        look_direction,
+        sprinting,
+        active_effects,
+        instance_name,
+        entity_kind,
+    ) in &mut query
     {
         let is_player = **entity_kind == EntityKind::Player;
 
@@ -140,6 +149,7 @@ pub fn ai_step(
                             *sprinting,
                             instance_name,
                             &instance_container,
+                            active_effects,
                         );
                         physics.no_jump_delay = 10;
                     }
@@ -331,17 +341,23 @@ pub fn jump_from_ground(
     sprinting: Sprinting,
     instance_name: &InstanceName,
     instance_container: &InstanceContainer,
+    active_effects: &ActiveEffects,
 ) {
     let world_lock = instance_container
         .get(instance_name)
         .expect("All entities should be in a valid world");
     let world = world_lock.read();
 
-    let jump_power: f64 = jump_power(&world, position) as f64 + jump_boost_power();
+    let base_jump = jump_power(&world, position);
+    let jump_power = base_jump + jump_boost_power(active_effects);
+    if jump_power <= 1.0E-5 {
+        return;
+    }
+
     let old_delta_movement = physics.velocity;
     physics.velocity = Vec3 {
         x: old_delta_movement.x,
-        y: jump_power,
+        y: f64::max(jump_power as f64, old_delta_movement.y),
         z: old_delta_movement.z,
     };
     if *sprinting {
@@ -363,7 +379,7 @@ pub fn update_old_position(mut query: Query<(&mut Physics, &Position)>) {
     }
 }
 
-fn get_block_pos_below_that_affects_movement(position: Position) -> BlockPos {
+pub fn get_block_pos_below_that_affects_movement(position: Position) -> BlockPos {
     BlockPos::new(
         position.x.floor() as i32,
         // TODO: this uses bounding_box.min_y instead of position.y
@@ -392,7 +408,7 @@ fn handle_relative_friction_and_calculate_movement(ctx: &mut MoveCtx, block_fric
         ctx.pose,
     );
 
-    move_colliding(ctx, ctx.physics.velocity).expect("Entity should exist");
+    move_colliding(ctx, ctx.physics.velocity);
     // let delta_movement = entity.delta;
     // ladders
     //   if ((entity.horizontalCollision || entity.jumping) && (entity.onClimbable()
@@ -504,16 +520,9 @@ fn jump_power(world: &Instance, position: Position) -> f32 {
     0.42 * block_jump_factor(world, position)
 }
 
-fn jump_boost_power() -> f64 {
-    // TODO: potion effects
-    // if let Some(effects) = entity.effects() {
-    //     if let Some(jump_effect) = effects.get(&Effect::Jump) {
-    //         0.1 * (jump_effect.amplifier + 1) as f32
-    //     } else {
-    //         0.
-    //     }
-    // } else {
-    //     0.
-    // }
-    0.
+fn jump_boost_power(active_effects: &ActiveEffects) -> f32 {
+    active_effects
+        .get_level(MobEffect::JumpBoost)
+        .map(|level| 0.1 * (level + 1) as f32)
+        .unwrap_or(0.)
 }

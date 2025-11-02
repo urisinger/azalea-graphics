@@ -1,14 +1,16 @@
 use azalea_block::{BlockState, BlockTrait, fluid_state::FluidState};
 use azalea_core::{direction::Direction, game_type::GameMode, position::BlockPos, tick::GameTick};
-use azalea_entity::{FluidOnEyes, Physics, PlayerAbilities, Position, mining::get_mine_progress};
+use azalea_entity::{
+    ActiveEffects, FluidOnEyes, Physics, PlayerAbilities, Position, mining::get_mine_progress,
+};
 use azalea_inventory::ItemStack;
-use azalea_physics::{PhysicsSet, collision::BlockWithShape};
+use azalea_physics::{PhysicsSystems, collision::BlockWithShape};
 use azalea_protocol::packets::game::s_player_action::{self, ServerboundPlayerAction};
 use azalea_world::{InstanceContainer, InstanceName};
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 use derive_more::{Deref, DerefMut};
-use tracing::{debug, trace};
+use tracing::{debug, trace, warn};
 
 use crate::{
     Client,
@@ -16,9 +18,9 @@ use crate::{
         BlockStatePredictionHandler, SwingArmEvent, can_use_game_master_blocks,
         check_is_interaction_restricted, pick::HitResultComponent,
     },
-    inventory::{Inventory, InventorySet},
+    inventory::{Inventory, InventorySystems},
     local_player::{InstanceHolder, LocalGameMode, PermissionLevel},
-    movement::MoveEventsSet,
+    movement::MoveEventsSystems,
     packet::game::SendGamePacketEvent,
 };
 
@@ -39,10 +41,10 @@ impl Plugin for MiningPlugin {
                     continue_mining_block,
                 )
                     .chain()
-                    .before(PhysicsSet)
+                    .before(PhysicsSystems)
                     .before(super::movement::send_position)
                     .before(super::interact::handle_start_use_item_queued)
-                    .in_set(MiningSet),
+                    .in_set(MiningSystems),
             )
             .add_systems(
                 Update,
@@ -51,9 +53,9 @@ impl Plugin for MiningPlugin {
                     handle_stop_mining_block_event,
                 )
                     .chain()
-                    .in_set(MiningSet)
-                    .after(InventorySet)
-                    .after(MoveEventsSet)
+                    .in_set(MiningSystems)
+                    .after(InventorySystems)
+                    .after(MoveEventsSystems)
                     .after(azalea_entity::update_fluid_on_eyes)
                     .after(crate::interact::pick::update_hit_result_component)
                     .after(crate::attack::handle_attack_event),
@@ -64,7 +66,7 @@ impl Plugin for MiningPlugin {
 
 /// The Bevy system set for things related to mining.
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-pub struct MiningSet;
+pub struct MiningSystems;
 
 impl Client {
     pub fn start_mining(&self, position: BlockPos) {
@@ -73,6 +75,7 @@ impl Client {
         ecs.write_message(StartMiningBlockEvent {
             entity: self.entity,
             position,
+            force: true,
         });
     }
 
@@ -138,6 +141,7 @@ fn handle_auto_mine(
             start_mining_block_event.write(StartMiningBlockEvent {
                 entity,
                 position: block_pos,
+                force: true,
             });
         } else if mining.is_some() && hit_result_component.miss() {
             stop_mining_block_event.write(StopMiningBlockEvent { entity });
@@ -145,8 +149,9 @@ fn handle_auto_mine(
     }
 }
 
-/// Information about the block we're currently mining. This is only present if
-/// we're currently mining a block.
+/// Information about the block we're currently mining.
+///
+/// This is only present if we're currently mining a block.
 #[derive(Component, Debug, Clone)]
 pub struct Mining {
     pub pos: BlockPos,
@@ -163,6 +168,14 @@ pub struct Mining {
 pub struct StartMiningBlockEvent {
     pub entity: Entity,
     pub position: BlockPos,
+    /// Whether we should ignore blocks that are blocking the view of this
+    /// block.
+    ///
+    /// Most of the time, you'll want to set this to true as it'll make the
+    /// behavior more predictable. If it's set to false, then it might fail or
+    /// it might mine blocks other than the one at `position` (which may be
+    /// preferable if you're trying to act like vanilla).
+    pub force: bool,
 }
 fn handle_start_mining_block_event(
     mut commands: Commands,
@@ -172,25 +185,44 @@ fn handle_start_mining_block_event(
     for event in events.read() {
         trace!("{event:?}");
         let hit_result = query.get_mut(event.entity).unwrap();
-        let (direction, force) = if let Some(block_hit_result) =
-            hit_result.as_block_hit_result_if_not_miss()
-            && block_hit_result.block_pos == event.position
-        {
-            // we're looking at the block
-            (block_hit_result.direction, false)
+        if event.force {
+            let direction = if let Some(block_hit_result) =
+                hit_result.as_block_hit_result_if_not_miss()
+                && block_hit_result.block_pos == event.position
+            {
+                // we're looking at the block
+                block_hit_result.direction
+            } else {
+                debug!(
+                    "Got StartMiningBlockEvent but we're not looking at the block ({hit_result:?}.block_pos != {:?}). Picking an arbitrary direction instead.",
+                    event.position
+                );
+                // we're not looking at the block, arbitrary direction
+                Direction::Down
+            };
+            commands.entity(event.entity).insert(MiningQueued {
+                position: event.position,
+                direction,
+                force: true,
+            });
         } else {
-            debug!(
-                "Got StartMiningBlockEvent but we're not looking at the block ({:?}.block_pos != {:?}). Picking an arbitrary direction instead.",
-                hit_result, event.position
-            );
-            // we're not looking at the block, arbitrary direction
-            (Direction::Down, true)
-        };
-        commands.entity(event.entity).insert(MiningQueued {
-            position: event.position,
-            direction,
-            force,
-        });
+            // let block_hit_result = hit_result.as_block_hit_result_if_not_miss();
+            // let direction = block_hit_result.map_or(Direction::Down, |b| b.direction);
+            if let Some(block_hit_result) = hit_result.as_block_hit_result_if_not_miss()
+                && block_hit_result.block_pos == event.position
+            {
+                commands.entity(event.entity).insert(MiningQueued {
+                    position: event.position,
+                    direction: block_hit_result.direction,
+                    force: false,
+                });
+            } else {
+                warn!(
+                    "Got StartMiningBlockEvent with force=false but we're not looking at the block ({hit_result:?}.block_pos != {:?}). You should've looked at the block before trying to mine with force=false.",
+                    event.position
+                );
+            };
+        }
     }
 }
 
@@ -213,9 +245,10 @@ pub fn handle_mining_queued(
         &InstanceHolder,
         &LocalGameMode,
         &Inventory,
+        &ActiveEffects,
         &FluidOnEyes,
         &Physics,
-        Option<&Mining>,
+        Option<&mut Mining>,
         &mut BlockStatePredictionHandler,
         &mut MineDelay,
         &mut MineProgress,
@@ -230,9 +263,10 @@ pub fn handle_mining_queued(
         instance_holder,
         game_mode,
         inventory,
+        active_effects,
         fluid_on_eyes,
         physics,
-        mining,
+        mut mining,
         mut sequence_number,
         mut mine_delay,
         mut mine_progress,
@@ -241,6 +275,7 @@ pub fn handle_mining_queued(
         mut current_mining_pos,
     ) in query
     {
+        trace!("handle_mining_queued {mining_queued:?}");
         commands.entity(entity).remove::<MiningQueued>();
 
         let instance = instance_holder.instance.read();
@@ -254,6 +289,13 @@ pub fn handle_mining_queued(
         }
         // TODO (when world border is implemented): vanilla ignores if the block
         // is outside of the worldborder
+
+        if let Some(mining) = &mut mining {
+            // this matters if we were previously mining a block without force
+            if mining_queued.force {
+                mining.force = true;
+            }
+        }
 
         if game_mode.current == GameMode::Creative {
             // In creative mode, first send START_DESTROY_BLOCK packet then immediately
@@ -321,6 +363,7 @@ pub fn handle_mining_queued(
                     &inventory.inventory_menu,
                     fluid_on_eyes,
                     physics,
+                    active_effects,
                 ) >= 1.
             {
                 // block was broken instantly (instamined)
@@ -404,8 +447,9 @@ pub struct MineBundle {
 #[derive(Component, Debug, Default, Deref, DerefMut, Clone)]
 pub struct MineDelay(pub u32);
 
-/// A component that stores the progress of the current mining operation. This
-/// is a value between 0 and 1.
+/// A component that stores the progress of the current mining operation.
+///
+/// This is a value between 0 and 1.
 #[derive(Component, Debug, Default, Deref, DerefMut, Clone)]
 pub struct MineProgress(pub f32);
 
@@ -420,8 +464,9 @@ impl MineProgress {
 }
 
 /// A component that stores the number of ticks that we've been mining the same
-/// block for. This is a float even though it should only ever be a round
-/// number.
+/// block for.
+///
+/// This is a float despite the fact that it should only ever be a round number.
 #[derive(Component, Clone, Debug, Default, Deref, DerefMut)]
 pub struct MineTicks(pub f32);
 
@@ -429,8 +474,8 @@ pub struct MineTicks(pub f32);
 #[derive(Component, Clone, Debug, Default, Deref, DerefMut)]
 pub struct MineBlockPos(pub Option<BlockPos>);
 
-/// A component that contains the item we're currently using to mine. If we're
-/// not mining anything, it'll be [`ItemStack::Empty`].
+/// A component that contains the item we're currently using to mine, or
+/// [`ItemStack::Empty`] if nothing is being mined.
 #[derive(Component, Clone, Debug, Default, Deref, DerefMut)]
 pub struct MineItem(pub ItemStack);
 
@@ -553,6 +598,7 @@ pub fn continue_mining_block(
         &Inventory,
         &MineBlockPos,
         &MineItem,
+        &ActiveEffects,
         &FluidOnEyes,
         &Physics,
         &Mining,
@@ -572,6 +618,7 @@ pub fn continue_mining_block(
         inventory,
         current_mining_pos,
         current_mining_item,
+        active_effects,
         fluid_on_eyes,
         physics,
         mining,
@@ -629,6 +676,7 @@ pub fn continue_mining_block(
                 &inventory.inventory_menu,
                 fluid_on_eyes,
                 physics,
+                active_effects,
             );
 
             if **mine_ticks % 4. == 0. {
@@ -686,7 +734,13 @@ pub fn update_mining_component(
                 continue;
             }
 
-            mining.pos = block_hit_result.block_pos;
+            if mining.pos != block_hit_result.block_pos {
+                debug!(
+                    "Updating Mining::pos from {:?} to {:?}",
+                    mining.pos, block_hit_result.block_pos
+                );
+                mining.pos = block_hit_result.block_pos;
+            }
             mining.dir = block_hit_result.direction;
         } else {
             if mining.force {

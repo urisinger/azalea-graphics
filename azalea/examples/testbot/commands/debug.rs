@@ -58,7 +58,7 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
         };
         let entity_id = source.bot.entity_component::<MinecraftEntityId>(entity);
         source.reply(format!(
-            "Your Minecraft ID is {} and your ECS id is {entity:?}",
+            "Your Minecraft ID is {} and your ECS ID is {entity:?}",
             *entity_id
         ));
         1
@@ -218,7 +218,7 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
         let source = ctx.source.lock();
         let player_entities = source
             .bot
-            .nearest_entities_by::<With<metadata::Player>, ()>(|_: &()| true);
+            .nearest_entities_by::<(), With<metadata::Player>>(|_: ()| true);
         let tab_list = source.bot.tab_list();
         for player_entity in player_entities {
             let uuid = source.bot.entity_component::<EntityUuid>(player_entity);

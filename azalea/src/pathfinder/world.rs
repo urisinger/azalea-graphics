@@ -17,8 +17,9 @@ use super::{mining::MiningCache, rel_block_pos::RelBlockPos};
 
 /// An efficient representation of the world used for the pathfinder.
 pub struct CachedWorld {
-    /// The origin that the [`RelBlockPos`] types will be relative to. This is
-    /// for an optimization that reduces the size of the block positions
+    /// The origin that the [`RelBlockPos`] types will be relative to.
+    ///
+    /// This is for an optimization that reduces the size of the block positions
     /// that are used by the pathfinder.
     origin: BlockPos,
 
@@ -247,8 +248,9 @@ impl CachedWorld {
         passable
     }
 
-    /// Get the block state at the given position. This is relatively slow, so
-    /// you should avoid it whenever possible.
+    /// Get the block state at the given position.
+    ///
+    /// This is relatively slow, so you should avoid it whenever possible.
     pub fn get_block_state(&self, pos: RelBlockPos) -> BlockState {
         self.get_block_state_at_pos(pos.apply(self.origin))
     }
@@ -304,8 +306,9 @@ impl CachedWorld {
         solid
     }
 
-    /// Returns how much it costs to break this block. Returns 0 if the block is
-    /// already passable.
+    /// Returns how much it costs to break this block.
+    ///
+    /// Returns 0 if the block is already passable.
     pub fn cost_for_breaking_block(&self, pos: RelBlockPos, mining_cache: &MiningCache) -> f32 {
         // SAFETY: pathfinding is single-threaded
         let cached_mining_costs = unsafe { &mut *self.cached_mining_costs.get() };
@@ -478,8 +481,10 @@ impl CachedWorld {
             + self.cost_for_breaking_block(pos.up(1), mining_cache)
     }
 
-    /// Whether we can stand in this position. Checks if the block below is
-    /// solid, and that the two blocks above that are passable.
+    /// Whether we can stand in this position.
+    ///
+    /// Checks if the block below is solid, and that the two blocks above that
+    /// are passable.
     pub fn is_standable(&self, pos: RelBlockPos) -> bool {
         self.is_standable_at_block_pos(pos.apply(self.origin))
     }
@@ -565,6 +570,7 @@ pub fn is_block_state_passable(block_state: BlockState) -> bool {
 
 /// Whether this block has a solid hitbox at the top (i.e. we can stand on it
 /// and do parkour from it).
+#[inline]
 pub fn is_block_state_solid(block_state: BlockState) -> bool {
     if block_state.is_air() {
         // fast path
@@ -582,26 +588,24 @@ pub fn is_block_state_solid(block_state: BlockState) -> bool {
         return true;
     }
 
+    let block = Block::from(block_state);
+    // solid enough
+    if matches!(block, Block::DirtPath | Block::Farmland) {
+        return true;
+    }
+
     false
 }
 
 /// Whether we can stand on this block (but not necessarily do parkour jumps
 /// from it).
 pub fn is_block_state_standable(block_state: BlockState) -> bool {
-    if block_state.is_air() {
-        // fast path
-        return false;
-    }
-    if block_state.is_collision_shape_full() {
+    if is_block_state_solid(block_state) {
         return true;
     }
 
     let block = Block::from(block_state);
     if tags::blocks::SLABS.contains(&block) || tags::blocks::STAIRS.contains(&block) {
-        return true;
-    }
-
-    if matches!(block, Block::DirtPath | Block::Farmland) {
         return true;
     }
 

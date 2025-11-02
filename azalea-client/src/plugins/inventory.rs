@@ -18,40 +18,37 @@ use azalea_protocol::packets::game::{
 };
 use azalea_registry::MenuKind;
 use azalea_world::{InstanceContainer, InstanceName};
-use bevy_app::{App, Plugin, Update};
+use bevy_app::{App, Plugin};
 use bevy_ecs::prelude::*;
 use indexmap::IndexMap;
 use tracing::{error, warn};
 
-use crate::{Client, packet::game::SendGamePacketEvent, respawn::perform_respawn};
+use crate::{Client, packet::game::SendGamePacketEvent};
 
 pub struct InventoryPlugin;
 impl Plugin for InventoryPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<SetSelectedHotbarSlotEvent>()
-            .add_systems(
-                Update,
-                handle_set_selected_hotbar_slot_event
-                    .in_set(InventorySet)
-                    .before(perform_respawn),
-            )
-            .add_systems(
-                GameTick,
-                ensure_has_sent_carried_item.after(super::mining::handle_mining_queued),
-            )
-            .add_observer(handle_client_side_close_container_trigger)
-            .add_observer(handle_menu_opened_trigger)
-            .add_observer(handle_container_close_event)
-            .add_observer(handle_set_container_content_trigger);
+        app.add_systems(
+            GameTick,
+            ensure_has_sent_carried_item.after(super::mining::handle_mining_queued),
+        )
+        .add_observer(handle_client_side_close_container_trigger)
+        .add_observer(handle_menu_opened_trigger)
+        .add_observer(handle_container_close_event)
+        .add_observer(handle_set_container_content_trigger)
+        .add_observer(handle_container_click_event)
+        // number keys are checked on tick but scrolling can happen outside of ticks, therefore
+        // this is fine
+        .add_observer(handle_set_selected_hotbar_slot_event);
     }
 }
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-pub struct InventorySet;
+pub struct InventorySystems;
 
 impl Client {
-    /// Return the menu that is currently open. If no menu is open, this will
-    /// have the player's inventory.
+    /// Return the menu that is currently open, or the player's inventory if no
+    /// menu is open.
     pub fn menu(&self) -> Menu {
         self.query_self::<&Inventory, _>(|inv| inv.menu().clone())
     }
@@ -82,7 +79,7 @@ impl Client {
         );
 
         let mut ecs = self.ecs.lock();
-        ecs.write_message(SetSelectedHotbarSlotEvent {
+        ecs.trigger(SetSelectedHotbarSlotEvent {
             entity: self.entity,
             slot: new_hotbar_slot_index,
         });
@@ -98,26 +95,29 @@ pub struct Inventory {
     /// bare [`azalea_inventory::Player`] doesn't have.
     pub inventory_menu: azalea_inventory::Menu,
 
-    /// The ID of the container that's currently open. Its value is not
-    /// guaranteed to be anything specific, and may change every time you open a
-    /// container (unless it's 0, in which case it means that no container is
-    /// open).
+    /// The ID of the container that's currently open.
+    ///
+    /// Its value is not guaranteed to be anything specific, and it may change
+    /// every time you open a container (unless it's 0, in which case it
+    /// means that no container is open).
     pub id: i32,
-    /// The current container menu that the player has open. If no container is
-    /// open, this will be `None`.
+    /// The current container menu that the player has open, or `None` if no
+    /// container is open.
     pub container_menu: Option<azalea_inventory::Menu>,
-    /// The custom name of the menu that's currently open. This is Some when
-    /// `container_menu` is Some.
+    /// The custom name of the menu that's currently open.
+    ///
+    /// This can only be `Some` when `container_menu` is `Some`.
     pub container_menu_title: Option<FormattedText>,
-    /// The item that is currently held by the cursor. `Slot::Empty` if nothing
-    /// is currently being held.
+    /// The item that is currently held by the cursor, or `Slot::Empty` if
+    /// nothing is currently being held.
     ///
     /// This is different from [`Self::selected_hotbar_slot`], which is the
     /// item that's selected in the hotbar.
     pub carried: ItemStack,
-    /// An identifier used by the server to track client inventory desyncs. This
-    /// is sent on every container click, and it's only ever updated when the
-    /// server sends a new container update.
+    /// An identifier used by the server to track client inventory desyncs.
+    ///
+    /// This is sent on every container click, and it's only ever updated when
+    /// the server sends a new container update.
     pub state_id: u32,
 
     pub quick_craft_status: QuickCraftStatusKind,
@@ -127,7 +127,7 @@ pub struct Inventory {
     pub quick_craft_slots: HashSet<u16>,
 
     /// The index of the item in the hotbar that's currently being held by the
-    /// player. This MUST be in the range 0..9 (not including 9).
+    /// player. This must be in the range 0..=8.
     ///
     /// In a vanilla client this is changed by pressing the number keys or using
     /// the scroll wheel.
@@ -135,9 +135,10 @@ pub struct Inventory {
 }
 
 impl Inventory {
-    /// Returns a reference to the currently active menu. If a container is open
-    /// it'll return [`Self::container_menu`], otherwise
-    /// [`Self::inventory_menu`].
+    /// Returns a reference to the currently active menu.
+    ///
+    /// If a container is open then it'll return [`Self::container_menu`],
+    /// otherwise [`Self::inventory_menu`].
     ///
     /// Use [`Self::menu_mut`] if you need a mutable reference.
     pub fn menu(&self) -> &azalea_inventory::Menu {
@@ -147,9 +148,10 @@ impl Inventory {
         }
     }
 
-    /// Returns a mutable reference to the currently active menu. If a container
-    /// is open it'll return [`Self::container_menu`], otherwise
-    /// [`Self::inventory_menu`].
+    /// Returns a mutable reference to the currently active menu.
+    ///
+    /// If a container is open then it'll return [`Self::container_menu`],
+    /// otherwise [`Self::inventory_menu`].
     ///
     /// Use [`Self::menu`] if you don't need a mutable reference.
     pub fn menu_mut(&mut self) -> &mut azalea_inventory::Menu {
@@ -746,8 +748,10 @@ fn handle_menu_opened_trigger(event: On<MenuOpenedEvent>, mut query: Query<&mut 
 #[derive(EntityEvent)]
 pub struct CloseContainerEvent {
     pub entity: Entity,
-    /// The ID of the container to close. 0 for the player's inventory. If this
-    /// is not the same as the currently open inventory, nothing will happen.
+    /// The ID of the container to close. 0 for the player's inventory.
+    ///
+    /// If this is not the same as the currently open inventory, nothing will
+    /// happen.
     pub id: i32,
 }
 fn handle_container_close_event(
@@ -775,7 +779,7 @@ fn handle_container_close_event(
     });
 }
 
-/// A Bevy trigger that's fired when our client closed a container.
+/// A Bevy event that's fired when our client closed a container.
 ///
 /// This can also be triggered directly to close a container silently without
 /// sending any packets to the server. You probably don't want that though, and
@@ -827,8 +831,8 @@ pub struct ContainerClickEvent {
     pub operation: ClickOperation,
 }
 pub fn handle_container_click_event(
-    mut commands: Commands,
     container_click: On<ContainerClickEvent>,
+    mut commands: Commands,
     mut query: Query<(
         Entity,
         &mut Inventory,
@@ -925,26 +929,18 @@ pub fn handle_set_container_content_trigger(
 /// An ECS message to switch our hand to a different hotbar slot.
 ///
 /// This is equivalent to using the scroll wheel or number keys in Minecraft.
-#[derive(Message)]
+#[derive(EntityEvent)]
 pub struct SetSelectedHotbarSlotEvent {
     pub entity: Entity,
     /// The hotbar slot to select. This should be in the range 0..=8.
     pub slot: u8,
 }
 pub fn handle_set_selected_hotbar_slot_event(
-    mut events: MessageReader<SetSelectedHotbarSlotEvent>,
+    set_selected_hotbar_slot: On<SetSelectedHotbarSlotEvent>,
     mut query: Query<&mut Inventory>,
 ) {
-    for event in events.read() {
-        let mut inventory = query.get_mut(event.entity).unwrap();
-
-        // if the slot is already selected, don't send a packet
-        if inventory.selected_hotbar_slot == event.slot {
-            continue;
-        }
-
-        inventory.selected_hotbar_slot = event.slot;
-    }
+    let mut inventory = query.get_mut(set_selected_hotbar_slot.entity).unwrap();
+    inventory.selected_hotbar_slot = set_selected_hotbar_slot.slot;
 }
 
 /// The item slot that the server thinks we have selected.

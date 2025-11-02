@@ -4,20 +4,18 @@ use ash::vk;
 use azalea::core::position::ChunkSectionPos;
 use glam::Vec3;
 use image::GenericImageView;
-use vk_mem::MemoryUsage;
 
 use crate::{
     app::WorldUpdate,
     renderer::{
         assets::{Assets, processed::atlas::TextureEntry},
+        frame_ctx::FrameCtx,
         timings,
         vulkan::{
-            buffer::Buffer,
             context::VkContext,
             frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
             swapchain::Swapchain,
             texture::Texture,
-            timestamp::TimestampQueryPool,
         },
         world_renderer::{
             aabb_renderer::AabbRenderer,
@@ -249,68 +247,64 @@ impl WorldRenderer {
         }
     }
 
-    pub fn render(
-        &mut self,
-        ctx: &VkContext,
-        cmd: vk::CommandBuffer,
-        image_index: u32,
-        extent: vk::Extent2D,
-        view_proj: glam::Mat4,
-        camera_pos: glam::Vec3,
-        frame_index: usize,
-        config: WorldRendererConfig,
-        timestamps: Option<&TimestampQueryPool>,
-        frame_sync: &mut FrameSync,
-    ) {
-        ctx.cmd_begin_debug_label(cmd, &format!("World Render Frame {}", frame_index));
+    pub fn render(&mut self, frame_ctx: &mut FrameCtx) {
+        let ctx = frame_ctx.ctx;
+        let camera_pos = frame_ctx.camera_pos;
+        let view_proj = frame_ctx.view_proj;
+        ctx.cmd_begin_debug_label(
+            frame_ctx.cmd,
+            &format!("World Render Frame {}", frame_ctx.frame_index),
+        );
 
-        ctx.cmd_begin_debug_label(cmd, "Update meshes");
-        self.mesh_store
-            .process_mesher_results(ctx, cmd, frame_index, &self.mesher, frame_sync);
+        ctx.cmd_begin_debug_label(frame_ctx.cmd, "Update meshes");
+        self.mesh_store.process_mesher_results(
+            frame_ctx,
+            &self.mesher,
+        );
 
-        ctx.cmd_end_debug_label(cmd);
+        ctx.cmd_end_debug_label(frame_ctx.cmd);
 
-        ctx.cmd_begin_debug_label(cmd, "Update dirty textures");
-        if let Some(timestamps) = timestamps {
+        ctx.cmd_begin_debug_label(frame_ctx.cmd, "Update dirty textures");
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::START_UPLOAD_DIRTY as u32,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
             );
         }
 
-        self.upload_dirty_textures(ctx, cmd, frame_index, frame_sync);
+        self.upload_dirty_textures(frame_ctx);
 
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::END_UPLOAD_DIRTY as u32,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
             );
         }
-        ctx.cmd_end_debug_label(cmd);
+        ctx.cmd_end_debug_label(frame_ctx.cmd);
 
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::START_TERRAIN_PASS as u32,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
             );
         }
 
-        ctx.cmd_begin_debug_label(cmd, "Main Render Pass");
+        ctx.cmd_begin_debug_label(frame_ctx.cmd, "Main Render Pass");
         self.render_targets
-            .begin(ctx.device(), cmd, image_index, extent);
+            .begin(ctx.device(), frame_ctx.cmd, frame_ctx.image_index, frame_ctx.extent);
         self.draw(
-            ctx,
-            cmd,
-            view_proj,
+            frame_ctx.ctx,
+            frame_ctx.cmd,
+            frame_ctx.view_proj,
             camera_pos,
-            frame_index,
-            config.wireframe_mode,
+            frame_ctx.frame_index,
+            frame_ctx.config.wireframe_mode,
         );
 
         let visibility_push_constants = if let Some(vb) = &mut self.visibility_buffers {
@@ -336,14 +330,14 @@ impl WorldRenderer {
             let pc = VisibilityPushConstants {
                 view_proj: view_proj.to_cols_array_2d(),
                 grid_origin_ws,
-                radius: config.render_distance as i32,
+                radius: frame_ctx.config.render_distance as i32,
                 height: vb.height,
                 _padding: [0, 0],
             };
-            if config.render_aabbs {
-                ctx.cmd_begin_debug_label(cmd, "Draw AABBs");
-                self.render_aabbs(ctx, cmd, &pc, frame_index);
-                ctx.cmd_end_debug_label(cmd);
+            if frame_ctx.config.render_aabbs {
+                ctx.cmd_begin_debug_label(frame_ctx.cmd, "Draw AABBs");
+                self.render_aabbs(ctx, frame_ctx.cmd, &pc, frame_ctx.frame_index);
+                ctx.cmd_end_debug_label(frame_ctx.cmd);
             }
 
             Some(pc)
@@ -351,72 +345,72 @@ impl WorldRenderer {
             None
         };
 
-        self.render_targets.end(ctx.device(), cmd);
+        self.render_targets.end(ctx.device(), frame_ctx.cmd);
 
-        ctx.cmd_end_debug_label(cmd);
+        ctx.cmd_end_debug_label(frame_ctx.cmd);
 
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::END_TERRAIN_PASS as u32,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
             );
         }
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::START_HIZ_COMPUTE as u32,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
             );
         }
 
-        ctx.cmd_begin_debug_label(cmd, "HiZ Pyramid Generation");
+        ctx.cmd_begin_debug_label(frame_ctx.cmd, "HiZ Pyramid Generation");
         self.hiz_compute.dispatch_all_levels(
             ctx,
-            cmd,
-            image_index,
-            &self.render_targets.depth_pyramids[image_index as usize],
-            &self.render_targets.depth_images[image_index as usize],
-            extent.width,
-            extent.height,
+            frame_ctx.cmd,
+            frame_ctx.image_index,
+            &self.render_targets.depth_pyramids[frame_ctx.image_index as usize],
+            &self.render_targets.depth_images[frame_ctx.image_index as usize],
+            frame_ctx.extent.width,
+            frame_ctx.extent.height,
         );
-        ctx.cmd_end_debug_label(cmd);
+        ctx.cmd_end_debug_label(frame_ctx.cmd);
 
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::END_HIZ_COMPUTE as u32,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
             );
         }
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::START_VISIBILITY_COMPUTE as u32,
                 vk::PipelineStageFlags::TOP_OF_PIPE,
             );
         }
 
         if let Some(vb) = &mut self.visibility_buffers
-            && !config.disable_visibilty
+            && !frame_ctx.config.disable_visibilty
         {
-            ctx.cmd_begin_debug_label(cmd, "Visibility Compute");
+            ctx.cmd_begin_debug_label(frame_ctx.cmd, "Visibility Compute");
             self.visibility_compute.dispatch(
                 ctx,
-                cmd,
-                image_index as usize,
-                frame_index,
+                frame_ctx.cmd,
+                frame_ctx.image_index as usize,
+                frame_ctx.frame_index,
                 vb,
                 &visibility_push_constants.unwrap(),
             );
 
             unsafe {
                 ctx.device().cmd_pipeline_barrier(
-                    cmd,
+                    frame_ctx.cmd,
                     vk::PipelineStageFlags::COMPUTE_SHADER,
                     vk::PipelineStageFlags::VERTEX_SHADER,
                     vk::DependencyFlags::empty(),
@@ -424,21 +418,21 @@ impl WorldRenderer {
                     &[vk::BufferMemoryBarrier::default()
                         .src_access_mask(vk::AccessFlags::SHADER_WRITE)
                         .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                        .buffer(vb.outputs[frame_index].buffer)
+                        .buffer(vb.outputs[frame_ctx.frame_index].buffer)
                         .offset(0)
                         .size(vk::WHOLE_SIZE)],
                     &[],
                 );
             }
 
-            ctx.cmd_end_debug_label(cmd);
+            ctx.cmd_end_debug_label(frame_ctx.cmd);
         };
-        ctx.cmd_end_debug_label(cmd);
+        ctx.cmd_end_debug_label(frame_ctx.cmd);
 
-        if let Some(timestamps) = timestamps {
+        if let Some(timestamps) = frame_ctx.timestamps {
             timestamps.write_timestamp(
                 ctx.device(),
-                cmd,
+                frame_ctx.cmd,
                 timings::END_VISIBILITY_COMPUTE as u32,
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE,
             );
@@ -580,13 +574,7 @@ impl WorldRenderer {
         ctx.cmd_end_debug_label(cmd);
     }
 
-    pub fn upload_dirty_textures(
-        &mut self,
-        ctx: &VkContext,
-        cmd: vk::CommandBuffer,
-        frame_index: usize,
-        frame_sync: &mut FrameSync,
-    ) {
+    pub fn upload_dirty_textures(&mut self, frame_ctx: &mut FrameCtx) {
         let dirty = self.animation_manager.dirty_textures(&self.assets.textures);
         if dirty.is_empty() {
             return;
@@ -635,68 +623,46 @@ impl WorldRenderer {
             }
         }
 
-        let needed_size = buffer_data.len() as vk::DeviceSize;
+        let subresource = vk::ImageSubresourceRange {
+            aspect_mask: vk::ImageAspectFlags::COLOR,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            layer_count: 1,
+        };
 
-        let mut staging = Buffer::new(
-            ctx,
-            needed_size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryUsage::Auto,
-            true,
+        frame_ctx.pipeline_barrier(
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            vk::PipelineStageFlags::TRANSFER,
+            &[],
+            &[vk::ImageMemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::SHADER_READ)
+                .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .old_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .image(self.blocks_texture.image)
+                .subresource_range(subresource)],
         );
-        staging.upload_data(ctx, 0, &buffer_data);
 
-        unsafe {
-            let subresource = vk::ImageSubresourceRange {
-                aspect_mask: vk::ImageAspectFlags::COLOR,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                layer_count: 1,
-            };
+        frame_ctx.upload_to_image(
+            &buffer_data,
+            self.blocks_texture.image,
+            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            &regions,
+        );
 
-            ctx.device().cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[vk::ImageMemoryBarrier::default()
-                    .src_access_mask(vk::AccessFlags::SHADER_READ)
-                    .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                    .old_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                    .image(self.blocks_texture.image)
-                    .subresource_range(subresource)],
-            );
-
-            ctx.device().cmd_copy_buffer_to_image(
-                cmd,
-                staging.buffer,
-                self.blocks_texture.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &regions,
-            );
-
-            ctx.device().cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[vk::ImageMemoryBarrier::default()
-                    .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                    .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                    .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                    .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                    .image(self.blocks_texture.image)
-                    .subresource_range(subresource)],
-            );
-        }
-
-        frame_sync.add_to_deletion_queue(frame_index, Box::new(staging));
+        frame_ctx.pipeline_barrier(
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::FRAGMENT_SHADER,
+            &[],
+            &[vk::ImageMemoryBarrier::default()
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image(self.blocks_texture.image)
+                .subresource_range(subresource)],
+        );
     }
 
     pub fn render_aabbs(

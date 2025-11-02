@@ -12,7 +12,7 @@ use azalea_entity::{
     Jumping, LocalEntity, LookDirection, Position, clamp_look_direction,
     dimensions::EntityDimensions, metadata::Player, update_dimensions,
 };
-use azalea_physics::PhysicsSet;
+use azalea_physics::PhysicsSystems;
 use bevy_app::Update;
 use bevy_ecs::prelude::*;
 use futures_lite::Future;
@@ -51,14 +51,16 @@ impl Plugin for BotPlugin {
             .add_systems(
                 GameTick,
                 stop_jumping
-                    .after(PhysicsSet)
+                    .after(PhysicsSystems)
                     .after(azalea_client::movement::send_player_input_packet),
             );
     }
 }
 
-/// A component that clients with [`BotPlugin`] will have. If you just want to
-/// check if an entity is one of our bots, you should use [`LocalEntity`].
+/// A component that clients with [`BotPlugin`] will have.
+///
+/// If you just want to check if an entity is one of our bots, you should use
+/// [`LocalEntity`].
 #[derive(Default, Component)]
 pub struct Bot {
     jumping_once: bool,
@@ -97,8 +99,10 @@ pub trait BotClientExt {
     fn wait_ticks(&self, n: usize) -> impl Future<Output = ()> + Send;
     /// Wait for the specified number of ECS `Update`s.
     fn wait_updates(&self, n: usize) -> impl Future<Output = ()> + Send;
-    /// Mine a block. This won't turn the bot's head towards the block, so if
-    /// that's necessary you'll have to do that yourself with [`look_at`].
+    /// Mine a block.
+    ///
+    /// This won't turn the bot's head towards the block, so if that's necessary
+    /// you'll have to do that yourself with [`look_at`].
     ///
     /// [`look_at`]: crate::prelude::BotClientExt::look_at
     fn mine(&self, position: BlockPos) -> impl Future<Output = ()> + Send;

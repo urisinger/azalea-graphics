@@ -1,3 +1,5 @@
+import lib.code.data_components
+import lib.code.inventory
 import lib.code.language
 import lib.code.data_components
 import lib.code.registry
@@ -9,6 +11,7 @@ import lib.code.entity
 import lib.code.utils
 import lib.download
 import lib.extract
+import genregistries
 import sys
 
 lib.download.clear_version_cache()
@@ -57,8 +60,6 @@ language = lib.extract.get_en_us_lang(new_version_id)
 lib.code.language.write_language(language)
 
 print("Generating registries...")
-import genregistries
-
 genregistries.generate(new_version_id)
 
 print("Generating entity data...")
