@@ -51,7 +51,11 @@ impl LocalChunk {
             self.neighbors[SW].as_ref().map(|c| c.read()),
         ];
 
-        BorrowedChunks { center, neighbors, min_y: self.min_y }
+        BorrowedChunks {
+            center,
+            neighbors,
+            min_y: self.min_y,
+        }
     }
 }
 
@@ -116,7 +120,7 @@ impl<'a> BorrowedChunks<'a> {
         };
 
         if let Some(chunk) = chunk_ref {
-            let section_index = (base_y + cy_off ) as usize;
+            let section_index = (base_y + cy_off) as usize;
             if let Some(section) = chunk.sections.get(section_index) {
                 return Some(section.get_block_state(ChunkSectionBlockPos {
                     x: sx,

@@ -59,7 +59,6 @@ async fn handle(bot: Client, event: azalea::Event, _state: State) -> anyhow::Res
                 view_distance: 32,
                 ..Default::default()
             })
-            .await
         }
         _ => {}
     }

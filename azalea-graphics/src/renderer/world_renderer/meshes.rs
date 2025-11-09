@@ -49,16 +49,13 @@ impl MeshStore {
         }
     }
 
-    pub fn process_mesher_results(
-        &mut self,
-        frame_ctx: &mut FrameCtx,
-        mesher: &Option<Mesher>,
-    ) {
+    pub fn process_mesher_results(&mut self, frame_ctx: &mut FrameCtx, mesher: &Option<Mesher>) {
         let mut touched_buffers: Vec<vk::Buffer> = Vec::new();
 
         while let Some(MeshResult { blocks, water }) = mesher.as_ref().and_then(|m| m.poll()) {
             if !blocks.vertices.is_empty() {
-                let staging_mesh = Mesh::new_staging(frame_ctx.ctx, &blocks.vertices, &blocks.indices);
+                let staging_mesh =
+                    Mesh::new_staging(frame_ctx.ctx, &blocks.vertices, &blocks.indices);
                 let mesh = staging_mesh.upload(frame_ctx.ctx, frame_ctx.cmd);
                 frame_ctx.delete(staging_mesh.buffer);
 
@@ -70,7 +67,8 @@ impl MeshStore {
             }
 
             if !water.vertices.is_empty() {
-                let staging_mesh = Mesh::new_staging(frame_ctx.ctx, &water.vertices, &water.indices);
+                let staging_mesh =
+                    Mesh::new_staging(frame_ctx.ctx, &water.vertices, &water.indices);
                 let mesh = staging_mesh.upload(frame_ctx.ctx, frame_ctx.cmd);
                 frame_ctx.delete(staging_mesh.buffer);
 

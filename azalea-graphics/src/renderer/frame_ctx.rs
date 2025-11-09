@@ -23,7 +23,8 @@ pub struct FrameCtx<'a> {
 }
 
 impl FrameCtx<'_> {
-    /// Upload data to a buffer using a staging buffer that is automatically deleted.
+    /// Upload data to a buffer using a staging buffer that is automatically
+    /// deleted.
     pub fn upload_to<T>(&mut self, data: &[T], dst: &Buffer) {
         let mut staging = Buffer::new(
             self.ctx,
@@ -49,7 +50,8 @@ impl FrameCtx<'_> {
         self.delete(staging);
     }
 
-    /// Upload data to an image using a staging buffer that is automatically deleted.
+    /// Upload data to an image using a staging buffer that is automatically
+    /// deleted.
     pub fn upload_to_image<T>(
         &mut self,
         data: &[T],
@@ -68,9 +70,13 @@ impl FrameCtx<'_> {
         staging.upload_data(self.ctx, 0, data);
 
         unsafe {
-            self.ctx
-                .device()
-                .cmd_copy_buffer_to_image(self.cmd, staging.buffer, dst, layout, regions);
+            self.ctx.device().cmd_copy_buffer_to_image(
+                self.cmd,
+                staging.buffer,
+                dst,
+                layout,
+                regions,
+            );
         }
 
         self.delete(staging);

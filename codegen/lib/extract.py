@@ -148,76 +148,26 @@ def get_pumpkin_data(version_id: str, category: str):
     os.makedirs(pumpkin_run_directory, exist_ok=True)
     with open(f"{pumpkin_run_directory}/eula.txt", "w") as f:
         f.write("eula=true")
-    with open(f"{pumpkin_run_directory}/server.properties", "w") as f:
-        f.write("server-port=0")
 
-    fabric_data = get_fabric_data(version_id)[0]
-    fabric_api_version = get_latest_fabric_api_version()
-    fabric_kotlin_version = get_latest_fabric_kotlin_version()
-    fabric_loom_version = get_latest_fabric_loom_version()
-
-    gradle_properties = f"""# Done to increase the memory available to gradle.
-org.gradle.jvmargs=-Xmx1G
-org.gradle.parallel=true
-# Fabric Properties
-# check these on https://modmuss50.me/fabric.html
-minecraft_version={version_id}
-yarn_mappings={fabric_data["mappings"]["version"]}
-loader_version={fabric_data["loader"]["version"]}
-kotlin_loader_version={fabric_kotlin_version}
-# Mod Properties
-mod_version=1.0-SNAPSHOT
-maven_group=de.snowii
-archives_base_name=extractor
-fabric_version=0.132.0+1.21.8
-"""
-    with open(f"{pumpkin_dir}/gradle.properties", "w") as f:
-        f.write(gradle_properties)
-
-    # update the minecraft version dependency in src/main/resources/fabric.mod.json
-    fabric_mod_json_path = f"{pumpkin_dir}/src/main/resources/fabric.mod.json"
-    with open(fabric_mod_json_path, "r") as f:
-        fabric_mod_json = f.read()
-    with open(fabric_mod_json_path, "w") as f:
-        fabric_mod_json = fabric_mod_json.replace(
-            '"minecraft": "${minecraft_version}"', '"minecraft": "*"'
-        )
-        f.write(fabric_mod_json)
-    with open(f"{pumpkin_dir}/build.gradle.kts", "r") as f:
-        build_gradle_kts = f.read()
-    with open(f"{pumpkin_dir}/build.gradle.kts", "w") as f:
-        build_gradle_kts = re.sub(
-            r'(id\("fabric-loom"\) version )"[^"]+"',
-            rf'\1"{fabric_loom_version}"',
-            build_gradle_kts,
-        )
-        # kotlin complains about nullable types if we don't add this
-        build_gradle_kts = re.sub(
-            r'(to project.property\("\w+"\))([\n,])', r"\1!!\2", build_gradle_kts
-        )
-        f.write(build_gradle_kts)
-
+    # run ./gradlew runServer until it logs "(pumpkin_extractor) Done"
     p = subprocess.Popen(
+        # the gradle wrapper (./gradlew) is sometimes on the wrong version so just prefer the system's gradle installation
         f"cd {pumpkin_dir} && ./gradlew clean && ./gradlew runServer",
         stdout=subprocess.PIPE,
         shell=True,
-        text=True,
     )
-    
-    done_marker = "[Server thread/INFO] (pumpkin_extractor) Done"
-    
+
     while True:
-        data = p.stdout.readline()
-        if data == "":  # EOF
-            break
+        data = p.stdout.readline().decode()
         print(">" + data, end="", flush=True)
-    
-        if done_marker in data:
+        if "[Server thread/INFO] (pumpkin_extractor) Done" in data:
             print("Pumpkin extractor done")
+            break
+        if data == "":
             break
 
     p.terminate()
-    
+
     # move the run/pumpkin_extractor_output directory to target_parent_dir
     # delete target_parent_dir if it's empty
     if os.path.exists(target_parent_dir):

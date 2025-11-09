@@ -257,10 +257,8 @@ impl WorldRenderer {
         );
 
         ctx.cmd_begin_debug_label(frame_ctx.cmd, "Update meshes");
-        self.mesh_store.process_mesher_results(
-            frame_ctx,
-            &self.mesher,
-        );
+        self.mesh_store
+            .process_mesher_results(frame_ctx, &self.mesher);
 
         ctx.cmd_end_debug_label(frame_ctx.cmd);
 
@@ -296,8 +294,12 @@ impl WorldRenderer {
         }
 
         ctx.cmd_begin_debug_label(frame_ctx.cmd, "Main Render Pass");
-        self.render_targets
-            .begin(ctx.device(), frame_ctx.cmd, frame_ctx.image_index, frame_ctx.extent);
+        self.render_targets.begin(
+            ctx.device(),
+            frame_ctx.cmd,
+            frame_ctx.image_index,
+            frame_ctx.extent,
+        );
         self.draw(
             frame_ctx.ctx,
             frame_ctx.cmd,

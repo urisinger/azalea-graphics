@@ -29,7 +29,7 @@ def get_pumpkin_extractor():
     if not os.path.exists(get_dir_location("__cache__/pumpkin-extractor")):
         print("\033[92mDownloading Pumpkin-MC/Extractor...\033[m")
         os.system(
-            f"cd {get_dir_location('__cache__')} && git clone https://github.com/Pumpkin-MC/Extractor pumpkin-extractor && cd pumpkin-extractor && git pull"
+            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/Extractor --branch 1.20.10 pumpkin-extractor && cd pumpkin-extractor && git pull"
         )
 
     return get_dir_location("__cache__/pumpkin-extractor")
