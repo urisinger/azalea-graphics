@@ -3,9 +3,9 @@ use azalea::{
     registry::Block,
 };
 use glam::{IVec3, Vec3};
+use azalea_assets::processed::atlas::PlacedSprite;
 
 use crate::renderer::{
-    assets::processed::atlas::PlacedSprite,
     world_renderer::{
         BlockVertex,
         mesher::{MeshBuilder, helpers::quad_uvs},

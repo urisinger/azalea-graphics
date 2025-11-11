@@ -405,6 +405,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "azalea-assets"
+version = "0.14.0+mc1.21.10"
+dependencies = [
+ "azalea-block",
+ "glam 0.30.9",
+ "image",
+ "log",
+ "regex",
+ "serde",
+ "serde-tuple-vec-map",
+ "serde_json",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "azalea-auth"
 version = "0.14.0+mc1.21.10"
 dependencies = [
@@ -597,6 +612,7 @@ dependencies = [
  "ash",
  "ash-window",
  "azalea",
+ "azalea-assets",
  "bytemuck",
  "cargo-gpu",
  "clap",
@@ -612,7 +628,6 @@ dependencies = [
  "raw-window-handle",
  "regex",
  "serde",
- "serde-tuple-vec-map",
  "serde_json",
  "simdnbt",
  "thiserror 2.0.17",
@@ -627,6 +642,7 @@ dependencies = [
 name = "azalea-inventory"
 version = "0.14.0+mc1.21.10"
 dependencies = [
+ "azalea-assets",
  "azalea-auth",
  "azalea-buf",
  "azalea-chat",

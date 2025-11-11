@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use image::{GenericImageView, RgbaImage};
 
-use crate::renderer::assets::processed::{
+use azalea_assets::processed::{
     animation::Animation,
     atlas::{Atlas, TextureEntry},
 };

@@ -11,13 +11,13 @@ ash = "0.38"
 raw-window-handle = "0.6"
 vk-mem = "0.5"
 ash-window = "0.13"
-log = "0.4"
 winit = "0.30.12"
+log.workspace = true
 
 egui = "0.32"
 egui-winit = "0.32"
 
-glam = {version = "0.30", features = ["serde"]}
+glam.workspace = true
 crossbeam = "0.8.4"
 parking_lot.workspace = true
 azalea.path = "../azalea/"
@@ -27,7 +27,6 @@ walkdir = "2.5.0"
 serde.workspace = true
 serde_json.workspace = true
 image = "0.25.6"
-serde-tuple-vec-map = "1"
 thiserror.workspace = true
 regex.workspace = true
 simdnbt.workspace = true
@@ -36,6 +35,7 @@ bytemuck = "1.23.2"
 clap = {version = "4.5.48", features=["derive"]}
 num_cpus = "1.17.0"
 tracing.workspace = true
+azalea-assets.workspace = true
 
 
 [dev-dependencies]

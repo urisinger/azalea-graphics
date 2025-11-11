@@ -3,13 +3,13 @@ use azalea::{
     core::direction::Direction,
     physics::collision::BlockWithShape,
 };
+use azalea_assets::processed::{
+    VariantDesc,
+    model::{self, Cube},
+};
 use glam::{IVec3, Vec3};
 
 use crate::renderer::{
-    assets::processed::{
-        VariantDesc,
-        model::{self, Cube},
-    },
     chunk::LocalSection,
     world_renderer::{
         BlockVertex,

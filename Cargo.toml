@@ -17,7 +17,8 @@ members = [
     "azalea-registry",
     "azalea-world",
     "azalea-graphics",
-    "azalea-graphics/shaders"
+    "azalea-graphics/shaders",
+    "azalea-graphics/azalea-assets"
 ]
 resolver = "2"
 
@@ -44,6 +45,7 @@ bevy_time = "0.17.2"
 byteorder = "1"
 cfb8 = "0.8"
 chrono = { version = "0.4", default-features = false }
+glam = {version = "0.30", features = ["serde"]}
 compact_str = "0.9"
 crc32c = "0.6"
 criterion = "0.7"
@@ -86,6 +88,8 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 uuid = "1"
 
+log = "0.4"
+
 azalea-block-macros = { path = "azalea-block/azalea-block-macros", version = "0.14.0" }
 azalea-block = { path = "azalea-block", version = "0.14.0" }
 azalea-auth = { path = "azalea-auth", version = "0.14.0" }
@@ -106,6 +110,7 @@ azalea-protocol = { path = "azalea-protocol", version = "0.14.0" }
 azalea-registry-macros = { path = "azalea-registry/azalea-registry-macros", version = "0.14.0" }
 azalea-registry = { path = "azalea-registry", version = "0.14.0" }
 azalea-world = { path = "azalea-world", version = "0.14.0" }
+azalea-assets = { path = "azalea-graphics/azalea-assets", version = "0.14.0" }
 
 # --- Profile Settings ---
 

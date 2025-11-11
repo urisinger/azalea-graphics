@@ -54,12 +54,10 @@ struct State;
 
 async fn handle(bot: Client, event: azalea::Event, _state: State) -> anyhow::Result<()> {
     match event {
-        azalea::Event::Init => {
-            bot.set_client_information(ClientInformation {
-                view_distance: 32,
-                ..Default::default()
-            })
-        }
+        azalea::Event::Init => bot.set_client_information(ClientInformation {
+            view_distance: 32,
+            ..Default::default()
+        }),
         _ => {}
     }
     Ok(())

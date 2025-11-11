@@ -2,13 +2,13 @@ use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use ash::vk;
 use azalea::core::position::ChunkSectionPos;
+use azalea_assets::{Assets, processed::atlas::TextureEntry};
 use glam::Vec3;
 use image::GenericImageView;
 
 use crate::{
     app::WorldUpdate,
     renderer::{
-        assets::{Assets, processed::atlas::TextureEntry},
         frame_ctx::FrameCtx,
         timings,
         vulkan::{

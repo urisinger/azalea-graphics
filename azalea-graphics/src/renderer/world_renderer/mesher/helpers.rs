@@ -4,9 +4,8 @@ use azalea::{
     physics::collision::BlockWithShape,
 };
 use glam::IVec3;
-
+use azalea_assets::processed::{atlas::PlacedSprite, model::Cube};
 use crate::renderer::{
-    assets::processed::{atlas::PlacedSprite, model::Cube},
     chunk::LocalSection,
 };
 

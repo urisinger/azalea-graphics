@@ -31,14 +31,13 @@ use crate::{
 
 mod camera;
 pub mod chunk;
+mod entity;
 mod frame_ctx;
 mod mesh;
 mod timings;
 mod ui;
 pub mod vulkan;
 pub mod world_renderer;
-
-mod assets;
 
 pub struct Renderer {
     pub context: VkContext,
@@ -77,7 +76,14 @@ impl Renderer {
         let context = VkContext::new(window_handle, display_handle, args);
         let swapchain = Swapchain::new(&context, size.width, size.height);
 
-        let assets = assets::load_assets(&context, "assets/minecraft");
+        let max_tex = unsafe {
+            let props = context
+                .instance()
+                .get_physical_device_properties(context.physical_device());
+            props.limits.max_image_dimension2_d
+        };
+
+        let assets = azalea_assets::load_assets("assets/minecraft", max_tex);
 
         let spirv = read_spv(&mut Cursor::new(include_bytes!(env!("SHADERS")))).unwrap();
         let module = unsafe {

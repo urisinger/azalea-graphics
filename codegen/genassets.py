@@ -1,8 +1,8 @@
-#!/usr/bin/env python3
-
 import os
 import json
+import shutil
 from zipfile import ZipFile
+from lib.extract import get_pumpkin_data, get_pumpkin_dir
 from lib.download import get_client_jar
 from lib.utils import get_dir_location
 from lib.code.version import get_version_id
@@ -21,13 +21,11 @@ def extract_assets(version_id: str):
     os.makedirs(assets_output_dir, exist_ok=True)
     
     with ZipFile(client_jar_path, 'r') as jar:
-        # Get all entries that start with "assets/"
         asset_entries = [name for name in jar.namelist() if name.startswith("assets/")]
         
         print(f"Found {len(asset_entries)} asset files")
         
         for entry in asset_entries:
-            # Skip directories
             if entry.endswith('/'):
                 continue
                 
@@ -43,6 +41,10 @@ def extract_assets(version_id: str):
                 with open(output_path, 'wb') as target:
                     target.write(source.read())
 
+    get_pumpkin_data(version_id, 'entity_models', client=True)
+    category_dir = get_pumpkin_dir(version_id, 'entity_models', client=True)
+
+    shutil.copy(category_dir, f"{assets_output_dir}/entity_models.json")
     
     print(f"Asset extraction complete! Assets saved to: {assets_output_dir}")
 

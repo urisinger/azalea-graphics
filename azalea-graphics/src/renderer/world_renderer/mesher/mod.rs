@@ -21,9 +21,9 @@ use glam::IVec3;
 use log::error;
 use parking_lot::{Mutex, RwLock};
 use simdnbt::Deserialize;
-
+use 
+    azalea_assets::Assets;
 use crate::renderer::{
-    assets::Assets,
     chunk::{LocalChunk, LocalSection},
     world_renderer::{
         BlockVertex,

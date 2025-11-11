@@ -129,10 +129,11 @@ def get_burger_data_for_version(version_id: str):
         return json.load(f)
 
 
-def get_pumpkin_data(version_id: str, category: str):
+def get_pumpkin_data(version_id: str, category: str, client: bool=False):
     assert "/" not in version_id
     assert "\\" not in version_id
-    target_parent_dir = get_dir_location(f"__cache__/pumpkin-{version_id}")
+    
+    target_parent_dir = get_dir_location(f"__cache__/pumpkin-{version_id}-{"client" if client else "server"}")
     category_dir = f"{target_parent_dir}/{category}.json"
 
     if os.path.exists(category_dir):
@@ -150,9 +151,10 @@ def get_pumpkin_data(version_id: str, category: str):
         f.write("eula=true")
 
     # run ./gradlew runServer until it logs "(pumpkin_extractor) Done"
+    cmd = "runClient" if client else "runServer"
     p = subprocess.Popen(
         # the gradle wrapper (./gradlew) is sometimes on the wrong version so just prefer the system's gradle installation
-        f"cd {pumpkin_dir} && ./gradlew clean && ./gradlew runServer",
+        f"cd {pumpkin_dir} && ./gradlew clean && ./gradlew {cmd}",
         stdout=subprocess.PIPE,
         shell=True,
     )
@@ -171,11 +173,18 @@ def get_pumpkin_data(version_id: str, category: str):
     # move the run/pumpkin_extractor_output directory to target_parent_dir
     # delete target_parent_dir if it's empty
     if os.path.exists(target_parent_dir):
-        os.rmdir(target_parent_dir)
-    os.rename(f"{pumpkin_dir}/run/pumpkin_extractor_output", target_parent_dir)
+        shutil.rmtree(target_parent_dir)
+    os.rename(f"{pumpkin_dir}/run/pumpkin_extractor_output_{"client" if client else "server"}", target_parent_dir)
 
     with open(category_dir, "r") as f:
         return json.load(f)
+
+def get_pumpkin_dir(version_id: str, category: str, client: bool=False):
+    assert "/" not in version_id
+    assert "\\" not in version_id
+    
+    target_parent_dir = get_dir_location(f"__cache__/pumpkin-{version_id}-{"client" if client else "server"}")
+    return f"{target_parent_dir}/{category}.json"
 
 
 def get_file_from_jar(version_id: str, file_dir: str):
