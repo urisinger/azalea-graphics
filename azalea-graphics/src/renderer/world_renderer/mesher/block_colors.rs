@@ -4,9 +4,10 @@ use azalea::{
     blocks::BlockState,
     registry::{Biome, Block, DataRegistry},
 };
-use glam::IVec3;
 use azalea_assets::Assets;
-use crate::renderer::{ chunk::LocalSection, world_renderer::mesher::BiomeCache};
+use glam::IVec3;
+
+use crate::renderer::{chunk::LocalSection, world_renderer::mesher::BiomeCache};
 
 /// Function signature for block color providers
 /// Takes block_state, section (with biome_cache), local_pos, tint_index, and

@@ -31,7 +31,7 @@ use crate::{
 
 mod camera;
 pub mod chunk;
-mod entity;
+mod entity_renderer;
 mod frame_ctx;
 mod mesh;
 mod timings;

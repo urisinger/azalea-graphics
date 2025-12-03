@@ -24,3 +24,4 @@ pub mod sound;
 #[cfg(feature = "bevy_ecs")]
 pub mod tick;
 pub mod tier;
+pub mod arm;

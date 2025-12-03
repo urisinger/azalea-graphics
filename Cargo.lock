@@ -409,6 +409,7 @@ name = "azalea-assets"
 version = "0.14.0+mc1.21.10"
 dependencies = [
  "azalea-block",
+ "azalea-core",
  "glam 0.30.9",
  "image",
  "log",

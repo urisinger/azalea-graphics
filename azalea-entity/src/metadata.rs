@@ -87,8 +87,8 @@ impl AcaciaBoat {
 
 #[derive(Bundle)]
 pub struct AcaciaBoatMetadataBundle {
-    _marker: AcaciaBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: AcaciaBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for AcaciaBoatMetadataBundle {
     fn default() -> Self {
@@ -144,8 +144,8 @@ impl AcaciaChestBoat {
 
 #[derive(Bundle)]
 pub struct AcaciaChestBoatMetadataBundle {
-    _marker: AcaciaChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: AcaciaChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for AcaciaChestBoatMetadataBundle {
     fn default() -> Self {
@@ -233,10 +233,10 @@ impl Allay {
 
 #[derive(Bundle)]
 pub struct AllayMetadataBundle {
-    _marker: Allay,
-    parent: AbstractCreatureMetadataBundle,
-    dancing: Dancing,
-    can_duplicate: CanDuplicate,
+    pub _marker: Allay,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub dancing: Dancing,
+    pub can_duplicate: CanDuplicate,
 }
 impl Default for AllayMetadataBundle {
     fn default() -> Self {
@@ -315,11 +315,11 @@ impl AreaEffectCloud {
 
 #[derive(Bundle)]
 pub struct AreaEffectCloudMetadataBundle {
-    _marker: AreaEffectCloud,
-    parent: AbstractEntityMetadataBundle,
-    radius: Radius,
-    waiting: Waiting,
-    particle: Particle,
+    pub _marker: AreaEffectCloud,
+    pub parent: AbstractEntityMetadataBundle,
+    pub radius: Radius,
+    pub waiting: Waiting,
+    pub particle: Particle,
 }
 impl Default for AreaEffectCloudMetadataBundle {
     fn default() -> Self {
@@ -373,9 +373,9 @@ impl Armadillo {
 
 #[derive(Bundle)]
 pub struct ArmadilloMetadataBundle {
-    _marker: Armadillo,
-    parent: AbstractAnimalMetadataBundle,
-    armadillo_state: ArmadilloState,
+    pub _marker: Armadillo,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub armadillo_state: ArmadilloState,
 }
 impl Default for ArmadilloMetadataBundle {
     fn default() -> Self {
@@ -494,18 +494,18 @@ impl ArmorStand {
 
 #[derive(Bundle)]
 pub struct ArmorStandMetadataBundle {
-    _marker: ArmorStand,
-    parent: AbstractLivingMetadataBundle,
-    small: Small,
-    show_arms: ShowArms,
-    show_base_plate: ShowBasePlate,
-    armor_stand_marker: ArmorStandMarker,
-    head_pose: HeadPose,
-    body_pose: BodyPose,
-    left_arm_pose: LeftArmPose,
-    right_arm_pose: RightArmPose,
-    left_leg_pose: LeftLegPose,
-    right_leg_pose: RightLegPose,
+    pub _marker: ArmorStand,
+    pub parent: AbstractLivingMetadataBundle,
+    pub small: Small,
+    pub show_arms: ShowArms,
+    pub show_base_plate: ShowBasePlate,
+    pub armor_stand_marker: ArmorStandMarker,
+    pub head_pose: HeadPose,
+    pub body_pose: BodyPose,
+    pub left_arm_pose: LeftArmPose,
+    pub right_arm_pose: RightArmPose,
+    pub left_leg_pose: LeftLegPose,
+    pub right_leg_pose: RightLegPose,
 }
 impl Default for ArmorStandMetadataBundle {
     fn default() -> Self {
@@ -583,9 +583,9 @@ impl Arrow {
 
 #[derive(Bundle)]
 pub struct ArrowMetadataBundle {
-    _marker: Arrow,
-    parent: AbstractArrowMetadataBundle,
-    effect_color: EffectColor,
+    pub _marker: Arrow,
+    pub parent: AbstractArrowMetadataBundle,
+    pub effect_color: EffectColor,
 }
 impl Default for ArrowMetadataBundle {
     fn default() -> Self {
@@ -652,11 +652,11 @@ impl Axolotl {
 
 #[derive(Bundle)]
 pub struct AxolotlMetadataBundle {
-    _marker: Axolotl,
-    parent: AbstractAnimalMetadataBundle,
-    axolotl_variant: AxolotlVariant,
-    playing_dead: PlayingDead,
-    axolotl_from_bucket: AxolotlFromBucket,
+    pub _marker: Axolotl,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub axolotl_variant: AxolotlVariant,
+    pub playing_dead: PlayingDead,
+    pub axolotl_from_bucket: AxolotlFromBucket,
 }
 impl Default for AxolotlMetadataBundle {
     fn default() -> Self {
@@ -732,8 +732,8 @@ impl BambooChestRaft {
 
 #[derive(Bundle)]
 pub struct BambooChestRaftMetadataBundle {
-    _marker: BambooChestRaft,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: BambooChestRaft,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for BambooChestRaftMetadataBundle {
     fn default() -> Self {
@@ -789,8 +789,8 @@ impl BambooRaft {
 
 #[derive(Bundle)]
 pub struct BambooRaftMetadataBundle {
-    _marker: BambooRaft,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: BambooRaft,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for BambooRaftMetadataBundle {
     fn default() -> Self {
@@ -852,9 +852,9 @@ impl Bat {
 
 #[derive(Bundle)]
 pub struct BatMetadataBundle {
-    _marker: Bat,
-    parent: AbstractInsentientMetadataBundle,
-    resting: Resting,
+    pub _marker: Bat,
+    pub parent: AbstractInsentientMetadataBundle,
+    pub resting: Resting,
 }
 impl Default for BatMetadataBundle {
     fn default() -> Self {
@@ -933,12 +933,12 @@ impl Bee {
 
 #[derive(Bundle)]
 pub struct BeeMetadataBundle {
-    _marker: Bee,
-    parent: AbstractAnimalMetadataBundle,
-    has_nectar: HasNectar,
-    has_stung: HasStung,
-    bee_rolling: BeeRolling,
-    bee_remaining_anger_time: BeeRemainingAngerTime,
+    pub _marker: Bee,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub has_nectar: HasNectar,
+    pub has_stung: HasStung,
+    pub bee_rolling: BeeRolling,
+    pub bee_remaining_anger_time: BeeRemainingAngerTime,
 }
 impl Default for BeeMetadataBundle {
     fn default() -> Self {
@@ -1015,8 +1015,8 @@ impl BirchBoat {
 
 #[derive(Bundle)]
 pub struct BirchBoatMetadataBundle {
-    _marker: BirchBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: BirchBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for BirchBoatMetadataBundle {
     fn default() -> Self {
@@ -1072,8 +1072,8 @@ impl BirchChestBoat {
 
 #[derive(Bundle)]
 pub struct BirchChestBoatMetadataBundle {
-    _marker: BirchChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: BirchChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for BirchChestBoatMetadataBundle {
     fn default() -> Self {
@@ -1135,9 +1135,9 @@ impl Blaze {
 
 #[derive(Bundle)]
 pub struct BlazeMetadataBundle {
-    _marker: Blaze,
-    parent: AbstractMonsterMetadataBundle,
-    charged: Charged,
+    pub _marker: Blaze,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub charged: Charged,
 }
 impl Default for BlazeMetadataBundle {
     fn default() -> Self {
@@ -1240,9 +1240,9 @@ impl BlockDisplay {
 
 #[derive(Bundle)]
 pub struct BlockDisplayMetadataBundle {
-    _marker: BlockDisplay,
-    parent: AbstractDisplayMetadataBundle,
-    block_display_block_state: BlockDisplayBlockState,
+    pub _marker: BlockDisplay,
+    pub parent: AbstractDisplayMetadataBundle,
+    pub block_display_block_state: BlockDisplayBlockState,
 }
 impl Default for BlockDisplayMetadataBundle {
     fn default() -> Self {
@@ -1329,9 +1329,9 @@ impl Bogged {
 
 #[derive(Bundle)]
 pub struct BoggedMetadataBundle {
-    _marker: Bogged,
-    parent: AbstractMonsterMetadataBundle,
-    bogged_sheared: BoggedSheared,
+    pub _marker: Bogged,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub bogged_sheared: BoggedSheared,
 }
 impl Default for BoggedMetadataBundle {
     fn default() -> Self {
@@ -1399,8 +1399,8 @@ impl Breeze {
 
 #[derive(Bundle)]
 pub struct BreezeMetadataBundle {
-    _marker: Breeze,
-    parent: AbstractMonsterMetadataBundle,
+    pub _marker: Breeze,
+    pub parent: AbstractMonsterMetadataBundle,
 }
 impl Default for BreezeMetadataBundle {
     fn default() -> Self {
@@ -1467,8 +1467,8 @@ impl BreezeWindCharge {
 
 #[derive(Bundle)]
 pub struct BreezeWindChargeMetadataBundle {
-    _marker: BreezeWindCharge,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: BreezeWindCharge,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for BreezeWindChargeMetadataBundle {
     fn default() -> Self {
@@ -1530,10 +1530,10 @@ impl Camel {
 
 #[derive(Bundle)]
 pub struct CamelMetadataBundle {
-    _marker: Camel,
-    parent: AbstractHorseMetadataBundle,
-    dash: Dash,
-    last_pose_change_tick: LastPoseChangeTick,
+    pub _marker: Camel,
+    pub parent: AbstractHorseMetadataBundle,
+    pub dash: Dash,
+    pub last_pose_change_tick: LastPoseChangeTick,
 }
 impl Default for CamelMetadataBundle {
     fn default() -> Self {
@@ -1641,12 +1641,12 @@ impl Cat {
 
 #[derive(Bundle)]
 pub struct CatMetadataBundle {
-    _marker: Cat,
-    parent: AbstractTameableMetadataBundle,
-    cat_variant: CatVariant,
-    is_lying: IsLying,
-    relax_state_one: RelaxStateOne,
-    cat_collar_color: CatCollarColor,
+    pub _marker: Cat,
+    pub parent: AbstractTameableMetadataBundle,
+    pub cat_variant: CatVariant,
+    pub is_lying: IsLying,
+    pub relax_state_one: RelaxStateOne,
+    pub cat_collar_color: CatCollarColor,
 }
 impl Default for CatMetadataBundle {
     fn default() -> Self {
@@ -1731,8 +1731,8 @@ impl CaveSpider {
 
 #[derive(Bundle)]
 pub struct CaveSpiderMetadataBundle {
-    _marker: CaveSpider,
-    parent: SpiderMetadataBundle,
+    pub _marker: CaveSpider,
+    pub parent: SpiderMetadataBundle,
 }
 impl Default for CaveSpiderMetadataBundle {
     fn default() -> Self {
@@ -1805,8 +1805,8 @@ impl CherryBoat {
 
 #[derive(Bundle)]
 pub struct CherryBoatMetadataBundle {
-    _marker: CherryBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: CherryBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for CherryBoatMetadataBundle {
     fn default() -> Self {
@@ -1862,8 +1862,8 @@ impl CherryChestBoat {
 
 #[derive(Bundle)]
 pub struct CherryChestBoatMetadataBundle {
-    _marker: CherryChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: CherryChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for CherryChestBoatMetadataBundle {
     fn default() -> Self {
@@ -1923,8 +1923,8 @@ impl ChestMinecart {
 
 #[derive(Bundle)]
 pub struct ChestMinecartMetadataBundle {
-    _marker: ChestMinecart,
-    parent: AbstractMinecartMetadataBundle,
+    pub _marker: ChestMinecart,
+    pub parent: AbstractMinecartMetadataBundle,
 }
 impl Default for ChestMinecartMetadataBundle {
     fn default() -> Self {
@@ -1984,9 +1984,9 @@ impl Chicken {
 
 #[derive(Bundle)]
 pub struct ChickenMetadataBundle {
-    _marker: Chicken,
-    parent: AbstractAnimalMetadataBundle,
-    chicken_variant: ChickenVariant,
+    pub _marker: Chicken,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub chicken_variant: ChickenVariant,
 }
 impl Default for ChickenMetadataBundle {
     fn default() -> Self {
@@ -2062,8 +2062,8 @@ impl Cod {
 
 #[derive(Bundle)]
 pub struct CodMetadataBundle {
-    _marker: Cod,
-    parent: AbstractFishMetadataBundle,
+    pub _marker: Cod,
+    pub parent: AbstractFishMetadataBundle,
 }
 impl Default for CodMetadataBundle {
     fn default() -> Self {
@@ -2141,10 +2141,10 @@ impl CommandBlockMinecart {
 
 #[derive(Bundle)]
 pub struct CommandBlockMinecartMetadataBundle {
-    _marker: CommandBlockMinecart,
-    parent: AbstractMinecartMetadataBundle,
-    command_name: CommandName,
-    last_output: LastOutput,
+    pub _marker: CommandBlockMinecart,
+    pub parent: AbstractMinecartMetadataBundle,
+    pub command_name: CommandName,
+    pub last_output: LastOutput,
 }
 impl Default for CommandBlockMinecartMetadataBundle {
     fn default() -> Self {
@@ -2211,10 +2211,10 @@ impl CopperGolem {
 
 #[derive(Bundle)]
 pub struct CopperGolemMetadataBundle {
-    _marker: CopperGolem,
-    parent: AbstractCreatureMetadataBundle,
-    weather_state: WeatherState,
-    copper_golem_state: CopperGolemState,
+    pub _marker: CopperGolem,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub weather_state: WeatherState,
+    pub copper_golem_state: CopperGolemState,
 }
 impl Default for CopperGolemMetadataBundle {
     fn default() -> Self {
@@ -2285,9 +2285,9 @@ impl Cow {
 
 #[derive(Bundle)]
 pub struct CowMetadataBundle {
-    _marker: Cow,
-    parent: AbstractAnimalMetadataBundle,
-    cow_variant: CowVariant,
+    pub _marker: Cow,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub cow_variant: CowVariant,
 }
 impl Default for CowMetadataBundle {
     fn default() -> Self {
@@ -2381,12 +2381,12 @@ impl Creaking {
 
 #[derive(Bundle)]
 pub struct CreakingMetadataBundle {
-    _marker: Creaking,
-    parent: AbstractMonsterMetadataBundle,
-    can_move: CanMove,
-    is_active: IsActive,
-    is_tearing_down: IsTearingDown,
-    home_pos: HomePos,
+    pub _marker: Creaking,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub can_move: CanMove,
+    pub is_active: IsActive,
+    pub is_tearing_down: IsTearingDown,
+    pub home_pos: HomePos,
 }
 impl Default for CreakingMetadataBundle {
     fn default() -> Self {
@@ -2472,11 +2472,11 @@ impl Creeper {
 
 #[derive(Bundle)]
 pub struct CreeperMetadataBundle {
-    _marker: Creeper,
-    parent: AbstractMonsterMetadataBundle,
-    swell_dir: SwellDir,
-    is_powered: IsPowered,
-    is_ignited: IsIgnited,
+    pub _marker: Creeper,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub swell_dir: SwellDir,
+    pub is_powered: IsPowered,
+    pub is_ignited: IsIgnited,
 }
 impl Default for CreeperMetadataBundle {
     fn default() -> Self {
@@ -2546,8 +2546,8 @@ impl DarkOakBoat {
 
 #[derive(Bundle)]
 pub struct DarkOakBoatMetadataBundle {
-    _marker: DarkOakBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: DarkOakBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for DarkOakBoatMetadataBundle {
     fn default() -> Self {
@@ -2603,8 +2603,8 @@ impl DarkOakChestBoat {
 
 #[derive(Bundle)]
 pub struct DarkOakChestBoatMetadataBundle {
-    _marker: DarkOakChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: DarkOakChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for DarkOakChestBoatMetadataBundle {
     fn default() -> Self {
@@ -2670,10 +2670,10 @@ impl Dolphin {
 
 #[derive(Bundle)]
 pub struct DolphinMetadataBundle {
-    _marker: Dolphin,
-    parent: AbstractAgeableMetadataBundle,
-    got_fish: GotFish,
-    moistness_level: MoistnessLevel,
+    pub _marker: Dolphin,
+    pub parent: AbstractAgeableMetadataBundle,
+    pub got_fish: GotFish,
+    pub moistness_level: MoistnessLevel,
 }
 impl Default for DolphinMetadataBundle {
     fn default() -> Self {
@@ -2745,8 +2745,8 @@ impl Donkey {
 
 #[derive(Bundle)]
 pub struct DonkeyMetadataBundle {
-    _marker: Donkey,
-    parent: AbstractChestedHorseMetadataBundle,
+    pub _marker: Donkey,
+    pub parent: AbstractChestedHorseMetadataBundle,
 }
 impl Default for DonkeyMetadataBundle {
     fn default() -> Self {
@@ -2831,8 +2831,8 @@ impl DragonFireball {
 
 #[derive(Bundle)]
 pub struct DragonFireballMetadataBundle {
-    _marker: DragonFireball,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: DragonFireball,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for DragonFireballMetadataBundle {
     fn default() -> Self {
@@ -2882,8 +2882,8 @@ impl Drowned {
 
 #[derive(Bundle)]
 pub struct DrownedMetadataBundle {
-    _marker: Drowned,
-    parent: ZombieMetadataBundle,
+    pub _marker: Drowned,
+    pub parent: ZombieMetadataBundle,
 }
 impl Default for DrownedMetadataBundle {
     fn default() -> Self {
@@ -2960,8 +2960,8 @@ impl Egg {
 
 #[derive(Bundle)]
 pub struct EggMetadataBundle {
-    _marker: Egg,
-    parent: AbstractThrownItemProjectileMetadataBundle,
+    pub _marker: Egg,
+    pub parent: AbstractThrownItemProjectileMetadataBundle,
 }
 impl Default for EggMetadataBundle {
     fn default() -> Self {
@@ -3015,8 +3015,8 @@ impl ElderGuardian {
 
 #[derive(Bundle)]
 pub struct ElderGuardianMetadataBundle {
-    _marker: ElderGuardian,
-    parent: GuardianMetadataBundle,
+    pub _marker: ElderGuardian,
+    pub parent: GuardianMetadataBundle,
 }
 impl Default for ElderGuardianMetadataBundle {
     fn default() -> Self {
@@ -3100,10 +3100,10 @@ impl EndCrystal {
 
 #[derive(Bundle)]
 pub struct EndCrystalMetadataBundle {
-    _marker: EndCrystal,
-    parent: AbstractEntityMetadataBundle,
-    beam_target: BeamTarget,
-    show_bottom: ShowBottom,
+    pub _marker: EndCrystal,
+    pub parent: AbstractEntityMetadataBundle,
+    pub beam_target: BeamTarget,
+    pub show_bottom: ShowBottom,
 }
 impl Default for EndCrystalMetadataBundle {
     fn default() -> Self {
@@ -3154,9 +3154,9 @@ impl EnderDragon {
 
 #[derive(Bundle)]
 pub struct EnderDragonMetadataBundle {
-    _marker: EnderDragon,
-    parent: AbstractInsentientMetadataBundle,
-    phase: Phase,
+    pub _marker: EnderDragon,
+    pub parent: AbstractInsentientMetadataBundle,
+    pub phase: Phase,
 }
 impl Default for EnderDragonMetadataBundle {
     fn default() -> Self {
@@ -3218,8 +3218,8 @@ impl EnderPearl {
 
 #[derive(Bundle)]
 pub struct EnderPearlMetadataBundle {
-    _marker: EnderPearl,
-    parent: AbstractThrownItemProjectileMetadataBundle,
+    pub _marker: EnderPearl,
+    pub parent: AbstractThrownItemProjectileMetadataBundle,
 }
 impl Default for EnderPearlMetadataBundle {
     fn default() -> Self {
@@ -3284,11 +3284,11 @@ impl Enderman {
 
 #[derive(Bundle)]
 pub struct EndermanMetadataBundle {
-    _marker: Enderman,
-    parent: AbstractMonsterMetadataBundle,
-    carry_state: CarryState,
-    creepy: Creepy,
-    stared_at: StaredAt,
+    pub _marker: Enderman,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub carry_state: CarryState,
+    pub creepy: Creepy,
+    pub stared_at: StaredAt,
 }
 impl Default for EndermanMetadataBundle {
     fn default() -> Self {
@@ -3358,8 +3358,8 @@ impl Endermite {
 
 #[derive(Bundle)]
 pub struct EndermiteMetadataBundle {
-    _marker: Endermite,
-    parent: AbstractMonsterMetadataBundle,
+    pub _marker: Endermite,
+    pub parent: AbstractMonsterMetadataBundle,
 }
 impl Default for EndermiteMetadataBundle {
     fn default() -> Self {
@@ -3430,8 +3430,8 @@ impl Evoker {
 
 #[derive(Bundle)]
 pub struct EvokerMetadataBundle {
-    _marker: Evoker,
-    parent: AbstractSpellcasterIllagerMetadataBundle,
+    pub _marker: Evoker,
+    pub parent: AbstractSpellcasterIllagerMetadataBundle,
 }
 impl Default for EvokerMetadataBundle {
     fn default() -> Self {
@@ -3508,8 +3508,8 @@ impl EvokerFangs {
 
 #[derive(Bundle)]
 pub struct EvokerFangsMetadataBundle {
-    _marker: EvokerFangs,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: EvokerFangs,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for EvokerFangsMetadataBundle {
     fn default() -> Self {
@@ -3553,8 +3553,8 @@ impl ExperienceBottle {
 
 #[derive(Bundle)]
 pub struct ExperienceBottleMetadataBundle {
-    _marker: ExperienceBottle,
-    parent: AbstractThrownItemProjectileMetadataBundle,
+    pub _marker: ExperienceBottle,
+    pub parent: AbstractThrownItemProjectileMetadataBundle,
 }
 impl Default for ExperienceBottleMetadataBundle {
     fn default() -> Self {
@@ -3609,9 +3609,9 @@ impl ExperienceOrb {
 
 #[derive(Bundle)]
 pub struct ExperienceOrbMetadataBundle {
-    _marker: ExperienceOrb,
-    parent: AbstractEntityMetadataBundle,
-    value: Value,
+    pub _marker: ExperienceOrb,
+    pub parent: AbstractEntityMetadataBundle,
+    pub value: Value,
 }
 impl Default for ExperienceOrbMetadataBundle {
     fn default() -> Self {
@@ -3661,9 +3661,9 @@ impl EyeOfEnder {
 
 #[derive(Bundle)]
 pub struct EyeOfEnderMetadataBundle {
-    _marker: EyeOfEnder,
-    parent: AbstractEntityMetadataBundle,
-    eye_of_ender_item_stack: EyeOfEnderItemStack,
+    pub _marker: EyeOfEnder,
+    pub parent: AbstractEntityMetadataBundle,
+    pub eye_of_ender_item_stack: EyeOfEnderItemStack,
 }
 impl Default for EyeOfEnderMetadataBundle {
     fn default() -> Self {
@@ -3713,9 +3713,9 @@ impl FallingBlock {
 
 #[derive(Bundle)]
 pub struct FallingBlockMetadataBundle {
-    _marker: FallingBlock,
-    parent: AbstractEntityMetadataBundle,
-    start_pos: StartPos,
+    pub _marker: FallingBlock,
+    pub parent: AbstractEntityMetadataBundle,
+    pub start_pos: StartPos,
 }
 impl Default for FallingBlockMetadataBundle {
     fn default() -> Self {
@@ -3765,9 +3765,9 @@ impl Fireball {
 
 #[derive(Bundle)]
 pub struct FireballMetadataBundle {
-    _marker: Fireball,
-    parent: AbstractEntityMetadataBundle,
-    fireball_item_stack: FireballItemStack,
+    pub _marker: Fireball,
+    pub parent: AbstractEntityMetadataBundle,
+    pub fireball_item_stack: FireballItemStack,
 }
 impl Default for FireballMetadataBundle {
     fn default() -> Self {
@@ -3827,11 +3827,11 @@ impl FireworkRocket {
 
 #[derive(Bundle)]
 pub struct FireworkRocketMetadataBundle {
-    _marker: FireworkRocket,
-    parent: AbstractEntityMetadataBundle,
-    fireworks_item: FireworksItem,
-    attached_to_target: AttachedToTarget,
-    shot_at_angle: ShotAtAngle,
+    pub _marker: FireworkRocket,
+    pub parent: AbstractEntityMetadataBundle,
+    pub fireworks_item: FireworksItem,
+    pub attached_to_target: AttachedToTarget,
+    pub shot_at_angle: ShotAtAngle,
 }
 impl Default for FireworkRocketMetadataBundle {
     fn default() -> Self {
@@ -3888,10 +3888,10 @@ impl FishingBobber {
 
 #[derive(Bundle)]
 pub struct FishingBobberMetadataBundle {
-    _marker: FishingBobber,
-    parent: AbstractEntityMetadataBundle,
-    hooked_entity: HookedEntity,
-    biting: Biting,
+    pub _marker: FishingBobber,
+    pub parent: AbstractEntityMetadataBundle,
+    pub hooked_entity: HookedEntity,
+    pub biting: Biting,
 }
 impl Default for FishingBobberMetadataBundle {
     fn default() -> Self {
@@ -3976,18 +3976,18 @@ impl Fox {
 
 #[derive(Bundle)]
 pub struct FoxMetadataBundle {
-    _marker: Fox,
-    parent: AbstractAnimalMetadataBundle,
-    fox_kind: FoxKind,
-    fox_sitting: FoxSitting,
-    faceplanted: Faceplanted,
-    defending: Defending,
-    sleeping: Sleeping,
-    pouncing: Pouncing,
-    fox_crouching: FoxCrouching,
-    fox_interested: FoxInterested,
-    trusted_id_0: TrustedId0,
-    trusted_id_1: TrustedId1,
+    pub _marker: Fox,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub fox_kind: FoxKind,
+    pub fox_sitting: FoxSitting,
+    pub faceplanted: Faceplanted,
+    pub defending: Defending,
+    pub sleeping: Sleeping,
+    pub pouncing: Pouncing,
+    pub fox_crouching: FoxCrouching,
+    pub fox_interested: FoxInterested,
+    pub trusted_id_0: TrustedId0,
+    pub trusted_id_1: TrustedId1,
 }
 impl Default for FoxMetadataBundle {
     fn default() -> Self {
@@ -4080,10 +4080,10 @@ impl Frog {
 
 #[derive(Bundle)]
 pub struct FrogMetadataBundle {
-    _marker: Frog,
-    parent: AbstractAnimalMetadataBundle,
-    frog_variant: FrogVariant,
-    tongue_target: TongueTarget,
+    pub _marker: Frog,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub frog_variant: FrogVariant,
+    pub tongue_target: TongueTarget,
 }
 impl Default for FrogMetadataBundle {
     fn default() -> Self {
@@ -4163,9 +4163,9 @@ impl FurnaceMinecart {
 
 #[derive(Bundle)]
 pub struct FurnaceMinecartMetadataBundle {
-    _marker: FurnaceMinecart,
-    parent: AbstractMinecartMetadataBundle,
-    fuel: Fuel,
+    pub _marker: FurnaceMinecart,
+    pub parent: AbstractMinecartMetadataBundle,
+    pub fuel: Fuel,
 }
 impl Default for FurnaceMinecartMetadataBundle {
     fn default() -> Self {
@@ -4226,9 +4226,9 @@ impl Ghast {
 
 #[derive(Bundle)]
 pub struct GhastMetadataBundle {
-    _marker: Ghast,
-    parent: AbstractInsentientMetadataBundle,
-    is_charging: IsCharging,
+    pub _marker: Ghast,
+    pub parent: AbstractInsentientMetadataBundle,
+    pub is_charging: IsCharging,
 }
 impl Default for GhastMetadataBundle {
     fn default() -> Self {
@@ -4290,8 +4290,8 @@ impl Giant {
 
 #[derive(Bundle)]
 pub struct GiantMetadataBundle {
-    _marker: Giant,
-    parent: AbstractMonsterMetadataBundle,
+    pub _marker: Giant,
+    pub parent: AbstractMonsterMetadataBundle,
 }
 impl Default for GiantMetadataBundle {
     fn default() -> Self {
@@ -4364,8 +4364,8 @@ impl GlowItemFrame {
 
 #[derive(Bundle)]
 pub struct GlowItemFrameMetadataBundle {
-    _marker: GlowItemFrame,
-    parent: ItemFrameMetadataBundle,
+    pub _marker: GlowItemFrame,
+    pub parent: ItemFrameMetadataBundle,
 }
 impl Default for GlowItemFrameMetadataBundle {
     fn default() -> Self {
@@ -4420,9 +4420,9 @@ impl GlowSquid {
 
 #[derive(Bundle)]
 pub struct GlowSquidMetadataBundle {
-    _marker: GlowSquid,
-    parent: SquidMetadataBundle,
-    dark_ticks_remaining: DarkTicksRemaining,
+    pub _marker: GlowSquid,
+    pub parent: SquidMetadataBundle,
+    pub dark_ticks_remaining: DarkTicksRemaining,
 }
 impl Default for GlowSquidMetadataBundle {
     fn default() -> Self {
@@ -4511,11 +4511,11 @@ impl Goat {
 
 #[derive(Bundle)]
 pub struct GoatMetadataBundle {
-    _marker: Goat,
-    parent: AbstractAnimalMetadataBundle,
-    is_screaming_goat: IsScreamingGoat,
-    has_left_horn: HasLeftHorn,
-    has_right_horn: HasRightHorn,
+    pub _marker: Goat,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub is_screaming_goat: IsScreamingGoat,
+    pub has_left_horn: HasLeftHorn,
+    pub has_right_horn: HasRightHorn,
 }
 impl Default for GoatMetadataBundle {
     fn default() -> Self {
@@ -4597,10 +4597,10 @@ impl Guardian {
 
 #[derive(Bundle)]
 pub struct GuardianMetadataBundle {
-    _marker: Guardian,
-    parent: AbstractMonsterMetadataBundle,
-    moving: Moving,
-    attack_target: AttackTarget,
+    pub _marker: Guardian,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub moving: Moving,
+    pub attack_target: AttackTarget,
 }
 impl Default for GuardianMetadataBundle {
     fn default() -> Self {
@@ -4679,10 +4679,10 @@ impl HappyGhast {
 
 #[derive(Bundle)]
 pub struct HappyGhastMetadataBundle {
-    _marker: HappyGhast,
-    parent: AbstractAnimalMetadataBundle,
-    is_leash_holder: IsLeashHolder,
-    stays_still: StaysStill,
+    pub _marker: HappyGhast,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub is_leash_holder: IsLeashHolder,
+    pub stays_still: StaysStill,
 }
 impl Default for HappyGhastMetadataBundle {
     fn default() -> Self {
@@ -4762,9 +4762,9 @@ impl Hoglin {
 
 #[derive(Bundle)]
 pub struct HoglinMetadataBundle {
-    _marker: Hoglin,
-    parent: AbstractAnimalMetadataBundle,
-    hoglin_immune_to_zombification: HoglinImmuneToZombification,
+    pub _marker: Hoglin,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub hoglin_immune_to_zombification: HoglinImmuneToZombification,
 }
 impl Default for HoglinMetadataBundle {
     fn default() -> Self {
@@ -4838,8 +4838,8 @@ impl HopperMinecart {
 
 #[derive(Bundle)]
 pub struct HopperMinecartMetadataBundle {
-    _marker: HopperMinecart,
-    parent: AbstractMinecartMetadataBundle,
+    pub _marker: HopperMinecart,
+    pub parent: AbstractMinecartMetadataBundle,
 }
 impl Default for HopperMinecartMetadataBundle {
     fn default() -> Self {
@@ -4899,9 +4899,9 @@ impl Horse {
 
 #[derive(Bundle)]
 pub struct HorseMetadataBundle {
-    _marker: Horse,
-    parent: AbstractHorseMetadataBundle,
-    horse_type_variant: HorseTypeVariant,
+    pub _marker: Horse,
+    pub parent: AbstractHorseMetadataBundle,
+    pub horse_type_variant: HorseTypeVariant,
 }
 impl Default for HorseMetadataBundle {
     fn default() -> Self {
@@ -4982,8 +4982,8 @@ impl Husk {
 
 #[derive(Bundle)]
 pub struct HuskMetadataBundle {
-    _marker: Husk,
-    parent: ZombieMetadataBundle,
+    pub _marker: Husk,
+    pub parent: ZombieMetadataBundle,
 }
 impl Default for HuskMetadataBundle {
     fn default() -> Self {
@@ -5058,8 +5058,8 @@ impl Illusioner {
 
 #[derive(Bundle)]
 pub struct IllusionerMetadataBundle {
-    _marker: Illusioner,
-    parent: AbstractSpellcasterIllagerMetadataBundle,
+    pub _marker: Illusioner,
+    pub parent: AbstractSpellcasterIllagerMetadataBundle,
 }
 impl Default for IllusionerMetadataBundle {
     fn default() -> Self {
@@ -5151,11 +5151,11 @@ impl Interaction {
 
 #[derive(Bundle)]
 pub struct InteractionMetadataBundle {
-    _marker: Interaction,
-    parent: AbstractEntityMetadataBundle,
-    interaction_width: InteractionWidth,
-    interaction_height: InteractionHeight,
-    response: Response,
+    pub _marker: Interaction,
+    pub parent: AbstractEntityMetadataBundle,
+    pub interaction_width: InteractionWidth,
+    pub interaction_height: InteractionHeight,
+    pub response: Response,
 }
 impl Default for InteractionMetadataBundle {
     fn default() -> Self {
@@ -5208,9 +5208,9 @@ impl IronGolem {
 
 #[derive(Bundle)]
 pub struct IronGolemMetadataBundle {
-    _marker: IronGolem,
-    parent: AbstractCreatureMetadataBundle,
-    player_created: PlayerCreated,
+    pub _marker: IronGolem,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub player_created: PlayerCreated,
 }
 impl Default for IronGolemMetadataBundle {
     fn default() -> Self {
@@ -5280,9 +5280,9 @@ impl Item {
 
 #[derive(Bundle)]
 pub struct ItemMetadataBundle {
-    _marker: Item,
-    parent: AbstractEntityMetadataBundle,
-    item_item: ItemItem,
+    pub _marker: Item,
+    pub parent: AbstractEntityMetadataBundle,
+    pub item_item: ItemItem,
 }
 impl Default for ItemMetadataBundle {
     fn default() -> Self {
@@ -5337,10 +5337,10 @@ impl ItemDisplay {
 
 #[derive(Bundle)]
 pub struct ItemDisplayMetadataBundle {
-    _marker: ItemDisplay,
-    parent: AbstractDisplayMetadataBundle,
-    item_display_item_stack: ItemDisplayItemStack,
-    item_display_item_display: ItemDisplayItemDisplay,
+    pub _marker: ItemDisplay,
+    pub parent: AbstractDisplayMetadataBundle,
+    pub item_display_item_stack: ItemDisplayItemStack,
+    pub item_display_item_display: ItemDisplayItemDisplay,
 }
 impl Default for ItemDisplayMetadataBundle {
     fn default() -> Self {
@@ -5432,11 +5432,11 @@ impl ItemFrame {
 
 #[derive(Bundle)]
 pub struct ItemFrameMetadataBundle {
-    _marker: ItemFrame,
-    parent: AbstractEntityMetadataBundle,
-    item_frame_direction: ItemFrameDirection,
-    item_frame_item: ItemFrameItem,
-    rotation: Rotation,
+    pub _marker: ItemFrame,
+    pub parent: AbstractEntityMetadataBundle,
+    pub item_frame_direction: ItemFrameDirection,
+    pub item_frame_item: ItemFrameItem,
+    pub rotation: Rotation,
 }
 impl Default for ItemFrameMetadataBundle {
     fn default() -> Self {
@@ -5483,8 +5483,8 @@ impl JungleBoat {
 
 #[derive(Bundle)]
 pub struct JungleBoatMetadataBundle {
-    _marker: JungleBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: JungleBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for JungleBoatMetadataBundle {
     fn default() -> Self {
@@ -5540,8 +5540,8 @@ impl JungleChestBoat {
 
 #[derive(Bundle)]
 pub struct JungleChestBoatMetadataBundle {
-    _marker: JungleChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: JungleChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for JungleChestBoatMetadataBundle {
     fn default() -> Self {
@@ -5597,8 +5597,8 @@ impl LeashKnot {
 
 #[derive(Bundle)]
 pub struct LeashKnotMetadataBundle {
-    _marker: LeashKnot,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: LeashKnot,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for LeashKnotMetadataBundle {
     fn default() -> Self {
@@ -5642,8 +5642,8 @@ impl LightningBolt {
 
 #[derive(Bundle)]
 pub struct LightningBoltMetadataBundle {
-    _marker: LightningBolt,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: LightningBolt,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for LightningBoltMetadataBundle {
     fn default() -> Self {
@@ -5687,8 +5687,8 @@ impl LingeringPotion {
 
 #[derive(Bundle)]
 pub struct LingeringPotionMetadataBundle {
-    _marker: LingeringPotion,
-    parent: AbstractThrownItemProjectileMetadataBundle,
+    pub _marker: LingeringPotion,
+    pub parent: AbstractThrownItemProjectileMetadataBundle,
 }
 impl Default for LingeringPotionMetadataBundle {
     fn default() -> Self {
@@ -5748,10 +5748,10 @@ impl Llama {
 
 #[derive(Bundle)]
 pub struct LlamaMetadataBundle {
-    _marker: Llama,
-    parent: AbstractChestedHorseMetadataBundle,
-    strength: Strength,
-    llama_variant: LlamaVariant,
+    pub _marker: Llama,
+    pub parent: AbstractChestedHorseMetadataBundle,
+    pub strength: Strength,
+    pub llama_variant: LlamaVariant,
 }
 impl Default for LlamaMetadataBundle {
     fn default() -> Self {
@@ -5838,8 +5838,8 @@ impl LlamaSpit {
 
 #[derive(Bundle)]
 pub struct LlamaSpitMetadataBundle {
-    _marker: LlamaSpit,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: LlamaSpit,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for LlamaSpitMetadataBundle {
     fn default() -> Self {
@@ -5885,8 +5885,8 @@ impl MagmaCube {
 
 #[derive(Bundle)]
 pub struct MagmaCubeMetadataBundle {
-    _marker: MagmaCube,
-    parent: SlimeMetadataBundle,
+    pub _marker: MagmaCube,
+    pub parent: SlimeMetadataBundle,
 }
 impl Default for MagmaCubeMetadataBundle {
     fn default() -> Self {
@@ -5951,8 +5951,8 @@ impl MangroveBoat {
 
 #[derive(Bundle)]
 pub struct MangroveBoatMetadataBundle {
-    _marker: MangroveBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: MangroveBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for MangroveBoatMetadataBundle {
     fn default() -> Self {
@@ -6008,8 +6008,8 @@ impl MangroveChestBoat {
 
 #[derive(Bundle)]
 pub struct MangroveChestBoatMetadataBundle {
-    _marker: MangroveChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: MangroveChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for MangroveChestBoatMetadataBundle {
     fn default() -> Self {
@@ -6084,11 +6084,11 @@ impl Mannequin {
 
 #[derive(Bundle)]
 pub struct MannequinMetadataBundle {
-    _marker: Mannequin,
-    parent: AbstractAvatarMetadataBundle,
-    profile: Profile,
-    immovable: Immovable,
-    description: Description,
+    pub _marker: Mannequin,
+    pub parent: AbstractAvatarMetadataBundle,
+    pub profile: Profile,
+    pub immovable: Immovable,
+    pub description: Description,
 }
 impl Default for MannequinMetadataBundle {
     fn default() -> Self {
@@ -6151,8 +6151,8 @@ impl Marker {
 
 #[derive(Bundle)]
 pub struct MarkerMetadataBundle {
-    _marker: Marker,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: Marker,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for MarkerMetadataBundle {
     fn default() -> Self {
@@ -6196,8 +6196,8 @@ impl Minecart {
 
 #[derive(Bundle)]
 pub struct MinecartMetadataBundle {
-    _marker: Minecart,
-    parent: AbstractMinecartMetadataBundle,
+    pub _marker: Minecart,
+    pub parent: AbstractMinecartMetadataBundle,
 }
 impl Default for MinecartMetadataBundle {
     fn default() -> Self {
@@ -6257,9 +6257,9 @@ impl Mooshroom {
 
 #[derive(Bundle)]
 pub struct MooshroomMetadataBundle {
-    _marker: Mooshroom,
-    parent: AbstractAnimalMetadataBundle,
-    mooshroom_kind: MooshroomKind,
+    pub _marker: Mooshroom,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub mooshroom_kind: MooshroomKind,
 }
 impl Default for MooshroomMetadataBundle {
     fn default() -> Self {
@@ -6333,8 +6333,8 @@ impl Mule {
 
 #[derive(Bundle)]
 pub struct MuleMetadataBundle {
-    _marker: Mule,
-    parent: AbstractChestedHorseMetadataBundle,
+    pub _marker: Mule,
+    pub parent: AbstractChestedHorseMetadataBundle,
 }
 impl Default for MuleMetadataBundle {
     fn default() -> Self {
@@ -6419,8 +6419,8 @@ impl OakBoat {
 
 #[derive(Bundle)]
 pub struct OakBoatMetadataBundle {
-    _marker: OakBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: OakBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for OakBoatMetadataBundle {
     fn default() -> Self {
@@ -6476,8 +6476,8 @@ impl OakChestBoat {
 
 #[derive(Bundle)]
 pub struct OakChestBoatMetadataBundle {
-    _marker: OakChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: OakChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for OakChestBoatMetadataBundle {
     fn default() -> Self {
@@ -6538,9 +6538,9 @@ impl Ocelot {
 
 #[derive(Bundle)]
 pub struct OcelotMetadataBundle {
-    _marker: Ocelot,
-    parent: AbstractAnimalMetadataBundle,
-    trusting: Trusting,
+    pub _marker: Ocelot,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub trusting: Trusting,
 }
 impl Default for OcelotMetadataBundle {
     fn default() -> Self {
@@ -6619,9 +6619,9 @@ impl OminousItemSpawner {
 
 #[derive(Bundle)]
 pub struct OminousItemSpawnerMetadataBundle {
-    _marker: OminousItemSpawner,
-    parent: AbstractEntityMetadataBundle,
-    ominous_item_spawner_item: OminousItemSpawnerItem,
+    pub _marker: OminousItemSpawner,
+    pub parent: AbstractEntityMetadataBundle,
+    pub ominous_item_spawner_item: OminousItemSpawnerItem,
 }
 impl Default for OminousItemSpawnerMetadataBundle {
     fn default() -> Self {
@@ -6676,10 +6676,10 @@ impl Painting {
 
 #[derive(Bundle)]
 pub struct PaintingMetadataBundle {
-    _marker: Painting,
-    parent: AbstractEntityMetadataBundle,
-    painting_direction: PaintingDirection,
-    painting_variant: PaintingVariant,
+    pub _marker: Painting,
+    pub parent: AbstractEntityMetadataBundle,
+    pub painting_direction: PaintingDirection,
+    pub painting_variant: PaintingVariant,
 }
 impl Default for PaintingMetadataBundle {
     fn default() -> Self {
@@ -6725,8 +6725,8 @@ impl PaleOakBoat {
 
 #[derive(Bundle)]
 pub struct PaleOakBoatMetadataBundle {
-    _marker: PaleOakBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: PaleOakBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for PaleOakBoatMetadataBundle {
     fn default() -> Self {
@@ -6782,8 +6782,8 @@ impl PaleOakChestBoat {
 
 #[derive(Bundle)]
 pub struct PaleOakChestBoatMetadataBundle {
-    _marker: PaleOakChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: PaleOakChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for PaleOakChestBoatMetadataBundle {
     fn default() -> Self {
@@ -6879,17 +6879,17 @@ impl Panda {
 
 #[derive(Bundle)]
 pub struct PandaMetadataBundle {
-    _marker: Panda,
-    parent: AbstractAnimalMetadataBundle,
-    panda_unhappy_counter: PandaUnhappyCounter,
-    sneeze_counter: SneezeCounter,
-    eat_counter: EatCounter,
-    sneezing: Sneezing,
-    panda_sitting: PandaSitting,
-    on_back: OnBack,
-    panda_rolling: PandaRolling,
-    hidden_gene: HiddenGene,
-    panda_flags: PandaFlags,
+    pub _marker: Panda,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub panda_unhappy_counter: PandaUnhappyCounter,
+    pub sneeze_counter: SneezeCounter,
+    pub eat_counter: EatCounter,
+    pub sneezing: Sneezing,
+    pub panda_sitting: PandaSitting,
+    pub on_back: OnBack,
+    pub panda_rolling: PandaRolling,
+    pub hidden_gene: HiddenGene,
+    pub panda_flags: PandaFlags,
 }
 impl Default for PandaMetadataBundle {
     fn default() -> Self {
@@ -6976,9 +6976,9 @@ impl Parrot {
 
 #[derive(Bundle)]
 pub struct ParrotMetadataBundle {
-    _marker: Parrot,
-    parent: AbstractTameableMetadataBundle,
-    parrot_variant: ParrotVariant,
+    pub _marker: Parrot,
+    pub parent: AbstractTameableMetadataBundle,
+    pub parrot_variant: ParrotVariant,
 }
 impl Default for ParrotMetadataBundle {
     fn default() -> Self {
@@ -7063,9 +7063,9 @@ impl Phantom {
 
 #[derive(Bundle)]
 pub struct PhantomMetadataBundle {
-    _marker: Phantom,
-    parent: AbstractInsentientMetadataBundle,
-    phantom_size: PhantomSize,
+    pub _marker: Phantom,
+    pub parent: AbstractInsentientMetadataBundle,
+    pub phantom_size: PhantomSize,
 }
 impl Default for PhantomMetadataBundle {
     fn default() -> Self {
@@ -7137,10 +7137,10 @@ impl Pig {
 
 #[derive(Bundle)]
 pub struct PigMetadataBundle {
-    _marker: Pig,
-    parent: AbstractAnimalMetadataBundle,
-    pig_boost_time: PigBoostTime,
-    pig_variant: PigVariant,
+    pub _marker: Pig,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub pig_boost_time: PigBoostTime,
+    pub pig_variant: PigVariant,
 }
 impl Default for PigMetadataBundle {
     fn default() -> Self {
@@ -7232,11 +7232,11 @@ impl Piglin {
 
 #[derive(Bundle)]
 pub struct PiglinMetadataBundle {
-    _marker: Piglin,
-    parent: AbstractPiglinMetadataBundle,
-    piglin_baby: PiglinBaby,
-    piglin_is_charging_crossbow: PiglinIsChargingCrossbow,
-    is_dancing: IsDancing,
+    pub _marker: Piglin,
+    pub parent: AbstractPiglinMetadataBundle,
+    pub piglin_baby: PiglinBaby,
+    pub piglin_is_charging_crossbow: PiglinIsChargingCrossbow,
+    pub is_dancing: IsDancing,
 }
 impl Default for PiglinMetadataBundle {
     fn default() -> Self {
@@ -7312,8 +7312,8 @@ impl PiglinBrute {
 
 #[derive(Bundle)]
 pub struct PiglinBruteMetadataBundle {
-    _marker: PiglinBrute,
-    parent: AbstractPiglinMetadataBundle,
+    pub _marker: PiglinBrute,
+    pub parent: AbstractPiglinMetadataBundle,
 }
 impl Default for PiglinBruteMetadataBundle {
     fn default() -> Self {
@@ -7391,9 +7391,9 @@ impl Pillager {
 
 #[derive(Bundle)]
 pub struct PillagerMetadataBundle {
-    _marker: Pillager,
-    parent: AbstractRaiderMetadataBundle,
-    pillager_is_charging_crossbow: PillagerIsChargingCrossbow,
+    pub _marker: Pillager,
+    pub parent: AbstractRaiderMetadataBundle,
+    pub pillager_is_charging_crossbow: PillagerIsChargingCrossbow,
 }
 impl Default for PillagerMetadataBundle {
     fn default() -> Self {
@@ -7487,12 +7487,12 @@ impl Player {
 
 #[derive(Bundle)]
 pub struct PlayerMetadataBundle {
-    _marker: Player,
-    parent: AbstractAvatarMetadataBundle,
-    player_absorption: PlayerAbsorption,
-    score: Score,
-    shoulder_parrot_left: ShoulderParrotLeft,
-    shoulder_parrot_right: ShoulderParrotRight,
+    pub _marker: Player,
+    pub parent: AbstractAvatarMetadataBundle,
+    pub player_absorption: PlayerAbsorption,
+    pub score: Score,
+    pub shoulder_parrot_left: ShoulderParrotLeft,
+    pub shoulder_parrot_right: ShoulderParrotRight,
 }
 impl Default for PlayerMetadataBundle {
     fn default() -> Self {
@@ -7561,9 +7561,9 @@ impl PolarBear {
 
 #[derive(Bundle)]
 pub struct PolarBearMetadataBundle {
-    _marker: PolarBear,
-    parent: AbstractAnimalMetadataBundle,
-    polar_bear_standing: PolarBearStanding,
+    pub _marker: PolarBear,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub polar_bear_standing: PolarBearStanding,
 }
 impl Default for PolarBearMetadataBundle {
     fn default() -> Self {
@@ -7647,10 +7647,10 @@ impl Pufferfish {
 
 #[derive(Bundle)]
 pub struct PufferfishMetadataBundle {
-    _marker: Pufferfish,
-    parent: AbstractCreatureMetadataBundle,
-    pufferfish_from_bucket: PufferfishFromBucket,
-    puff_state: PuffState,
+    pub _marker: Pufferfish,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub pufferfish_from_bucket: PufferfishFromBucket,
+    pub puff_state: PuffState,
 }
 impl Default for PufferfishMetadataBundle {
     fn default() -> Self {
@@ -7721,9 +7721,9 @@ impl Rabbit {
 
 #[derive(Bundle)]
 pub struct RabbitMetadataBundle {
-    _marker: Rabbit,
-    parent: AbstractAnimalMetadataBundle,
-    rabbit_kind: RabbitKind,
+    pub _marker: Rabbit,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub rabbit_kind: RabbitKind,
 }
 impl Default for RabbitMetadataBundle {
     fn default() -> Self {
@@ -7797,8 +7797,8 @@ impl Ravager {
 
 #[derive(Bundle)]
 pub struct RavagerMetadataBundle {
-    _marker: Ravager,
-    parent: AbstractRaiderMetadataBundle,
+    pub _marker: Ravager,
+    pub parent: AbstractRaiderMetadataBundle,
 }
 impl Default for RavagerMetadataBundle {
     fn default() -> Self {
@@ -7876,9 +7876,9 @@ impl Salmon {
 
 #[derive(Bundle)]
 pub struct SalmonMetadataBundle {
-    _marker: Salmon,
-    parent: AbstractFishMetadataBundle,
-    salmon_kind: SalmonKind,
+    pub _marker: Salmon,
+    pub parent: AbstractFishMetadataBundle,
+    pub salmon_kind: SalmonKind,
 }
 impl Default for SalmonMetadataBundle {
     fn default() -> Self {
@@ -7953,9 +7953,9 @@ impl Sheep {
 
 #[derive(Bundle)]
 pub struct SheepMetadataBundle {
-    _marker: Sheep,
-    parent: AbstractAnimalMetadataBundle,
-    sheep_sheared: SheepSheared,
+    pub _marker: Sheep,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub sheep_sheared: SheepSheared,
 }
 impl Default for SheepMetadataBundle {
     fn default() -> Self {
@@ -8044,11 +8044,11 @@ impl Shulker {
 
 #[derive(Bundle)]
 pub struct ShulkerMetadataBundle {
-    _marker: Shulker,
-    parent: AbstractCreatureMetadataBundle,
-    attach_face: AttachFace,
-    peek: Peek,
-    color: Color,
+    pub _marker: Shulker,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub attach_face: AttachFace,
+    pub peek: Peek,
+    pub color: Color,
 }
 impl Default for ShulkerMetadataBundle {
     fn default() -> Self {
@@ -8115,8 +8115,8 @@ impl ShulkerBullet {
 
 #[derive(Bundle)]
 pub struct ShulkerBulletMetadataBundle {
-    _marker: ShulkerBullet,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: ShulkerBullet,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for ShulkerBulletMetadataBundle {
     fn default() -> Self {
@@ -8160,8 +8160,8 @@ impl Silverfish {
 
 #[derive(Bundle)]
 pub struct SilverfishMetadataBundle {
-    _marker: Silverfish,
-    parent: AbstractMonsterMetadataBundle,
+    pub _marker: Silverfish,
+    pub parent: AbstractMonsterMetadataBundle,
 }
 impl Default for SilverfishMetadataBundle {
     fn default() -> Self {
@@ -8233,9 +8233,9 @@ impl Skeleton {
 
 #[derive(Bundle)]
 pub struct SkeletonMetadataBundle {
-    _marker: Skeleton,
-    parent: AbstractMonsterMetadataBundle,
-    stray_conversion: StrayConversion,
+    pub _marker: Skeleton,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub stray_conversion: StrayConversion,
 }
 impl Default for SkeletonMetadataBundle {
     fn default() -> Self {
@@ -8303,8 +8303,8 @@ impl SkeletonHorse {
 
 #[derive(Bundle)]
 pub struct SkeletonHorseMetadataBundle {
-    _marker: SkeletonHorse,
-    parent: AbstractHorseMetadataBundle,
+    pub _marker: SkeletonHorse,
+    pub parent: AbstractHorseMetadataBundle,
 }
 impl Default for SkeletonHorseMetadataBundle {
     fn default() -> Self {
@@ -8387,9 +8387,9 @@ impl Slime {
 
 #[derive(Bundle)]
 pub struct SlimeMetadataBundle {
-    _marker: Slime,
-    parent: AbstractInsentientMetadataBundle,
-    slime_size: SlimeSize,
+    pub _marker: Slime,
+    pub parent: AbstractInsentientMetadataBundle,
+    pub slime_size: SlimeSize,
 }
 impl Default for SlimeMetadataBundle {
     fn default() -> Self {
@@ -8456,9 +8456,9 @@ impl SmallFireball {
 
 #[derive(Bundle)]
 pub struct SmallFireballMetadataBundle {
-    _marker: SmallFireball,
-    parent: AbstractEntityMetadataBundle,
-    small_fireball_item_stack: SmallFireballItemStack,
+    pub _marker: SmallFireball,
+    pub parent: AbstractEntityMetadataBundle,
+    pub small_fireball_item_stack: SmallFireballItemStack,
 }
 impl Default for SmallFireballMetadataBundle {
     fn default() -> Self {
@@ -8513,10 +8513,10 @@ impl Sniffer {
 
 #[derive(Bundle)]
 pub struct SnifferMetadataBundle {
-    _marker: Sniffer,
-    parent: AbstractAnimalMetadataBundle,
-    sniffer_state: SnifferState,
-    drop_seed_at_tick: DropSeedAtTick,
+    pub _marker: Sniffer,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub sniffer_state: SnifferState,
+    pub drop_seed_at_tick: DropSeedAtTick,
 }
 impl Default for SnifferMetadataBundle {
     fn default() -> Self {
@@ -8597,9 +8597,9 @@ impl SnowGolem {
 
 #[derive(Bundle)]
 pub struct SnowGolemMetadataBundle {
-    _marker: SnowGolem,
-    parent: AbstractCreatureMetadataBundle,
-    has_pumpkin: HasPumpkin,
+    pub _marker: SnowGolem,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub has_pumpkin: HasPumpkin,
 }
 impl Default for SnowGolemMetadataBundle {
     fn default() -> Self {
@@ -8664,8 +8664,8 @@ impl Snowball {
 
 #[derive(Bundle)]
 pub struct SnowballMetadataBundle {
-    _marker: Snowball,
-    parent: AbstractThrownItemProjectileMetadataBundle,
+    pub _marker: Snowball,
+    pub parent: AbstractThrownItemProjectileMetadataBundle,
 }
 impl Default for SnowballMetadataBundle {
     fn default() -> Self {
@@ -8715,8 +8715,8 @@ impl SpawnerMinecart {
 
 #[derive(Bundle)]
 pub struct SpawnerMinecartMetadataBundle {
-    _marker: SpawnerMinecart,
-    parent: AbstractMinecartMetadataBundle,
+    pub _marker: SpawnerMinecart,
+    pub parent: AbstractMinecartMetadataBundle,
 }
 impl Default for SpawnerMinecartMetadataBundle {
     fn default() -> Self {
@@ -8771,8 +8771,8 @@ impl SpectralArrow {
 
 #[derive(Bundle)]
 pub struct SpectralArrowMetadataBundle {
-    _marker: SpectralArrow,
-    parent: AbstractArrowMetadataBundle,
+    pub _marker: SpectralArrow,
+    pub parent: AbstractArrowMetadataBundle,
 }
 impl Default for SpectralArrowMetadataBundle {
     fn default() -> Self {
@@ -8827,9 +8827,9 @@ impl Spider {
 
 #[derive(Bundle)]
 pub struct SpiderMetadataBundle {
-    _marker: Spider,
-    parent: AbstractMonsterMetadataBundle,
-    climbing: Climbing,
+    pub _marker: Spider,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub climbing: Climbing,
 }
 impl Default for SpiderMetadataBundle {
     fn default() -> Self {
@@ -8897,8 +8897,8 @@ impl SplashPotion {
 
 #[derive(Bundle)]
 pub struct SplashPotionMetadataBundle {
-    _marker: SplashPotion,
-    parent: AbstractThrownItemProjectileMetadataBundle,
+    pub _marker: SplashPotion,
+    pub parent: AbstractThrownItemProjectileMetadataBundle,
 }
 impl Default for SplashPotionMetadataBundle {
     fn default() -> Self {
@@ -8948,8 +8948,8 @@ impl SpruceBoat {
 
 #[derive(Bundle)]
 pub struct SpruceBoatMetadataBundle {
-    _marker: SpruceBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: SpruceBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for SpruceBoatMetadataBundle {
     fn default() -> Self {
@@ -9005,8 +9005,8 @@ impl SpruceChestBoat {
 
 #[derive(Bundle)]
 pub struct SpruceChestBoatMetadataBundle {
-    _marker: SpruceChestBoat,
-    parent: AbstractBoatMetadataBundle,
+    pub _marker: SpruceChestBoat,
+    pub parent: AbstractBoatMetadataBundle,
 }
 impl Default for SpruceChestBoatMetadataBundle {
     fn default() -> Self {
@@ -9062,8 +9062,8 @@ impl Squid {
 
 #[derive(Bundle)]
 pub struct SquidMetadataBundle {
-    _marker: Squid,
-    parent: AbstractAgeableMetadataBundle,
+    pub _marker: Squid,
+    pub parent: AbstractAgeableMetadataBundle,
 }
 impl Default for SquidMetadataBundle {
     fn default() -> Self {
@@ -9131,8 +9131,8 @@ impl Stray {
 
 #[derive(Bundle)]
 pub struct StrayMetadataBundle {
-    _marker: Stray,
-    parent: AbstractMonsterMetadataBundle,
+    pub _marker: Stray,
+    pub parent: AbstractMonsterMetadataBundle,
 }
 impl Default for StrayMetadataBundle {
     fn default() -> Self {
@@ -9209,10 +9209,10 @@ impl Strider {
 
 #[derive(Bundle)]
 pub struct StriderMetadataBundle {
-    _marker: Strider,
-    parent: AbstractAnimalMetadataBundle,
-    strider_boost_time: StriderBoostTime,
-    suffocating: Suffocating,
+    pub _marker: Strider,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub strider_boost_time: StriderBoostTime,
+    pub suffocating: Suffocating,
 }
 impl Default for StriderMetadataBundle {
     fn default() -> Self {
@@ -9292,9 +9292,9 @@ impl Tadpole {
 
 #[derive(Bundle)]
 pub struct TadpoleMetadataBundle {
-    _marker: Tadpole,
-    parent: AbstractCreatureMetadataBundle,
-    tadpole_from_bucket: TadpoleFromBucket,
+    pub _marker: Tadpole,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub tadpole_from_bucket: TadpoleFromBucket,
 }
 impl Default for TadpoleMetadataBundle {
     fn default() -> Self {
@@ -9384,13 +9384,13 @@ impl TextDisplay {
 
 #[derive(Bundle)]
 pub struct TextDisplayMetadataBundle {
-    _marker: TextDisplay,
-    parent: AbstractDisplayMetadataBundle,
-    text: Text,
-    line_width: LineWidth,
-    background_color: BackgroundColor,
-    text_opacity: TextOpacity,
-    style_flags: StyleFlags,
+    pub _marker: TextDisplay,
+    pub parent: AbstractDisplayMetadataBundle,
+    pub text: Text,
+    pub line_width: LineWidth,
+    pub background_color: BackgroundColor,
+    pub text_opacity: TextOpacity,
+    pub style_flags: StyleFlags,
 }
 impl Default for TextDisplayMetadataBundle {
     fn default() -> Self {
@@ -9486,10 +9486,10 @@ impl Tnt {
 
 #[derive(Bundle)]
 pub struct TntMetadataBundle {
-    _marker: Tnt,
-    parent: AbstractEntityMetadataBundle,
-    fuse: Fuse,
-    tnt_block_state: TntBlockState,
+    pub _marker: Tnt,
+    pub parent: AbstractEntityMetadataBundle,
+    pub fuse: Fuse,
+    pub tnt_block_state: TntBlockState,
 }
 impl Default for TntMetadataBundle {
     fn default() -> Self {
@@ -9535,8 +9535,8 @@ impl TntMinecart {
 
 #[derive(Bundle)]
 pub struct TntMinecartMetadataBundle {
-    _marker: TntMinecart,
-    parent: AbstractMinecartMetadataBundle,
+    pub _marker: TntMinecart,
+    pub parent: AbstractMinecartMetadataBundle,
 }
 impl Default for TntMinecartMetadataBundle {
     fn default() -> Self {
@@ -9591,8 +9591,8 @@ impl TraderLlama {
 
 #[derive(Bundle)]
 pub struct TraderLlamaMetadataBundle {
-    _marker: TraderLlama,
-    parent: LlamaMetadataBundle,
+    pub _marker: TraderLlama,
+    pub parent: LlamaMetadataBundle,
 }
 impl Default for TraderLlamaMetadataBundle {
     fn default() -> Self {
@@ -9694,10 +9694,10 @@ impl Trident {
 
 #[derive(Bundle)]
 pub struct TridentMetadataBundle {
-    _marker: Trident,
-    parent: AbstractArrowMetadataBundle,
-    loyalty: Loyalty,
-    foil: Foil,
+    pub _marker: Trident,
+    pub parent: AbstractArrowMetadataBundle,
+    pub loyalty: Loyalty,
+    pub foil: Foil,
 }
 impl Default for TridentMetadataBundle {
     fn default() -> Self {
@@ -9755,9 +9755,9 @@ impl TropicalFish {
 
 #[derive(Bundle)]
 pub struct TropicalFishMetadataBundle {
-    _marker: TropicalFish,
-    parent: AbstractFishMetadataBundle,
-    tropical_fish_type_variant: TropicalFishTypeVariant,
+    pub _marker: TropicalFish,
+    pub parent: AbstractFishMetadataBundle,
+    pub tropical_fish_type_variant: TropicalFishTypeVariant,
 }
 impl Default for TropicalFishMetadataBundle {
     fn default() -> Self {
@@ -9836,10 +9836,10 @@ impl Turtle {
 
 #[derive(Bundle)]
 pub struct TurtleMetadataBundle {
-    _marker: Turtle,
-    parent: AbstractAnimalMetadataBundle,
-    has_egg: HasEgg,
-    laying_egg: LayingEgg,
+    pub _marker: Turtle,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub has_egg: HasEgg,
+    pub laying_egg: LayingEgg,
 }
 impl Default for TurtleMetadataBundle {
     fn default() -> Self {
@@ -9919,9 +9919,9 @@ impl Vex {
 
 #[derive(Bundle)]
 pub struct VexMetadataBundle {
-    _marker: Vex,
-    parent: AbstractMonsterMetadataBundle,
-    vex_flags: VexFlags,
+    pub _marker: Vex,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub vex_flags: VexFlags,
 }
 impl Default for VexMetadataBundle {
     fn default() -> Self {
@@ -9996,9 +9996,9 @@ impl Villager {
 
 #[derive(Bundle)]
 pub struct VillagerMetadataBundle {
-    _marker: Villager,
-    parent: AbstractVillagerMetadataBundle,
-    villager_villager_data: VillagerVillagerData,
+    pub _marker: Villager,
+    pub parent: AbstractVillagerMetadataBundle,
+    pub villager_villager_data: VillagerVillagerData,
 }
 impl Default for VillagerMetadataBundle {
     fn default() -> Self {
@@ -10077,8 +10077,8 @@ impl Vindicator {
 
 #[derive(Bundle)]
 pub struct VindicatorMetadataBundle {
-    _marker: Vindicator,
-    parent: AbstractRaiderMetadataBundle,
+    pub _marker: Vindicator,
+    pub parent: AbstractRaiderMetadataBundle,
 }
 impl Default for VindicatorMetadataBundle {
     fn default() -> Self {
@@ -10151,8 +10151,8 @@ impl WanderingTrader {
 
 #[derive(Bundle)]
 pub struct WanderingTraderMetadataBundle {
-    _marker: WanderingTrader,
-    parent: AbstractVillagerMetadataBundle,
+    pub _marker: WanderingTrader,
+    pub parent: AbstractVillagerMetadataBundle,
 }
 impl Default for WanderingTraderMetadataBundle {
     fn default() -> Self {
@@ -10231,9 +10231,9 @@ impl Warden {
 
 #[derive(Bundle)]
 pub struct WardenMetadataBundle {
-    _marker: Warden,
-    parent: AbstractMonsterMetadataBundle,
-    client_anger_level: ClientAngerLevel,
+    pub _marker: Warden,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub client_anger_level: ClientAngerLevel,
 }
 impl Default for WardenMetadataBundle {
     fn default() -> Self {
@@ -10301,8 +10301,8 @@ impl WindCharge {
 
 #[derive(Bundle)]
 pub struct WindChargeMetadataBundle {
-    _marker: WindCharge,
-    parent: AbstractEntityMetadataBundle,
+    pub _marker: WindCharge,
+    pub parent: AbstractEntityMetadataBundle,
 }
 impl Default for WindChargeMetadataBundle {
     fn default() -> Self {
@@ -10351,9 +10351,9 @@ impl Witch {
 
 #[derive(Bundle)]
 pub struct WitchMetadataBundle {
-    _marker: Witch,
-    parent: AbstractRaiderMetadataBundle,
-    witch_using_item: WitchUsingItem,
+    pub _marker: Witch,
+    pub parent: AbstractRaiderMetadataBundle,
+    pub witch_using_item: WitchUsingItem,
 }
 impl Default for WitchMetadataBundle {
     fn default() -> Self {
@@ -10447,12 +10447,12 @@ impl Wither {
 
 #[derive(Bundle)]
 pub struct WitherMetadataBundle {
-    _marker: Wither,
-    parent: AbstractMonsterMetadataBundle,
-    target_a: TargetA,
-    target_b: TargetB,
-    target_c: TargetC,
-    inv: Inv,
+    pub _marker: Wither,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub target_a: TargetA,
+    pub target_b: TargetB,
+    pub target_c: TargetC,
+    pub inv: Inv,
 }
 impl Default for WitherMetadataBundle {
     fn default() -> Self {
@@ -10523,8 +10523,8 @@ impl WitherSkeleton {
 
 #[derive(Bundle)]
 pub struct WitherSkeletonMetadataBundle {
-    _marker: WitherSkeleton,
-    parent: AbstractMonsterMetadataBundle,
+    pub _marker: WitherSkeleton,
+    pub parent: AbstractMonsterMetadataBundle,
 }
 impl Default for WitherSkeletonMetadataBundle {
     fn default() -> Self {
@@ -10596,9 +10596,9 @@ impl WitherSkull {
 
 #[derive(Bundle)]
 pub struct WitherSkullMetadataBundle {
-    _marker: WitherSkull,
-    parent: AbstractEntityMetadataBundle,
-    dangerous: Dangerous,
+    pub _marker: WitherSkull,
+    pub parent: AbstractEntityMetadataBundle,
+    pub dangerous: Dangerous,
 }
 impl Default for WitherSkullMetadataBundle {
     fn default() -> Self {
@@ -10668,13 +10668,13 @@ impl Wolf {
 
 #[derive(Bundle)]
 pub struct WolfMetadataBundle {
-    _marker: Wolf,
-    parent: AbstractTameableMetadataBundle,
-    wolf_interested: WolfInterested,
-    wolf_collar_color: WolfCollarColor,
-    wolf_remaining_anger_time: WolfRemainingAngerTime,
-    wolf_variant: WolfVariant,
-    sound_variant: SoundVariant,
+    pub _marker: Wolf,
+    pub parent: AbstractTameableMetadataBundle,
+    pub wolf_interested: WolfInterested,
+    pub wolf_collar_color: WolfCollarColor,
+    pub wolf_remaining_anger_time: WolfRemainingAngerTime,
+    pub wolf_variant: WolfVariant,
+    pub sound_variant: SoundVariant,
 }
 impl Default for WolfMetadataBundle {
     fn default() -> Self {
@@ -10763,9 +10763,9 @@ impl Zoglin {
 
 #[derive(Bundle)]
 pub struct ZoglinMetadataBundle {
-    _marker: Zoglin,
-    parent: AbstractMonsterMetadataBundle,
-    zoglin_baby: ZoglinBaby,
+    pub _marker: Zoglin,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub zoglin_baby: ZoglinBaby,
 }
 impl Default for ZoglinMetadataBundle {
     fn default() -> Self {
@@ -10842,11 +10842,11 @@ impl Zombie {
 
 #[derive(Bundle)]
 pub struct ZombieMetadataBundle {
-    _marker: Zombie,
-    parent: AbstractMonsterMetadataBundle,
-    zombie_baby: ZombieBaby,
-    special_type: SpecialType,
-    drowned_conversion: DrownedConversion,
+    pub _marker: Zombie,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub zombie_baby: ZombieBaby,
+    pub special_type: SpecialType,
+    pub drowned_conversion: DrownedConversion,
 }
 impl Default for ZombieMetadataBundle {
     fn default() -> Self {
@@ -10916,8 +10916,8 @@ impl ZombieHorse {
 
 #[derive(Bundle)]
 pub struct ZombieHorseMetadataBundle {
-    _marker: ZombieHorse,
-    parent: AbstractHorseMetadataBundle,
+    pub _marker: ZombieHorse,
+    pub parent: AbstractHorseMetadataBundle,
 }
 impl Default for ZombieHorseMetadataBundle {
     fn default() -> Self {
@@ -11007,10 +11007,10 @@ impl ZombieVillager {
 
 #[derive(Bundle)]
 pub struct ZombieVillagerMetadataBundle {
-    _marker: ZombieVillager,
-    parent: ZombieMetadataBundle,
-    converting: Converting,
-    zombie_villager_villager_data: ZombieVillagerVillagerData,
+    pub _marker: ZombieVillager,
+    pub parent: ZombieMetadataBundle,
+    pub converting: Converting,
+    pub zombie_villager_villager_data: ZombieVillagerVillagerData,
 }
 impl Default for ZombieVillagerMetadataBundle {
     fn default() -> Self {
@@ -11091,8 +11091,8 @@ impl ZombifiedPiglin {
 
 #[derive(Bundle)]
 pub struct ZombifiedPiglinMetadataBundle {
-    _marker: ZombifiedPiglin,
-    parent: ZombieMetadataBundle,
+    pub _marker: ZombifiedPiglin,
+    pub parent: ZombieMetadataBundle,
 }
 impl Default for ZombifiedPiglinMetadataBundle {
     fn default() -> Self {
@@ -11170,9 +11170,9 @@ impl AbstractAgeable {
 
 #[derive(Bundle)]
 pub struct AbstractAgeableMetadataBundle {
-    _marker: AbstractAgeable,
-    parent: AbstractCreatureMetadataBundle,
-    abstract_ageable_baby: AbstractAgeableBaby,
+    pub _marker: AbstractAgeable,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub abstract_ageable_baby: AbstractAgeableBaby,
 }
 impl Default for AbstractAgeableMetadataBundle {
     fn default() -> Self {
@@ -11237,8 +11237,8 @@ impl AbstractAnimal {
 
 #[derive(Bundle)]
 pub struct AbstractAnimalMetadataBundle {
-    _marker: AbstractAnimal,
-    parent: AbstractAgeableMetadataBundle,
+    pub _marker: AbstractAnimal,
+    pub parent: AbstractAgeableMetadataBundle,
 }
 impl Default for AbstractAnimalMetadataBundle {
     fn default() -> Self {
@@ -11317,12 +11317,12 @@ impl AbstractArrow {
 
 #[derive(Bundle)]
 pub struct AbstractArrowMetadataBundle {
-    _marker: AbstractArrow,
-    parent: AbstractEntityMetadataBundle,
-    crit_arrow: CritArrow,
-    no_physics: NoPhysics,
-    pierce_level: PierceLevel,
-    in_ground: InGround,
+    pub _marker: AbstractArrow,
+    pub parent: AbstractEntityMetadataBundle,
+    pub crit_arrow: CritArrow,
+    pub no_physics: NoPhysics,
+    pub pierce_level: PierceLevel,
+    pub in_ground: InGround,
 }
 impl Default for AbstractArrowMetadataBundle {
     fn default() -> Self {
@@ -11376,10 +11376,10 @@ impl AbstractAvatar {
 
 #[derive(Bundle)]
 pub struct AbstractAvatarMetadataBundle {
-    _marker: AbstractAvatar,
-    parent: AbstractLivingMetadataBundle,
-    player_main_hand: PlayerMainHand,
-    player_mode_customisation: PlayerModeCustomisation,
+    pub _marker: AbstractAvatar,
+    pub parent: AbstractLivingMetadataBundle,
+    pub player_main_hand: PlayerMainHand,
+    pub player_mode_customisation: PlayerModeCustomisation,
 }
 impl Default for AbstractAvatarMetadataBundle {
     fn default() -> Self {
@@ -11445,11 +11445,11 @@ impl AbstractBoat {
 
 #[derive(Bundle)]
 pub struct AbstractBoatMetadataBundle {
-    _marker: AbstractBoat,
-    parent: AbstractVehicleMetadataBundle,
-    paddle_left: PaddleLeft,
-    paddle_right: PaddleRight,
-    bubble_time: BubbleTime,
+    pub _marker: AbstractBoat,
+    pub parent: AbstractVehicleMetadataBundle,
+    pub paddle_left: PaddleLeft,
+    pub paddle_right: PaddleRight,
+    pub bubble_time: BubbleTime,
 }
 impl Default for AbstractBoatMetadataBundle {
     fn default() -> Self {
@@ -11505,9 +11505,9 @@ impl AbstractChestedHorse {
 
 #[derive(Bundle)]
 pub struct AbstractChestedHorseMetadataBundle {
-    _marker: AbstractChestedHorse,
-    parent: AbstractHorseMetadataBundle,
-    chest: Chest,
+    pub _marker: AbstractChestedHorse,
+    pub parent: AbstractHorseMetadataBundle,
+    pub chest: Chest,
 }
 impl Default for AbstractChestedHorseMetadataBundle {
     fn default() -> Self {
@@ -11588,8 +11588,8 @@ impl AbstractCreature {
 
 #[derive(Bundle)]
 pub struct AbstractCreatureMetadataBundle {
-    _marker: AbstractCreature,
-    parent: AbstractInsentientMetadataBundle,
+    pub _marker: AbstractCreature,
+    pub parent: AbstractInsentientMetadataBundle,
 }
 impl Default for AbstractCreatureMetadataBundle {
     fn default() -> Self {
@@ -11697,23 +11697,23 @@ impl AbstractDisplay {
 
 #[derive(Bundle)]
 pub struct AbstractDisplayMetadataBundle {
-    _marker: AbstractDisplay,
-    parent: AbstractEntityMetadataBundle,
-    transformation_interpolation_start_delta_ticks: TransformationInterpolationStartDeltaTicks,
-    transformation_interpolation_duration: TransformationInterpolationDuration,
-    pos_rot_interpolation_duration: PosRotInterpolationDuration,
-    translation: Translation,
-    scale: Scale,
-    left_rotation: LeftRotation,
-    right_rotation: RightRotation,
-    billboard_render_constraints: BillboardRenderConstraints,
-    brightness_override: BrightnessOverride,
-    view_range: ViewRange,
-    shadow_radius: ShadowRadius,
-    shadow_strength: ShadowStrength,
-    abstract_display_width: AbstractDisplayWidth,
-    abstract_display_height: AbstractDisplayHeight,
-    glow_color_override: GlowColorOverride,
+    pub _marker: AbstractDisplay,
+    pub parent: AbstractEntityMetadataBundle,
+    pub transformation_interpolation_start_delta_ticks: TransformationInterpolationStartDeltaTicks,
+    pub transformation_interpolation_duration: TransformationInterpolationDuration,
+    pub pos_rot_interpolation_duration: PosRotInterpolationDuration,
+    pub translation: Translation,
+    pub scale: Scale,
+    pub left_rotation: LeftRotation,
+    pub right_rotation: RightRotation,
+    pub billboard_render_constraints: BillboardRenderConstraints,
+    pub brightness_override: BrightnessOverride,
+    pub view_range: ViewRange,
+    pub shadow_radius: ShadowRadius,
+    pub shadow_strength: ShadowStrength,
+    pub abstract_display_width: AbstractDisplayWidth,
+    pub abstract_display_height: AbstractDisplayHeight,
+    pub glow_color_override: GlowColorOverride,
 }
 impl Default for AbstractDisplayMetadataBundle {
     fn default() -> Self {
@@ -11821,21 +11821,21 @@ impl AbstractEntity {
 
 #[derive(Bundle)]
 pub struct AbstractEntityMetadataBundle {
-    _marker: AbstractEntity,
-    on_fire: OnFire,
-    abstract_entity_shift_key_down: AbstractEntityShiftKeyDown,
-    sprinting: Sprinting,
-    swimming: Swimming,
-    currently_glowing: CurrentlyGlowing,
-    invisible: Invisible,
-    fall_flying: FallFlying,
-    air_supply: AirSupply,
-    custom_name: CustomName,
-    custom_name_visible: CustomNameVisible,
-    silent: Silent,
-    no_gravity: NoGravity,
-    pose: Pose,
-    ticks_frozen: TicksFrozen,
+    pub _marker: AbstractEntity,
+    pub on_fire: OnFire,
+    pub abstract_entity_shift_key_down: AbstractEntityShiftKeyDown,
+    pub sprinting: Sprinting,
+    pub swimming: Swimming,
+    pub currently_glowing: CurrentlyGlowing,
+    pub invisible: Invisible,
+    pub fall_flying: FallFlying,
+    pub air_supply: AirSupply,
+    pub custom_name: CustomName,
+    pub custom_name_visible: CustomNameVisible,
+    pub silent: Silent,
+    pub no_gravity: NoGravity,
+    pub pose: Pose,
+    pub ticks_frozen: TicksFrozen,
 }
 impl Default for AbstractEntityMetadataBundle {
     fn default() -> Self {
@@ -11879,9 +11879,9 @@ impl AbstractFish {
 
 #[derive(Bundle)]
 pub struct AbstractFishMetadataBundle {
-    _marker: AbstractFish,
-    parent: AbstractCreatureMetadataBundle,
-    abstract_fish_from_bucket: AbstractFishFromBucket,
+    pub _marker: AbstractFish,
+    pub parent: AbstractCreatureMetadataBundle,
+    pub abstract_fish_from_bucket: AbstractFishFromBucket,
 }
 impl Default for AbstractFishMetadataBundle {
     fn default() -> Self {
@@ -11953,12 +11953,12 @@ impl AbstractHorse {
 
 #[derive(Bundle)]
 pub struct AbstractHorseMetadataBundle {
-    _marker: AbstractHorse,
-    parent: AbstractAnimalMetadataBundle,
-    tamed: Tamed,
-    eating: Eating,
-    abstract_horse_standing: AbstractHorseStanding,
-    bred: Bred,
+    pub _marker: AbstractHorse,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub tamed: Tamed,
+    pub eating: Eating,
+    pub abstract_horse_standing: AbstractHorseStanding,
+    pub bred: Bred,
 }
 impl Default for AbstractHorseMetadataBundle {
     fn default() -> Self {
@@ -12041,11 +12041,11 @@ impl AbstractInsentient {
 
 #[derive(Bundle)]
 pub struct AbstractInsentientMetadataBundle {
-    _marker: AbstractInsentient,
-    parent: AbstractLivingMetadataBundle,
-    no_ai: NoAi,
-    left_handed: LeftHanded,
-    aggressive: Aggressive,
+    pub _marker: AbstractInsentient,
+    pub parent: AbstractLivingMetadataBundle,
+    pub no_ai: NoAi,
+    pub left_handed: LeftHanded,
+    pub aggressive: Aggressive,
 }
 impl Default for AbstractInsentientMetadataBundle {
     fn default() -> Self {
@@ -12126,16 +12126,16 @@ impl AbstractLiving {
 
 #[derive(Bundle)]
 pub struct AbstractLivingMetadataBundle {
-    _marker: AbstractLiving,
-    parent: AbstractEntityMetadataBundle,
-    auto_spin_attack: AutoSpinAttack,
-    abstract_living_using_item: AbstractLivingUsingItem,
-    health: Health,
-    effect_particles: EffectParticles,
-    effect_ambience: EffectAmbience,
-    arrow_count: ArrowCount,
-    stinger_count: StingerCount,
-    sleeping_pos: SleepingPos,
+    pub _marker: AbstractLiving,
+    pub parent: AbstractEntityMetadataBundle,
+    pub auto_spin_attack: AutoSpinAttack,
+    pub abstract_living_using_item: AbstractLivingUsingItem,
+    pub health: Health,
+    pub effect_particles: EffectParticles,
+    pub effect_ambience: EffectAmbience,
+    pub arrow_count: ArrowCount,
+    pub stinger_count: StingerCount,
+    pub sleeping_pos: SleepingPos,
 }
 impl Default for AbstractLivingMetadataBundle {
     fn default() -> Self {
@@ -12193,10 +12193,10 @@ impl AbstractMinecart {
 
 #[derive(Bundle)]
 pub struct AbstractMinecartMetadataBundle {
-    _marker: AbstractMinecart,
-    parent: AbstractVehicleMetadataBundle,
-    custom_display_block: CustomDisplayBlock,
-    display_offset: DisplayOffset,
+    pub _marker: AbstractMinecart,
+    pub parent: AbstractVehicleMetadataBundle,
+    pub custom_display_block: CustomDisplayBlock,
+    pub display_offset: DisplayOffset,
 }
 impl Default for AbstractMinecartMetadataBundle {
     fn default() -> Self {
@@ -12248,8 +12248,8 @@ impl AbstractMonster {
 
 #[derive(Bundle)]
 pub struct AbstractMonsterMetadataBundle {
-    _marker: AbstractMonster,
-    parent: AbstractCreatureMetadataBundle,
+    pub _marker: AbstractMonster,
+    pub parent: AbstractCreatureMetadataBundle,
 }
 impl Default for AbstractMonsterMetadataBundle {
     fn default() -> Self {
@@ -12316,9 +12316,9 @@ impl AbstractPiglin {
 
 #[derive(Bundle)]
 pub struct AbstractPiglinMetadataBundle {
-    _marker: AbstractPiglin,
-    parent: AbstractMonsterMetadataBundle,
-    abstract_piglin_immune_to_zombification: AbstractPiglinImmuneToZombification,
+    pub _marker: AbstractPiglin,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub abstract_piglin_immune_to_zombification: AbstractPiglinImmuneToZombification,
 }
 impl Default for AbstractPiglinMetadataBundle {
     fn default() -> Self {
@@ -12389,9 +12389,9 @@ impl AbstractRaider {
 
 #[derive(Bundle)]
 pub struct AbstractRaiderMetadataBundle {
-    _marker: AbstractRaider,
-    parent: AbstractMonsterMetadataBundle,
-    is_celebrating: IsCelebrating,
+    pub _marker: AbstractRaider,
+    pub parent: AbstractMonsterMetadataBundle,
+    pub is_celebrating: IsCelebrating,
 }
 impl Default for AbstractRaiderMetadataBundle {
     fn default() -> Self {
@@ -12462,9 +12462,9 @@ impl AbstractSpellcasterIllager {
 
 #[derive(Bundle)]
 pub struct AbstractSpellcasterIllagerMetadataBundle {
-    _marker: AbstractSpellcasterIllager,
-    parent: AbstractRaiderMetadataBundle,
-    spell_casting: SpellCasting,
+    pub _marker: AbstractSpellcasterIllager,
+    pub parent: AbstractRaiderMetadataBundle,
+    pub spell_casting: SpellCasting,
 }
 impl Default for AbstractSpellcasterIllagerMetadataBundle {
     fn default() -> Self {
@@ -12546,11 +12546,11 @@ impl AbstractTameable {
 
 #[derive(Bundle)]
 pub struct AbstractTameableMetadataBundle {
-    _marker: AbstractTameable,
-    parent: AbstractAnimalMetadataBundle,
-    tame: Tame,
-    in_sitting_pose: InSittingPose,
-    owneruuid: Owneruuid,
+    pub _marker: AbstractTameable,
+    pub parent: AbstractAnimalMetadataBundle,
+    pub tame: Tame,
+    pub in_sitting_pose: InSittingPose,
+    pub owneruuid: Owneruuid,
 }
 impl Default for AbstractTameableMetadataBundle {
     fn default() -> Self {
@@ -12631,9 +12631,9 @@ impl AbstractThrownItemProjectile {
 
 #[derive(Bundle)]
 pub struct AbstractThrownItemProjectileMetadataBundle {
-    _marker: AbstractThrownItemProjectile,
-    parent: AbstractEntityMetadataBundle,
-    abstract_thrown_item_projectile_item_stack: AbstractThrownItemProjectileItemStack,
+    pub _marker: AbstractThrownItemProjectile,
+    pub parent: AbstractEntityMetadataBundle,
+    pub abstract_thrown_item_projectile_item_stack: AbstractThrownItemProjectileItemStack,
 }
 impl Default for AbstractThrownItemProjectileMetadataBundle {
     fn default() -> Self {
@@ -12689,11 +12689,11 @@ impl AbstractVehicle {
 
 #[derive(Bundle)]
 pub struct AbstractVehicleMetadataBundle {
-    _marker: AbstractVehicle,
-    parent: AbstractEntityMetadataBundle,
-    hurt: Hurt,
-    hurtdir: Hurtdir,
-    damage: Damage,
+    pub _marker: AbstractVehicle,
+    pub parent: AbstractEntityMetadataBundle,
+    pub hurt: Hurt,
+    pub hurtdir: Hurtdir,
+    pub damage: Damage,
 }
 impl Default for AbstractVehicleMetadataBundle {
     fn default() -> Self {
@@ -12743,9 +12743,9 @@ impl AbstractVillager {
 
 #[derive(Bundle)]
 pub struct AbstractVillagerMetadataBundle {
-    _marker: AbstractVillager,
-    parent: AbstractAgeableMetadataBundle,
-    abstract_villager_unhappy_counter: AbstractVillagerUnhappyCounter,
+    pub _marker: AbstractVillager,
+    pub parent: AbstractAgeableMetadataBundle,
+    pub abstract_villager_unhappy_counter: AbstractVillagerUnhappyCounter,
 }
 impl Default for AbstractVillagerMetadataBundle {
     fn default() -> Self {

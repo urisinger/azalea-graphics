@@ -16,13 +16,13 @@ use azalea::{
     },
     registry::{Biome, Block, DataRegistry},
 };
+use azalea_assets::Assets;
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use glam::IVec3;
 use log::error;
 use parking_lot::{Mutex, RwLock};
 use simdnbt::Deserialize;
-use 
-    azalea_assets::Assets;
+
 use crate::renderer::{
     chunk::{LocalChunk, LocalSection},
     world_renderer::{

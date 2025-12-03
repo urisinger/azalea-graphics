@@ -102,7 +102,8 @@ impl WorldRenderer {
         swapchain: &Swapchain,
         options: WorldRendererFeatures,
     ) -> Self {
-        let atlas_image = animation::create_initial_atlas(&assets.block_atlas, &assets.textures);
+        let atlas_image =
+            animation::create_initial_atlas(&assets.block_atlas, &assets.block_textures);
         let blocks_texture = Texture::new(ctx, atlas_image);
 
         let descriptors = Descriptors::new(ctx.device(), &blocks_texture);
@@ -132,7 +133,7 @@ impl WorldRenderer {
 
         Self {
             mesher: None,
-            animation_manager: AnimationManager::from_textures(&assets.textures),
+            animation_manager: AnimationManager::from_textures(&assets.block_textures),
             hiz_compute,
 
             visibility_compute,
@@ -149,7 +150,7 @@ impl WorldRenderer {
     }
 
     pub fn tick(&mut self) {
-        self.animation_manager.tick(&self.assets.textures);
+        self.animation_manager.tick(&self.assets.block_textures);
     }
 
     pub fn update_visibility(&mut self, ctx: &VkContext, frame_index: usize, camera_pos: Vec3) {
@@ -577,7 +578,9 @@ impl WorldRenderer {
     }
 
     pub fn upload_dirty_textures(&mut self, frame_ctx: &mut FrameCtx) {
-        let dirty = self.animation_manager.dirty_textures(&self.assets.textures);
+        let dirty = self
+            .animation_manager
+            .dirty_textures(&self.assets.block_textures);
         if dirty.is_empty() {
             return;
         }

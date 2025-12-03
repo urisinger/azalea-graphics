@@ -371,22 +371,22 @@ impl From<EntityDataValue> for UpdateMetadataError {
         code.append("")
         code.append("#[derive(Bundle)]")
         code.append(f"pub struct {bundle_struct_name} {{")
-        code.append(f"    _marker: {struct_name},")
+        code.append(f"   pub _marker: {struct_name},")
         if parent_struct_name:
-            code.append(f"    parent: {parent_struct_name}MetadataBundle,")
+            code.append(f"   pub parent: {parent_struct_name}MetadataBundle,")
         for index, name_or_bitfield in get_entity_metadata_names(
             entity_id, burger_entity_metadata, mappings
         ).items():
             if isinstance(name_or_bitfield, str):
                 name_or_bitfield = maybe_rename_field(name_or_bitfield, index)
                 struct_name = upper_first_letter(to_camel_case(name_or_bitfield))
-                code.append(f"    {name_or_bitfield}: {struct_name},")
+                code.append(f"   pub {name_or_bitfield}: {struct_name},")
             else:
                 for mask, name in name_or_bitfield.items():
                     name = maybe_rename_field(name, index)
 
                     struct_name = upper_first_letter(to_camel_case(name))
-                    code.append(f"    {name}: {struct_name},")
+                    code.append(f"   pub {name}: {struct_name},")
         code.append("}")
 
         # impl Default for AllayBundle {

@@ -3,11 +3,10 @@ use azalea::{
     core::direction::Direction,
     physics::collision::BlockWithShape,
 };
-use glam::IVec3;
 use azalea_assets::processed::{atlas::PlacedSprite, model::Cube};
-use crate::renderer::{
-    chunk::LocalSection,
-};
+use glam::IVec3;
+
+use crate::renderer::chunk::LocalSection;
 
 pub struct Face {
     pub offsets: [IVec3; 4],

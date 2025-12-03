@@ -1,0 +1,19 @@
+[package]
+name = "azalea-assets"
+description = "parsing and loading texture packs and entity models"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+glam.workspace = true
+azalea-block.workspace = true
+azalea-core.workspace = true
+serde.workspace = true
+log.workspace = true
+image = "0.25.8"
+serde_json.workspace = true
+serde-tuple-vec-map = "1"
+regex.workspace = true
+thiserror.workspace = true

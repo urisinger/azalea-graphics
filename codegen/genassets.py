@@ -44,7 +44,7 @@ def extract_assets(version_id: str):
     get_pumpkin_data(version_id, 'entity_models', client=True)
     category_dir = get_pumpkin_dir(version_id, 'entity_models', client=True)
 
-    shutil.copy(category_dir, f"{assets_output_dir}/entity_models.json")
+    shutil.copy(category_dir, f"{assets_output_dir}/minecraft/entity_models.json")
     
     print(f"Asset extraction complete! Assets saved to: {assets_output_dir}")
 

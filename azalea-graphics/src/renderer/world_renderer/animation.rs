@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 
-use image::{GenericImageView, RgbaImage};
-
 use azalea_assets::processed::{
     animation::Animation,
     atlas::{Atlas, TextureEntry},
 };
+use image::{GenericImageView, RgbaImage};
 
 pub struct AnimationManager {
     block_states: HashMap<String, BlockAnimationState>,
