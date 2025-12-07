@@ -31,7 +31,6 @@ thiserror.workspace = true
 regex.workspace = true
 simdnbt.workspace = true
 anyhow.workspace = true
-bytemuck = "1.23.2"
 clap = {version = "4.5.48", features=["derive"]}
 num_cpus = "1.17.0"
 tracing.workspace = true
@@ -44,4 +43,4 @@ env_logger = "0.11"
 anyhow = "1"
 
 [build-dependencies]
-cargo-gpu = {git = "https://github.com/rust-gpu/cargo-gpu", rev = "9561c1641a8cdd8fb59b65dde1c3d150337b7d11"}
+cargo-gpu = {git = "https://github.com/rust-gpu/cargo-gpu"}

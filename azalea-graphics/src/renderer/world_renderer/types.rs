@@ -1,7 +1,6 @@
 use std::mem::offset_of;
 
 use ash::vk;
-use bytemuck::{NoUninit, Zeroable};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
@@ -52,16 +51,15 @@ impl BlockVertex {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct PushConstants {
+pub struct Uniform {
     pub view_proj: glam::Mat4,
 }
 
-#[repr(C, align(16))]
-#[derive(Clone, Copy, Default, Zeroable, NoUninit)]
-pub struct VisibilityPushConstants {
-    pub view_proj: [[f32; 4]; 4],
-    pub grid_origin_ws: [f32; 4],
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct VisibilityUniform {
+    pub view_proj: glam::Mat4,
+    pub grid_origin_ws: glam::Vec4,
     pub radius: i32,
     pub height: i32,
-    pub _padding: [i32; 2],
 }

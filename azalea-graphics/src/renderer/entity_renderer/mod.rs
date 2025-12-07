@@ -1,24 +1,123 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
-use azalea_assets::Assets;
+use ash::vk;
+use azalea_assets::{Assets, entity::ModelPart};
+use glam::{Mat4, Vec2, Vec3};
+use vk_mem::MemoryUsage;
 
-use crate::renderer::entity_renderer::state::RenderState;
-
+use crate::renderer::{
+    entity_renderer::state::RenderState,
+    frame_ctx::FrameCtx,
+    vulkan::{buffer::Buffer, context::VkContext},
+};
 
 mod renderers;
 mod state;
+mod pipelines;
+
+struct EntityVertex {
+    pub pos: Vec3,
+    pub transform_id: u32,
+    pub uv: Vec2,
+}
+
+struct EntityModel {
+    pub offset: u32,
+    pub size: u32,
+}
 
 pub struct EntityRenderer {
     assets: Arc<Assets>,
+
+    //entity_pipeline: vk::Pipeline,
+    //entity_pipeline_layout: vk::PipelineLayout,
+
+    model_vertices: Buffer,
+    loaded_models: HashMap<String, EntityModel>,
 }
 
 impl EntityRenderer {
-    pub fn new(assets: Arc<Assets>) -> Self {
-        Self { assets }
+    pub fn new(ctx: &VkContext, assets: Arc<Assets>) -> Self {
+        let mut buf = Vec::new();
+        let loaded_models = assets
+            .entity_models
+            .iter()
+            .map(|(name, model)| {
+                let offset = buf.len() as u32;
+                let size = Self::load_model_part(&mut buf, 0, model);
+
+                (name.clone(), EntityModel { offset, size })
+            })
+            .collect();
+
+        let mut staging = Buffer::new(
+            ctx,
+            buf.len() as vk::DeviceSize,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            MemoryUsage::AutoPreferHost,
+            true,
+        );
+        let cmd = ctx.begin_one_time_commands();
+
+        staging.upload_data(ctx, 0, &buf);
+        let model_vertices = Buffer::new(
+            ctx,
+            buf.len() as vk::DeviceSize,
+            vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+            MemoryUsage::AutoPreferDevice,
+            false,
+        );
+        ctx.end_one_time_commands(cmd);
+        Self {
+            assets,
+            loaded_models,
+            model_vertices,
+        }
     }
 
-    pub fn render(&mut self, states: Vec<RenderState>){
+    fn load_model_part(
+        vertices: &mut Vec<EntityVertex>,
+        transform_id: u32,
+        model_part: &ModelPart,
+    ) -> u32 {
+        let mut num_vertices = 0;
+        for cuboid in &model_part.cuboids {
+            for side in &cuboid.sides {
+                for vertex in &side.vertices {
+                    vertices.push(EntityVertex {
+                        pos: vertex.pos,
+                        transform_id,
+                        uv: vertex.uv.unwrap_or(Vec2::ZERO),
+                    });
 
+                    num_vertices += 1;
+                }
+            }
+        }
+        for (_, child) in &model_part.children {
+            num_vertices += Self::load_model_part(vertices, transform_id + 1, &child);
+        }
+        num_vertices
+    }
+
+    fn render_model(&self, frame_ctx: FrameCtx, model: EntityModel, transform: Mat4) {
+        let device = frame_ctx.ctx.device();
+        unsafe { device.cmd_draw(frame_ctx.cmd, model.size, 1, model.offset, 0) };
+    }
+
+    pub fn render(&mut self, ctx: FrameCtx, states: Vec<RenderState>) {
+
+        let device = ctx.ctx.device();
+        unsafe { device.cmd_bind_vertex_buffers(ctx.cmd, 0, &[self.model_vertices.buffer], &[0]) };
+        for state in states {
+            match state {
+                RenderState::Zombie(s) => {
+                    let entity_model = s.parent.parent.parent.parent;
+                    let zombie_model = &self.loaded_models["zombie#main"];
+
+                }
+            }
+        }
     }
 }
 

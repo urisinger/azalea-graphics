@@ -1,12 +1,9 @@
 use spirv_std::{
-    glam::{IVec3, Mat4, UVec2, Vec2, Vec3, Vec4, Vec4Swizzles},
-    image::{Image, SampledImage},
-    num_traits::Float,
-    spirv,
+    glam::{IVec3, Mat4, UVec2, Vec2, Vec3, Vec4, Vec4Swizzles}, image::{Image, SampledImage}, num_traits::Float, spirv
 };
 
 #[repr(C)]
-pub struct PushConstants {
+pub struct Uniform {
     pub view_proj: Mat4,
     pub grid_origin_ws: Vec4,
     pub radius: i32,
@@ -15,27 +12,28 @@ pub struct PushConstants {
 
 #[spirv(compute(threads(1, 1, 1)))]
 pub fn cull_chunks(
-    #[spirv(push_constant)] pc: &PushConstants,
 
     #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] visible: &mut [f32],
+
+    #[spirv(descriptor_set = 0, binding = 1, uniform)] uniform: &Uniform,
     #[spirv(descriptor_set = 1, binding = 0)] hiz: &SampledImage<Image!(2D, type=f32, sampled)>,
     #[spirv(global_invocation_id)] gid: IVec3,
 ) {
     const CHUNK_SIZE: f32 = 16.0;
-    let side = pc.radius * 2 + 1;
+    let side = uniform.radius * 2 + 1;
 
-    if gid.y < 0 || gid.y >= pc.height || gid.x < 0 || gid.x >= side || gid.z < 0 || gid.z >= side {
+    if gid.y < 0 || gid.y >= uniform.height || gid.x < 0 || gid.x >= side || gid.z < 0 || gid.z >= side {
         return;
     }
 
-    let dx = gid.x - pc.radius;
+    let dx = gid.x - uniform.radius;
     let dy = gid.y;
-    let dz = gid.z - pc.radius;
+    let dz = gid.z - uniform.radius;
 
-    let index = (dy * side * side) + ((dz + pc.radius) * side) + (dx + pc.radius);
+    let index = (dy * side * side) + ((dz + uniform.radius) * side) + (dx + uniform.radius);
 
     let base =
-        pc.grid_origin_ws.truncate() + Vec3::new(dx as f32, dy as f32, dz as f32) * CHUNK_SIZE;
+        uniform.grid_origin_ws.truncate() + Vec3::new(dx as f32, dy as f32, dz as f32) * CHUNK_SIZE;
     let bmin = base;
     let bmax = base + Vec3::splat(CHUNK_SIZE);
 
@@ -51,14 +49,14 @@ pub fn cull_chunks(
     ];
 
     let corners_clip: [_; 8] = [
-        pc.view_proj * corners_ws[0].extend(1.0),
-        pc.view_proj * corners_ws[1].extend(1.0),
-        pc.view_proj * corners_ws[2].extend(1.0),
-        pc.view_proj * corners_ws[3].extend(1.0),
-        pc.view_proj * corners_ws[4].extend(1.0),
-        pc.view_proj * corners_ws[5].extend(1.0),
-        pc.view_proj * corners_ws[6].extend(1.0),
-        pc.view_proj * corners_ws[7].extend(1.0),
+        uniform.view_proj * corners_ws[0].extend(1.0),
+        uniform.view_proj * corners_ws[1].extend(1.0),
+        uniform.view_proj * corners_ws[2].extend(1.0),
+        uniform.view_proj * corners_ws[3].extend(1.0),
+        uniform.view_proj * corners_ws[4].extend(1.0),
+        uniform.view_proj * corners_ws[5].extend(1.0),
+        uniform.view_proj * corners_ws[6].extend(1.0),
+        uniform.view_proj * corners_ws[7].extend(1.0),
     ];
 
     for plane in 0..6 {

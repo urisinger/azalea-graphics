@@ -6,13 +6,13 @@ use spirv_std::{
 };
 
 #[repr(C)]
-pub struct BlockPushConstants {
+pub struct WorldUniform {
     view_proj: Mat4,
 }
 
 #[spirv(vertex)]
 pub fn block_vert(
-    #[spirv(push_constant)] pc: &BlockPushConstants,
+    #[spirv(descriptor_set = 0, binding = 1, uniform)] pc: &WorldUniform,
 
     in_pos: Vec3,
     in_ao: f32,
@@ -51,7 +51,7 @@ pub fn block_frag(
 
 #[spirv(vertex)]
 pub fn water_vert(
-    #[spirv(push_constant)] pc: &BlockPushConstants,
+    #[spirv(descriptor_set = 0, binding = 1, uniform)] pc: &WorldUniform,
 
     in_pos: Vec3,
     in_ao: f32,

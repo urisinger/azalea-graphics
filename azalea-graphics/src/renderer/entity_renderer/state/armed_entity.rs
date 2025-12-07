@@ -4,11 +4,11 @@ use crate::renderer::entity_renderer::{ArmPose, state::living_entity::LivingEnti
 
 #[derive(Debug, Clone)]
 pub struct ArmedEntityRenderState {
-    parent: LivingEntityRenderState,
-    main_arm: Arm,
-    right_arm_pose: ArmPose,
+    pub parent: LivingEntityRenderState,
+    pub main_arm: Arm,
+    pub right_arm_pose: ArmPose,
     //right_hand_item_state: ItemRenderState,
-    left_arm_pose: ArmPose,
+    pub left_arm_pose: ArmPose,
     //left_hand_item_state: ItemRenderState,
 }
 

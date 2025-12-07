@@ -25,8 +25,8 @@ fn chunk_coords(instance: u32, pc: &PC) -> IVec3 {
 
 #[spirv(vertex)]
 pub fn aabb_vert(
-    #[spirv(push_constant)] pc: &PC,
     #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] visible: &[u32],
+    #[spirv(descriptor_set = 0, binding = 1, uniform)] pc: &PC,
 
     #[spirv(vertex_index)] vertex_index: i32,
     #[spirv(instance_index)] instance_index: u32,

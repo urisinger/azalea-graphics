@@ -1,7 +1,7 @@
 pub(crate) mod buffers;
 pub(crate) mod compute;
 
-pub fn aabb_visible(view_proj: glam::Mat4, min: glam::Vec3, max: glam::Vec3) -> bool {
+pub fn aabb_visible(view_proj: &glam::Mat4, min: glam::Vec3, max: glam::Vec3) -> bool {
     // Precompute the 8 corners in clip space
     let corners: [glam::Vec4; 8] = [
         view_proj * min.extend(1.0),

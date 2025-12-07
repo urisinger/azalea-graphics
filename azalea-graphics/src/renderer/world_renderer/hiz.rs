@@ -1,7 +1,11 @@
 use ash::{Device, vk};
 use vk_mem::Alloc;
 
-use crate::renderer::vulkan::{context::VkContext, image::AllocatedImage};
+use crate::renderer::{
+    frame_ctx::FrameCtx,
+    vulkan::{context::VkContext, image::AllocatedImage},
+    world_renderer::render_targets::RenderTargets,
+};
 
 pub struct HiZPyramid {
     pub image: vk::Image,
@@ -394,17 +398,16 @@ impl HiZCompute {
         }
     }
 
-    pub fn dispatch_all_levels(
-        &self,
-        ctx: &VkContext,
-        cmd: vk::CommandBuffer,
-        image_idx: u32,
-        pyramid: &HiZPyramid,
-        depth_image: &AllocatedImage,
-        base_width: u32,
-        base_height: u32,
-    ) {
+    pub fn dispatch_all_levels(&self, frame_ctx: &mut FrameCtx, render_targets: &RenderTargets) {
+        let FrameCtx {
+            ctx,
+            cmd,
+            image_index,
+            extent,
+            ..
+        } = frame_ctx;
         let device = ctx.device();
+        let pyramid = &render_targets.depth_pyramids[*image_index as usize];
 
         let pyramid_full = vk::ImageSubresourceRange {
             aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -416,7 +419,7 @@ impl HiZCompute {
 
         unsafe {
             device.cmd_pipeline_barrier(
-                cmd,
+                *cmd,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::BY_REGION,
@@ -430,18 +433,18 @@ impl HiZCompute {
                     .subresource_range(pyramid_full)],
             );
 
-            device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.copy_pipeline);
+            device.cmd_bind_pipeline(*cmd, vk::PipelineBindPoint::COMPUTE, self.copy_pipeline);
             device.cmd_bind_descriptor_sets(
-                cmd,
+                *cmd,
                 vk::PipelineBindPoint::COMPUTE,
                 self.copy_pipeline_layout,
                 0,
-                &[self.copy_sets[image_idx as usize]],
+                &[self.copy_sets[*image_index as usize]],
                 &[],
             );
-            let gx = (base_width + 7) / 8;
-            let gy = (base_height + 7) / 8;
-            device.cmd_dispatch(cmd, gx.max(1), gy.max(1), 1);
+            let gx = (extent.width + 7) / 8;
+            let gy = (extent.height + 7) / 8;
+            device.cmd_dispatch(*cmd, gx.max(1), gy.max(1), 1);
 
             let mip0_range = vk::ImageSubresourceRange {
                 aspect_mask: vk::ImageAspectFlags::COLOR,
@@ -451,7 +454,7 @@ impl HiZCompute {
                 layer_count: 1,
             };
             device.cmd_pipeline_barrier(
-                cmd,
+                *cmd,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::BY_REGION,
@@ -466,11 +469,11 @@ impl HiZCompute {
                     .subresource_range(mip0_range)],
             );
 
-            device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::COMPUTE, self.reduce_pipeline);
+            device.cmd_bind_pipeline(*cmd, vk::PipelineBindPoint::COMPUTE, self.reduce_pipeline);
         }
 
-        let mut w = (base_width / 2).max(1);
-        let mut h = (base_height / 2).max(1);
+        let mut w = (extent.width / 2).max(1);
+        let mut h = (extent.height / 2).max(1);
 
         for level in 1..pyramid.mip_levels {
             let prev = level - 1;
@@ -484,7 +487,7 @@ impl HiZCompute {
 
             unsafe {
                 device.cmd_pipeline_barrier(
-                    cmd,
+                    *cmd,
                     vk::PipelineStageFlags::COMPUTE_SHADER,
                     vk::PipelineStageFlags::COMPUTE_SHADER,
                     vk::DependencyFlags::BY_REGION,
@@ -499,16 +502,16 @@ impl HiZCompute {
                         .subresource_range(prev_range)],
                 );
                 device.cmd_bind_descriptor_sets(
-                    cmd,
+                    *cmd,
                     vk::PipelineBindPoint::COMPUTE,
                     self.reduce_pipeline_layout,
                     0,
-                    &[self.reduce_sets[image_idx as usize][(level - 1) as usize]],
+                    &[self.reduce_sets[*image_index as usize][(level - 1) as usize]],
                     &[],
                 );
                 let gx = (w + 7) / 8;
                 let gy = (h + 7) / 8;
-                device.cmd_dispatch(cmd, gx.max(1), gy.max(1), 1);
+                device.cmd_dispatch(*cmd, gx.max(1), gy.max(1), 1);
             }
 
             w = (w / 2).max(1);
@@ -517,7 +520,7 @@ impl HiZCompute {
 
         unsafe {
             device.cmd_pipeline_barrier(
-                cmd,
+                *cmd,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::PipelineStageFlags::COMPUTE_SHADER,
                 vk::DependencyFlags::BY_REGION,

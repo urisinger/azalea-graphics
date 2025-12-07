@@ -3,9 +3,9 @@ use azalea::{ecs::{entity::Entity, world::World}, entity::metadata::{Aggressive,
 use super::biped::BipedRenderState;
 
 pub struct ZombieRenderState {
-    parent: BipedRenderState,
-    attacking: bool,
-    converting_in_water: bool,
+    pub parent: BipedRenderState,
+    pub attacking: bool,
+    pub converting_in_water: bool,
 }
 
 impl ZombieRenderState {

@@ -1,10 +1,10 @@
-use std::{ffi::CString, mem};
+use std::ffi::CString;
 
 use ash::{Device, vk};
 
 use crate::renderer::{
     vulkan::{buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT},
-    world_renderer::types::VisibilityPushConstants,
+    world_renderer::types::VisibilityUniform,
 };
 
 pub struct AabbRenderer {
@@ -12,35 +12,41 @@ pub struct AabbRenderer {
     pub pipeline: vk::Pipeline,
     pub descriptor_set_layout: vk::DescriptorSetLayout,
     pub descriptor_pool: vk::DescriptorPool,
-    pub descriptor_sets: Vec<vk::DescriptorSet>,
+    pub descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 }
 
 impl AabbRenderer {
-    pub fn new(ctx: &VkContext, module: vk::ShaderModule, render_pass: vk::RenderPass) -> Self {
+    pub fn new(
+        ctx: &VkContext,
+        uniform_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT],
+        module: vk::ShaderModule,
+        render_pass: vk::RenderPass,
+    ) -> Self {
         let device = ctx.device();
 
-        let binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::VERTEX);
+        let bindings = [
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(0)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(1)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::VERTEX),
+        ];
 
-        let layout_info =
-            vk::DescriptorSetLayoutCreateInfo::default().bindings(std::slice::from_ref(&binding));
+        let layout_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
         let descriptor_set_layout = unsafe {
             device
                 .create_descriptor_set_layout(&layout_info, None)
                 .unwrap()
         };
 
-        let push_constant_range = vk::PushConstantRange::default()
-            .stage_flags(vk::ShaderStageFlags::VERTEX)
-            .offset(0)
-            .size(mem::size_of::<VisibilityPushConstants>() as u32);
-
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-            .set_layouts(std::slice::from_ref(&descriptor_set_layout))
-            .push_constant_ranges(std::slice::from_ref(&push_constant_range));
+            .set_layouts(std::slice::from_ref(&descriptor_set_layout));
+
         let pipeline_layout = unsafe {
             device
                 .create_pipeline_layout(&pipeline_layout_info, None)
@@ -56,13 +62,37 @@ impl AabbRenderer {
             .pool_sizes(std::slice::from_ref(&pool_size))
             .max_sets(MAX_FRAMES_IN_FLIGHT as u32);
         let descriptor_pool = unsafe { device.create_descriptor_pool(&pool_info, None).unwrap() };
+        let layouts = vec![descriptor_set_layout; MAX_FRAMES_IN_FLIGHT];
+        let alloc_info = vk::DescriptorSetAllocateInfo::default()
+            .descriptor_pool(descriptor_pool)
+            .set_layouts(&layouts);
+
+        let descriptor_sets: [_; MAX_FRAMES_IN_FLIGHT] =
+            unsafe { device.allocate_descriptor_sets(&alloc_info).unwrap() }
+                .try_into()
+                .expect("size should match frames in flight");
+
+        for i in 0..MAX_FRAMES_IN_FLIGHT {
+            unsafe {
+                device.update_descriptor_sets(
+                    &[vk::WriteDescriptorSet::default()
+                        .dst_set(descriptor_sets[i])
+                        .dst_binding(1)
+                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                        .buffer_info(&[vk::DescriptorBufferInfo::default()
+                            .buffer(uniform_buffers[i].buffer)
+                            .range(size_of::<VisibilityUniform>() as u64)])],
+                    &[],
+                );
+            }
+        }
 
         Self {
             pipeline_layout,
             pipeline,
             descriptor_set_layout,
             descriptor_pool,
-            descriptor_sets: Vec::new(),
+            descriptor_sets,
         }
     }
 
@@ -159,19 +189,6 @@ impl AabbRenderer {
         device: &Device,
         visibility_buffers: &[Buffer; MAX_FRAMES_IN_FLIGHT],
     ) {
-        unsafe {
-            device
-                .reset_descriptor_pool(self.descriptor_pool, vk::DescriptorPoolResetFlags::empty())
-                .unwrap();
-        }
-
-        let layouts = vec![self.descriptor_set_layout; MAX_FRAMES_IN_FLIGHT];
-        let alloc_info = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(self.descriptor_pool)
-            .set_layouts(&layouts);
-
-        self.descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info).unwrap() };
-
         for (i, buffer) in visibility_buffers.iter().enumerate() {
             let buffer_info = vk::DescriptorBufferInfo::default()
                 .buffer(buffer.buffer)
@@ -194,23 +211,11 @@ impl AabbRenderer {
         &self,
         device: &Device,
         cmd: vk::CommandBuffer,
-        push_constants: &VisibilityPushConstants,
         instance_count: u32,
         buffer_index: usize,
     ) {
         unsafe {
             device.cmd_bind_pipeline(cmd, vk::PipelineBindPoint::GRAPHICS, self.pipeline);
-
-            device.cmd_push_constants(
-                cmd,
-                self.pipeline_layout,
-                vk::ShaderStageFlags::VERTEX,
-                0,
-                std::slice::from_raw_parts(
-                    push_constants as *const VisibilityPushConstants as *const u8,
-                    mem::size_of::<VisibilityPushConstants>(),
-                ),
-            );
 
             device.cmd_bind_descriptor_sets(
                 cmd,

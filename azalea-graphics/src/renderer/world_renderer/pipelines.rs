@@ -1,9 +1,6 @@
 use ash::{Device, vk};
 
-use crate::renderer::{
-    vulkan::context::VkContext,
-    world_renderer::types::{BlockVertex, PushConstants},
-};
+use crate::renderer::{vulkan::context::VkContext, world_renderer::types::BlockVertex};
 
 fn create_shader_module(device: &Device, code: &[u32]) -> vk::ShaderModule {
     let info = vk::ShaderModuleCreateInfo::default().code(&code);
@@ -15,14 +12,8 @@ pub fn create_world_pipeline_layout(
     descriptor_set_layout: vk::DescriptorSetLayout,
 ) -> vk::PipelineLayout {
     let layouts = [descriptor_set_layout];
-    let push_constant_range = vk::PushConstantRange::default()
-        .stage_flags(vk::ShaderStageFlags::VERTEX)
-        .offset(0)
-        .size(std::mem::size_of::<PushConstants>() as u32);
 
-    let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
-        .set_layouts(&layouts)
-        .push_constant_ranges(std::slice::from_ref(&push_constant_range));
+    let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts);
 
     unsafe {
         device
