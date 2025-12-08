@@ -3,7 +3,8 @@ use std::{sync::Arc, time::Instant};
 use azalea::core::position::{ChunkPos, ChunkSectionPos};
 use clap::Parser;
 use crossbeam::channel::{Receiver, Sender, unbounded};
-use parking_lot::RwLock;
+use egui::ahash::HashMap;
+use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::{
     application::ApplicationHandler,
@@ -13,7 +14,7 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::renderer::Renderer;
+use crate::renderer::{Renderer, world_renderer::state::RenderState};
 
 pub enum WorldUpdate {
     ChunkAdded(ChunkPos),
@@ -29,6 +30,8 @@ pub enum RendererEvent {
 pub struct RendererHandle {
     pub tx: Sender<WorldUpdate>,
     pub rx: Receiver<RendererEvent>,
+
+    pub entities: Arc<Mutex<Vec<RenderState>>>,
 }
 
 impl RendererHandle {
@@ -60,6 +63,7 @@ pub struct App {
     evt_tx: Sender<RendererEvent>,
 
     renderer: Option<Renderer>,
+    pub entities: Arc<Mutex<Vec<RenderState>>>,
 
     last_frame_time: Instant,
 
@@ -76,12 +80,14 @@ impl App {
         let handle = RendererHandle {
             tx: cmd_tx,
             rx: evt_rx,
+            entities: Arc::new(Mutex::new(Vec::new())),
         };
         let app = App {
             window: None,
             args,
             cmd_rx,
             evt_tx,
+            entities: handle.entities.clone(),
             renderer: None,
             last_frame_time: Instant::now(),
             is_focused: false,
@@ -114,6 +120,7 @@ impl ApplicationHandler for App {
             size,
             event_loop,
             &self.args,
+            self.entities.clone()
         )
         .expect("Failed to create renderer");
         self.renderer = Some(renderer);

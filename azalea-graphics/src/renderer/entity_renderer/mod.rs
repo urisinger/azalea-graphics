@@ -3,23 +3,26 @@ use std::{collections::HashMap, sync::Arc};
 use ash::vk;
 use azalea_assets::{Assets, entity::ModelPart};
 use glam::{Mat4, Vec2, Vec3};
+use parking_lot::Mutex;
 use vk_mem::MemoryUsage;
 
 use crate::renderer::{
-    entity_renderer::state::RenderState,
     frame_ctx::FrameCtx,
     vulkan::{buffer::Buffer, context::VkContext},
+    world_renderer::{
+        entity_renderer::{
+            pipelines::create_entity_pipeline,
+            state::RenderState,
+            types::{EntityPushConstants, EntityVertex},
+        },
+        texture_manager::TextureManager,
+    },
 };
 
-mod renderers;
-mod state;
 mod pipelines;
-
-struct EntityVertex {
-    pub pos: Vec3,
-    pub transform_id: u32,
-    pub uv: Vec2,
-}
+mod renderers;
+pub mod state;
+mod types;
 
 struct EntityModel {
     pub offset: u32,
@@ -29,21 +32,32 @@ struct EntityModel {
 pub struct EntityRenderer {
     assets: Arc<Assets>,
 
-    //entity_pipeline: vk::Pipeline,
-    //entity_pipeline_layout: vk::PipelineLayout,
+    entity_pipeline: vk::Pipeline,
+    entity_pipeline_layout: vk::PipelineLayout,
 
     model_vertices: Buffer,
     loaded_models: HashMap<String, EntityModel>,
+
+    entities: Arc<Mutex<Vec<RenderState>>>,
+
+    texture_manager: Arc<TextureManager>,
 }
 
 impl EntityRenderer {
-    pub fn new(ctx: &VkContext, assets: Arc<Assets>) -> Self {
+    pub fn new(
+        ctx: &VkContext,
+        module: vk::ShaderModule,
+        render_pass: vk::RenderPass,
+        assets: Arc<Assets>,
+        texture_manager: Arc<TextureManager>,
+        entities: Arc<Mutex<Vec<RenderState>>>,
+    ) -> Self {
         let mut buf = Vec::new();
         let loaded_models = assets
             .entity_models
             .iter()
             .map(|(name, model)| {
-                let offset = buf.len() as u32;
+                let offset = (buf.len() * size_of::<EntityVertex>()) as u32;
                 let size = Self::load_model_part(&mut buf, 0, model);
 
                 (name.clone(), EntityModel { offset, size })
@@ -52,7 +66,7 @@ impl EntityRenderer {
 
         let mut staging = Buffer::new(
             ctx,
-            buf.len() as vk::DeviceSize,
+            (buf.len() * size_of::<EntityVertex>()) as vk::DeviceSize,
             vk::BufferUsageFlags::TRANSFER_SRC,
             MemoryUsage::AutoPreferHost,
             true,
@@ -62,16 +76,40 @@ impl EntityRenderer {
         staging.upload_data(ctx, 0, &buf);
         let model_vertices = Buffer::new(
             ctx,
-            buf.len() as vk::DeviceSize,
+            (buf.len() * size_of::<EntityVertex>()) as vk::DeviceSize,
             vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
             MemoryUsage::AutoPreferDevice,
             false,
         );
         ctx.end_one_time_commands(cmd);
+
+        let world_layout = unsafe {
+            ctx.device()
+                .create_descriptor_set_layout(
+                    &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
+                        vk::DescriptorSetLayoutBinding::default()
+                            .binding(0)
+                            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER),
+                    ]),
+                    None,
+                )
+                .unwrap()
+        };
+
+        let (entity_pipeline_layout, entity_pipeline) = create_entity_pipeline(
+            ctx,
+            module,
+            texture_manager.descriptor_set_layout(),
+            render_pass,
+        );
         Self {
             assets,
             loaded_models,
             model_vertices,
+            entity_pipeline,
+            entity_pipeline_layout,
+            entities,
+            texture_manager,
         }
     }
 
@@ -100,21 +138,65 @@ impl EntityRenderer {
         num_vertices
     }
 
-    fn render_model(&self, frame_ctx: FrameCtx, model: EntityModel, transform: Mat4) {
+    fn render_model(
+        &self,
+        frame_ctx: &mut FrameCtx,
+        model: &EntityModel,
+        transform: Mat4,
+        texture: &str,
+    ) {
         let device = frame_ctx.ctx.device();
-        unsafe { device.cmd_draw(frame_ctx.cmd, model.size, 1, model.offset, 0) };
+        let tex = self.texture_manager.get_texture(frame_ctx, texture);
+
+        let push_constants = EntityPushConstants {
+            model: transform,
+            tex_id: tex,
+        };
+        unsafe {
+            device.cmd_push_constants(
+                frame_ctx.cmd,
+                self.entity_pipeline_layout,
+                vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                0,
+                std::slice::from_raw_parts(
+                    &push_constants as *const _ as *const u8,
+                    std::mem::size_of::<EntityPushConstants>(),
+                ),
+            );
+            device.cmd_draw(frame_ctx.cmd, model.size, 1, model.offset, 0)
+        };
     }
 
-    pub fn render(&mut self, ctx: FrameCtx, states: Vec<RenderState>) {
-
+    pub fn render(&mut self, ctx: &mut FrameCtx) {
+        let states = self.entities.lock();
         let device = ctx.ctx.device();
         unsafe { device.cmd_bind_vertex_buffers(ctx.cmd, 0, &[self.model_vertices.buffer], &[0]) };
-        for state in states {
+        unsafe {
+            device.cmd_bind_descriptor_sets(
+                ctx.cmd,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.entity_pipeline_layout,
+                0,
+                &[self
+                    .texture_manager
+                    .get_descriptor_set(device, ctx.frame_index)],
+                &[],
+            );
+        }
+        for state in states.iter() {
             match state {
                 RenderState::Zombie(s) => {
-                    let entity_model = s.parent.parent.parent.parent;
+                    let entity_model = &s.parent.parent.parent.parent;
                     let zombie_model = &self.loaded_models["zombie#main"];
+                    let pos = entity_model.x;
 
+                    let transform = Mat4::from_translation(Vec3::new(
+                        entity_model.x as f32,
+                        entity_model.y as f32,
+                        entity_model.z as f32,
+                    ));
+
+                    self.render_model(ctx, zombie_model, transform, "");
                 }
             }
         }

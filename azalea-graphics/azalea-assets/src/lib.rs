@@ -21,6 +21,7 @@ use self::{
 use crate::processed::atlas::TextureEntry;
 
 pub struct Assets {
+    path: PathBuf,
     blockstate_to_models: Vec<Vec<VariantDesc>>,
 
     pub block_atlas: Atlas,
@@ -52,6 +53,10 @@ impl Assets {
         self.foliage_colormap
             .as_ref()
             .map(|colormap| sample_colormap_at_climate(colormap, temperature, downfall))
+    }
+
+    pub fn get_path(&self, id: String) -> PathBuf {
+        self.path.join(id)
     }
 }
 
@@ -279,6 +284,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     info!("Total asset load time: {:?}", start_total.elapsed());
 
     Assets {
+        path,
         blockstate_to_models,
         grass_colormap,
         foliage_colormap,

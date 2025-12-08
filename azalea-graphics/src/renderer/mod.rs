@@ -2,6 +2,7 @@ use std::{io::Cursor, sync::Arc, time::Duration};
 
 use ash::{util::read_spv, vk};
 use crossbeam::channel::Receiver;
+use parking_lot::Mutex;
 use raw_window_handle::{DisplayHandle, WindowHandle};
 use vulkan::{
     context::VkContext,
@@ -24,8 +25,7 @@ use self::{
 use crate::{
     app::{RendererArgs, WorldUpdate},
     renderer::{
-        frame_ctx::FrameCtx, timings::Timings, vulkan::timestamp::TimestampQueryPool,
-        world_renderer::WorldRendererConfig,
+        entity_renderer::EntityRenderer, frame_ctx::FrameCtx, texture_manager::TextureManager, timings::Timings, vulkan::timestamp::TimestampQueryPool, world_renderer::{WorldRendererConfig, state::RenderState}
     },
 };
 
@@ -34,6 +34,7 @@ pub mod chunk;
 mod entity_renderer;
 mod frame_ctx;
 mod mesh;
+mod texture_manager;
 mod timings;
 mod ui;
 pub mod vulkan;
@@ -54,6 +55,7 @@ pub struct Renderer {
     sync: FrameSync,
 
     world: WorldRenderer,
+    entity_renderer: EntityRenderer,
 
     camera: Camera,
     projection: Projection,
@@ -72,6 +74,7 @@ impl Renderer {
         size: PhysicalSize<u32>,
         event_loop: &ActiveEventLoop,
         args: &RendererArgs,
+        entities: Arc<Mutex<Vec<RenderState>>>,
     ) -> anyhow::Result<Self> {
         let context = VkContext::new(window_handle, display_handle, args);
         let swapchain = Swapchain::new(&context, size.width, size.height);
@@ -124,6 +127,16 @@ impl Renderer {
         } else {
             None
         };
+        let texture_manager = TextureManager::new(ctx, assets);
+
+        let entity_renderer = EntityRenderer::new(
+            ctx,
+            module,
+            render_targets.render_pass,
+            assets.clone(),
+            texture_manager,
+            entities,
+        );
 
         Ok(Self {
             context,
@@ -142,6 +155,7 @@ impl Renderer {
             camera,
             projection,
             camera_controller,
+            entity_renderer,
 
             egui,
 

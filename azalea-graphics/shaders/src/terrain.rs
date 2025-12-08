@@ -7,7 +7,7 @@ use spirv_std::{
 
 #[repr(C)]
 pub struct WorldUniform {
-    view_proj: Mat4,
+    pub view_proj: Mat4,
 }
 
 #[spirv(vertex)]

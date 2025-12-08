@@ -1,6 +1,6 @@
 use azalea::{core::arm::Arm, ecs::{entity::Entity, world::World}};
 
-use crate::renderer::entity_renderer::{ArmPose, state::living_entity::LivingEntityRenderState};
+use crate::renderer::world_renderer::entity_renderer::{ArmPose, state::living_entity::LivingEntityRenderState};
 
 #[derive(Debug, Clone)]
 pub struct ArmedEntityRenderState {

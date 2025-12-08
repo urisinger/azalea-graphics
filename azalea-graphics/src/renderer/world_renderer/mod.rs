@@ -5,6 +5,7 @@ use azalea::core::position::ChunkSectionPos;
 use azalea_assets::{Assets, processed::atlas::TextureEntry};
 use glam::{Vec3, Vec4};
 use image::GenericImageView;
+use parking_lot::Mutex;
 use vk_mem::MemoryUsage;
 
 use crate::{
@@ -22,7 +23,9 @@ use crate::{
         world_renderer::{
             aabb_renderer::AabbRenderer,
             animation::AnimationManager,
+            entity_renderer::EntityRenderer,
             mesher::Mesher,
+            state::RenderState,
             types::{Uniform, VisibilityUniform},
             visibility::{buffers::VisibilityBuffers, compute::VisibilityCompute},
         },
@@ -59,6 +62,7 @@ pub struct WorldRenderer {
 
     uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT],
     visibility_uniforms: [Buffer; MAX_FRAMES_IN_FLIGHT],
+
 
     pipelines: Pipelines,
     descriptors: Descriptors,
@@ -110,7 +114,7 @@ impl WorldRenderer {
     ) -> Self {
         let atlas_image =
             animation::create_initial_atlas(&assets.block_atlas, &assets.block_textures);
-        let blocks_texture = Texture::new(ctx, atlas_image);
+        let blocks_texture = Texture::from_image(ctx, atlas_image);
 
         let uniform_buffers: [_; MAX_FRAMES_IN_FLIGHT] = from_fn(|i| {
             Buffer::new(
@@ -161,8 +165,12 @@ impl WorldRenderer {
             32,
             1,
         );
-        let aabb_renderer =
-            AabbRenderer::new(ctx, &visibility_uniforms, module, render_targets.render_pass);
+        let aabb_renderer = AabbRenderer::new(
+            ctx,
+            &visibility_uniforms,
+            module,
+            render_targets.render_pass,
+        );
 
         Self {
             mesher: None,
@@ -693,7 +701,7 @@ impl WorldRenderer {
         if let Some(mut vb) = self.visibility_buffers.take() {
             vb.destroy(ctx);
         }
-        for i in 0..MAX_FRAMES_IN_FLIGHT{
+        for i in 0..MAX_FRAMES_IN_FLIGHT {
             self.uniform_buffers[i].destroy(ctx);
             self.visibility_uniforms[i].destroy(ctx);
         }

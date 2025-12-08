@@ -10,6 +10,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let builder = backend
         .to_spirv_builder(shader_crate, "spirv-unknown-vulkan1.2")
         .capability(Capability::ImageQuery)
+        .capability(Capability::RuntimeDescriptorArray)
         .print_metadata(MetadataPrintout::DependencyOnly)
         .spirv_metadata(SpirvMetadata::Full);
 

@@ -6,17 +6,25 @@ use azalea::{
     chunks::{ReceiveChunkEvent, handle_receive_chunk_event},
     core::position::{ChunkPos, ChunkSectionPos},
     ecs::{
+        entity::Entity,
         message::{MessageReader, MessageWriter},
-        query::Changed,
+        query::{Changed, QueryState},
         schedule::IntoScheduleConfigs,
-        system::{Query, Res},
+        system::{Query, Res, SystemState},
+        world::World,
     },
+    entity::EntityKindComponent,
     local_player::InstanceHolder,
     prelude::*,
+    registry::EntityKind,
+    world::Instance,
 };
 use crossbeam::channel::TryRecvError;
 
-use crate::app::{RendererEvent, RendererHandle};
+use crate::{
+    app::{RendererEvent, RendererHandle},
+    renderer::world_renderer::state::RenderState,
+};
 
 #[derive(Resource, Clone)]
 pub struct RendererResource {
@@ -78,6 +86,24 @@ fn add_world(
         println!("added");
         renderer.handle.add_world(holder.instance.clone());
     }
+}
+
+fn get_entites(
+    world: &mut World,
+    params: &mut SystemState<(Res<RendererResource>, Query<(Entity, &EntityKindComponent)>)>,
+) {
+    let mut entites = Vec::new();
+
+    let (renderer, entity_kinds) = params.get(world);
+    let entities_mutex = renderer.handle.entities.clone();
+    let entity_kinds = entity_kinds.iter().map(|(entity, entity_kind)| (entity, entity_kind.clone())).collect::<Vec<_>>();
+    for (entity, entity_kind) in entity_kinds {
+        if let Some(e) = RenderState::from_entity(world, entity_kind.0, entity) {
+            entites.push(e);
+        }
+    }
+
+    *entities_mutex.lock() = entites;
 }
 
 fn poll_renderer_events(renderer: Res<RendererResource>, mut writer: MessageWriter<AppExit>) {
