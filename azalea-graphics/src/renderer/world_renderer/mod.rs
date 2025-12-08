@@ -400,7 +400,7 @@ impl WorldRenderer {
         ctx.cmd_end_debug_label(frame_ctx.cmd);
     }
 
-    pub fn begin(&self, frame_ctx: &mut FrameCtx) {
+    pub fn begin(&self, frame_ctx: &FrameCtx) {
         let device = frame_ctx.ctx.device();
         let cmd = frame_ctx.cmd;
         let extent = frame_ctx.render_targets.extent();
@@ -452,7 +452,7 @@ impl WorldRenderer {
         }
     }
 
-    pub fn end(&self, frame_ctx: &mut FrameCtx) {
+    pub fn end(&self, frame_ctx: &FrameCtx) {
         unsafe { frame_ctx.ctx.device().cmd_end_render_pass(frame_ctx.cmd) };
     }
 

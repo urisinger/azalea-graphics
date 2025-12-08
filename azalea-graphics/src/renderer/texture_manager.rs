@@ -122,7 +122,6 @@ impl TextureManager {
             self.textures.push(texture);
             self.name_to_index.insert(id.to_string(), texture_id);
             
-            // Mark all descriptor sets as dirty since we added a new texture
             for dirty in &mut self.dirty_descriptor_sets {
                 *dirty = true;
             }

@@ -1,11 +1,12 @@
 use ash::vk::{self};
-use vk_mem::MemoryUsage;
 
 use crate::renderer::{
-    render_targets::RenderTargets, vulkan::{
+    render_targets::RenderTargets,
+    vulkan::{
         buffer::Buffer, context::VkContext, frame_sync::FrameSync, object::VkObject,
         timestamp::TimestampQueryPool,
-    }, world_renderer::WorldRendererConfig
+    },
+    world_renderer::WorldRendererConfig,
 };
 
 pub struct FrameCtx<'a> {
@@ -25,13 +26,7 @@ impl FrameCtx<'_> {
     /// Upload data to a buffer using a staging buffer that is automatically
     /// deleted.
     pub fn upload_to<T>(&mut self, data: &[T], dst: &Buffer) {
-        let mut staging = Buffer::new(
-            self.ctx,
-            dst.size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryUsage::Auto,
-            true,
-        );
+        let mut staging = Buffer::new_staging(self.ctx, dst.size);
 
         staging.upload_data(self.ctx, 0, data);
 
@@ -81,12 +76,9 @@ impl FrameCtx<'_> {
         regions: &[vk::BufferImageCopy],
     ) {
         let size = (std::mem::size_of::<T>() * data.len()) as vk::DeviceSize;
-        let mut staging = Buffer::new(
+        let mut staging = Buffer::new_staging(
             self.ctx,
             size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryUsage::Auto,
-            true,
         );
         staging.upload_data(self.ctx, 0, data);
 

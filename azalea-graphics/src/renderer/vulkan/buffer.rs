@@ -29,6 +29,16 @@ impl Buffer {
         }
     }
 
+    pub fn new_staging(ctx: &VkContext, size: vk::DeviceSize) -> Self {
+        Self::new(
+            ctx,
+            size,
+            vk::BufferUsageFlags::TRANSFER_SRC,
+            MemoryUsage::AutoPreferHost,
+            true,
+        )
+    }
+
     /// Destroy the buffer
     pub fn destroy(&mut self, ctx: &VkContext) {
         ctx.label_object(self.buffer, format!("to_destory_manual: {}", self.size));

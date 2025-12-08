@@ -46,6 +46,7 @@ impl Plugin for RendererPlugin {
             Update,
             handle_block_updates.before(handle_block_update_event),
         );
+        app.add_systems(Update, get_entities);
         app.add_systems(Update, poll_renderer_events);
     }
 }
@@ -83,7 +84,7 @@ fn add_world(
     }
 }
 
-fn get_entites(
+fn get_entities(
     world: &mut World,
     params: &mut SystemState<(Res<RendererResource>, Query<(Entity, &EntityKindComponent)>)>,
 ) {

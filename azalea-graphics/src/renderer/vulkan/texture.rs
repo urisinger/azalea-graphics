@@ -1,7 +1,10 @@
 use ash::vk;
 use vk_mem::{Alloc, Allocation};
 
-use crate::renderer::{frame_ctx::FrameCtx, vulkan::context::VkContext};
+use crate::renderer::{
+    frame_ctx::FrameCtx,
+    vulkan::{buffer::Buffer, context::VkContext},
+};
 
 pub struct Texture {
     pub image: vk::Image,
@@ -128,22 +131,41 @@ impl Texture {
         let allocator = ctx.allocator();
         let image_size = rgba_data.len() as vk::DeviceSize;
 
-        let (staging_buf, mut staging_alloc) = crate::renderer::vulkan::buffer::create_buffer(
-            allocator,
-            image_size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            vk_mem::MemoryUsage::AutoPreferHost,
-            true,
-        );
-
-        unsafe {
-            let ptr = allocator.map_memory(&mut staging_alloc).unwrap();
-            std::ptr::copy_nonoverlapping(rgba_data.as_ptr(), ptr, rgba_data.len());
-            allocator.unmap_memory(&mut staging_alloc);
-        }
+        let mut staging_buf = Buffer::new_staging(ctx, image_size);
+        staging_buf.upload_data(ctx, 0, rgba_data);
 
         let cmd = ctx.begin_one_time_commands();
 
+        Self::record_image_upload(ctx.device(), cmd, &staging_buf, self.image, width, height);
+
+        ctx.end_one_time_commands(cmd);
+
+       staging_buf.destroy(ctx);
+    }
+
+    pub fn upload_data(&mut self, frame: &mut FrameCtx, rgba_data: &[u8], width: u32, height: u32) {
+        let staging_buf = Buffer::new_staging(frame.ctx, rgba_data.len() as u64);
+
+        Self::record_image_upload(
+            frame.ctx.device(),
+            frame.cmd,
+            &staging_buf,
+            self.image,
+            width,
+            height,
+        );
+
+        frame.delete(staging_buf);
+    }
+
+    fn record_image_upload(
+        device: &ash::Device,
+        cmd: vk::CommandBuffer,
+        staging_buffer: &Buffer,
+        image: vk::Image,
+        width: u32,
+        height: u32,
+    ) {
         let subresource_range = vk::ImageSubresourceRange {
             aspect_mask: vk::ImageAspectFlags::COLOR,
             base_mip_level: 0,
@@ -152,69 +174,6 @@ impl Texture {
             layer_count: 1,
         };
 
-        let barrier = vk::ImageMemoryBarrier::default()
-            .old_layout(vk::ImageLayout::UNDEFINED)
-            .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-            .src_access_mask(vk::AccessFlags::empty())
-            .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-            .image(self.image)
-            .subresource_range(subresource_range);
-
-        unsafe {
-            ctx.device().cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier],
-            );
-
-            ctx.device().cmd_copy_buffer_to_image(
-                cmd,
-                staging_buf,
-                self.image,
-                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-                &[vk::BufferImageCopy::default()
-                    .buffer_offset(0)
-                    .image_subresource(vk::ImageSubresourceLayers {
-                        aspect_mask: vk::ImageAspectFlags::COLOR,
-                        mip_level: 0,
-                        base_array_layer: 0,
-                        layer_count: 1,
-                    })
-                    .image_extent(vk::Extent3D {
-                        width,
-                        height,
-                        depth: 1,
-                    })],
-            );
-
-            let barrier2 = vk::ImageMemoryBarrier::default()
-                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                .dst_access_mask(vk::AccessFlags::SHADER_READ)
-                .image(self.image)
-                .subresource_range(subresource_range);
-
-            ctx.device().cmd_pipeline_barrier(
-                cmd,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::FRAGMENT_SHADER,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[],
-                &[barrier2],
-            );
-        }
-
-        ctx.end_one_time_commands(cmd);
-        unsafe { allocator.destroy_buffer(staging_buf, &mut staging_alloc) };
-    }
-
-    pub fn upload_data(&mut self, frame: &mut FrameCtx, rgba_data: &[u8], width: u32, height: u32) {
         let copy_region = vk::BufferImageCopy::default()
             .buffer_offset(0)
             .image_subresource(vk::ImageSubresourceLayers {
@@ -229,12 +188,51 @@ impl Texture {
                 depth: 1,
             });
 
-        frame.upload_to_image(
-            rgba_data,
-            self.image,
-            vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            &[copy_region],
-        );
+        let barrier_to_transfer = vk::ImageMemoryBarrier::default()
+            .old_layout(vk::ImageLayout::UNDEFINED)
+            .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+            .src_access_mask(vk::AccessFlags::empty())
+            .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+            .image(image)
+            .subresource_range(subresource_range);
+
+        unsafe {
+            device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_to_transfer],
+            );
+
+            device.cmd_copy_buffer_to_image(
+                cmd,
+                staging_buffer.buffer,
+                image,
+                vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[copy_region],
+            );
+
+            let barrier_to_shader = vk::ImageMemoryBarrier::default()
+                .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                .dst_access_mask(vk::AccessFlags::SHADER_READ)
+                .image(image)
+                .subresource_range(subresource_range);
+
+            device.cmd_pipeline_barrier(
+                cmd,
+                vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::FRAGMENT_SHADER,
+                vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[barrier_to_shader],
+            );
+        }
     }
 
     pub fn destroy(&mut self, ctx: &VkContext) {

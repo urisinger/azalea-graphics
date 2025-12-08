@@ -419,6 +419,7 @@ impl Renderer {
         frame_ctx.begin_timestamp(timings::START_FRAME);
 
         self.world.render(&mut frame_ctx);
+        self.entity_renderer.render(&mut frame_ctx, &mut self.texture_manager);
         frame_ctx.begin_timestamp(timings::START_UI_PASS);
         let dimensions = [
             self.render_targets.swapchain.extent.width,
@@ -505,6 +506,7 @@ impl Renderer {
             // Let the world renderer handle its own swapchain recreation
             self.world
                 .recreate_swapchain(&self.context, &self.render_targets);
+            self.entity_renderer.recreate_swapchain(&self.context, &self.render_targets);
 
             // Resize egui
             self.egui

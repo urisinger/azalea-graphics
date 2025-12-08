@@ -53,13 +53,7 @@ impl<V> Mesh<V> {
         let index_offset = (vertex_size + align - 1) & !(align - 1);
         let total_size = index_offset + index_size;
 
-        let mut buffer = Buffer::new(
-            ctx,
-            total_size,
-            vk::BufferUsageFlags::TRANSFER_SRC,
-            MemoryUsage::AutoPreferHost,
-            true,
-        );
+        let mut buffer = Buffer::new_staging(ctx, total_size);
 
         buffer.upload_data(ctx, 0, vertices);
         buffer.upload_data(ctx, index_offset, indices);

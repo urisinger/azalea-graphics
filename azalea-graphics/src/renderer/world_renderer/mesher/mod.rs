@@ -453,7 +453,7 @@ impl BiomeCache {
 
         if let Some(biome_registry) = registries
             .map
-            .get(&azalea::ResourceLocation::new(Biome::NAME))
+            .get(&azalea::Identifier::new(Biome::NAME))
         {
             for (_key, value) in biome_registry {
                 let mut nbt_bytes = Vec::new();
