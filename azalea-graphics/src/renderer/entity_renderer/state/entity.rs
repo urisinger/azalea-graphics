@@ -1,6 +1,6 @@
 use azalea::{
     ecs::{entity::Entity, world::World},
-    entity::{Position, metadata::Text},
+    entity::Position,
     physics::collision::VoxelShape,
 };
 use glam::Vec3;

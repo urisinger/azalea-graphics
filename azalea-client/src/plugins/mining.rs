@@ -352,13 +352,13 @@ pub fn handle_mining_queued(
                 });
             }
 
-            let block = Box::<dyn BlockTrait>::from(target_block_state);
+            let block = target_block_state.to_trait();
 
             let held_item = inventory.held_item();
 
             if block_is_solid
                 && get_mine_progress(
-                    block.as_ref(),
+                    block,
                     held_item.kind(),
                     &inventory.inventory_menu,
                     fluid_on_eyes,
@@ -532,7 +532,7 @@ pub fn handle_finish_mining_block_observer(
     };
 
     let registry_block: azalea_registry::Block =
-        Box::<dyn BlockTrait>::from(block_state).as_registry_block();
+        block_state.to_trait().as_registry_block();
     if !can_use_game_master_blocks(abilities, permission_level)
         && matches!(
             registry_block,
@@ -669,9 +669,9 @@ pub fn continue_mining_block(
                 commands.entity(entity).remove::<Mining>();
                 continue;
             }
-            let block = Box::<dyn BlockTrait>::from(target_block_state);
+            let block = target_block_state.to_trait();
             **mine_progress += get_mine_progress(
-                block.as_ref(),
+                block,
                 current_mining_item.kind(),
                 &inventory.inventory_menu,
                 fluid_on_eyes,

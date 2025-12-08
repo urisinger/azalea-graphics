@@ -61,8 +61,8 @@ impl MeshStore {
 
                 touched_buffers.push(mesh.buffer.buffer);
 
-                if let Some(mut old_mesh) = self.insert_block(blocks.section_pos, mesh) {
-                    old_mesh.destroy(frame_ctx.ctx);
+                if let Some(old_mesh) = self.insert_block(blocks.section_pos, mesh) {
+                    frame_ctx.delete(old_mesh.buffer);
                 }
             }
 
@@ -74,8 +74,8 @@ impl MeshStore {
 
                 touched_buffers.push(mesh.buffer.buffer);
 
-                if let Some(mut old_mesh) = self.insert_water(water.section_pos, mesh) {
-                    old_mesh.destroy(frame_ctx.ctx);
+                if let Some(old_mesh) = self.insert_water(water.section_pos, mesh) {
+                    frame_ctx.delete(old_mesh.buffer);
                 }
             }
         }

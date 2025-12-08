@@ -1,6 +1,6 @@
-use azalea::{core::direction::Direction, ecs::{entity::Entity, world::World}, entity::EntityBundle};
+use azalea::{core::direction::Direction, ecs::{entity::Entity, world::World}};
 
-use crate::renderer::world_renderer::entity_renderer::{EntityPose, state::entity::EntityRenderState};
+use crate::renderer::entity_renderer::{EntityPose, state::entity::EntityRenderState};
 
 #[derive(Debug, Clone)]
 pub struct LivingEntityRenderState {

@@ -150,6 +150,7 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
 
     let mut block_state_enum_variants = quote! {};
     let mut block_structs = quote! {};
+    let mut block_statics = quote! {};
 
     let mut from_state_to_block_match = quote! {};
     let mut from_registry_block_to_block_match = quote! {};
@@ -262,19 +263,16 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
             });
             default_state_id = Some(state_id);
 
-            let fn_name = Ident::new(
-                &format!("__make_{}_state_{}", block_struct_name, state_id),
+            let static_name = Ident::new(
+                &format!("__BLOCK_STATE_{}_{}", block_struct_name, state_id).to_uppercase(),
                 proc_macro2::Span::call_site(),
             );
 
-            let ctor_fn = quote! {
-                fn #fn_name() -> Box<dyn BlockTrait> {
-                    Box::new(#block_struct_name {})
-                }
-            };
+            block_statics.extend(quote! {
+                static #static_name: #block_struct_name = #block_struct_name {};
+            });
 
-            block_structs.extend(ctor_fn);
-            from_state_to_block_match.extend(quote! { #fn_name, });
+            from_state_to_block_match.extend(quote! { &#static_name, });
 
             state_id += 1;
         }
@@ -343,20 +341,18 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
                 default_state_id = Some(state_id);
             }
 
-            let fn_name = Ident::new(
-                &format!("__make_{}_state_{}", block_struct_name, state_id),
+            let static_name = Ident::new(
+                &format!("__BLOCK_STATE_{}_{}", block_struct_name, state_id).to_uppercase(),
                 proc_macro2::Span::call_site(),
             );
 
-            let ctor_fn = quote! {
-                fn #fn_name() -> Box<dyn BlockTrait> {
-                    Box::new(#block_struct_name { #from_block_to_state_combination_match_inner })
-                }
-            };
+            block_statics.extend(quote! {
+                static #static_name: #block_struct_name = #block_struct_name {
+                    #from_block_to_state_combination_match_inner
+                };
+            });
 
-            block_structs.extend(ctor_fn);
-
-            from_state_to_block_match.extend(quote! { #fn_name, });
+            from_state_to_block_match.extend(quote! { &#static_name, });
 
             state_id += 1;
         }
@@ -442,7 +438,7 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
         let last_state_id = state_id - 1;
 
         from_registry_block_to_block_match.extend(quote! {
-            azalea_registry::Block::#block_name_pascal_case => Box::new(#block_struct_name::default()),
+            azalea_registry::Block::#block_name_pascal_case => #block_struct_name::default().boxed(),
         });
         from_registry_block_to_blockstate_match.extend(quote! {
             azalea_registry::Block::#block_name_pascal_case => BlockState::new_const(#default_state_id),
@@ -500,6 +496,9 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
 
         block_struct.extend(quote! {
             impl BlockTrait for #block_struct_name {
+                fn boxed(&self) -> Box<dyn BlockTrait>{
+                    Box::new(*self)
+                }
                 fn behavior(&self) -> BlockBehavior {
                     #block_behavior
                 }
@@ -580,15 +579,17 @@ pub fn make_block_states(input: TokenStream) -> TokenStream {
 
             #block_structs
 
-            static BLOCK_STATE_TABLE: &[fn() -> Box<dyn BlockTrait>; BlockState::MAX_STATE as usize + 1] = &[
+            #block_statics
+
+            static BLOCK_STATE_TABLE: &[&'static dyn BlockTrait; BlockState::MAX_STATE as usize + 1] = &[
                 #from_state_to_block_match
             ];
 
 
-            impl From<BlockState> for Box<dyn BlockTrait> {
+            impl From<BlockState> for &'static dyn BlockTrait {
                 fn from(block_state: BlockState) -> Self {
                     let id = block_state.id() as usize;
-                    BLOCK_STATE_TABLE[id]()
+                    BLOCK_STATE_TABLE[id]
                 }
             }
 

@@ -44,6 +44,10 @@ impl BlockState {
         Self { id }
     }
 
+    pub fn to_trait(self) -> &'static dyn BlockTrait {
+        From::from(self)
+    }
+
     /// Whether the block state is possible to exist in vanilla Minecraft.
     ///
     /// It's equivalent to checking that the state ID is not greater than
@@ -120,18 +124,13 @@ impl AzaleaWrite for BlockState {
 
 impl Debug for BlockState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "BlockState(id: {}, {:?})",
-            self.id,
-            Box::<dyn BlockTrait>::from(*self)
-        )
+        write!(f, "BlockState(id: {}, {:?})", self.id, self.to_trait())
     }
 }
 
 impl From<BlockState> for azalea_registry::Block {
     fn from(value: BlockState) -> Self {
-        Box::<dyn BlockTrait>::from(value).as_registry_block()
+        value.to_trait().as_registry_block()
     }
 }
 
@@ -152,11 +151,10 @@ mod tests {
 
     #[test]
     fn test_from_blockstate() {
-        let block: Box<dyn BlockTrait> = Box::<dyn BlockTrait>::from(BlockState::AIR);
+        let block = BlockState::AIR.to_trait();
         assert_eq!(block.id(), "air");
 
-        let block: Box<dyn BlockTrait> =
-            Box::<dyn BlockTrait>::from(BlockState::from(azalea_registry::Block::FloweringAzalea));
+        let block = BlockState::from(azalea_registry::Block::FloweringAzalea).to_trait();
         assert_eq!(block.id(), "flowering_azalea");
     }
 

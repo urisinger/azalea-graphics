@@ -8,7 +8,7 @@ use azalea::{
     ecs::{
         entity::Entity,
         message::{MessageReader, MessageWriter},
-        query::{Changed, QueryState},
+        query::Changed,
         schedule::IntoScheduleConfigs,
         system::{Query, Res, SystemState},
         world::World,
@@ -16,15 +16,10 @@ use azalea::{
     entity::EntityKindComponent,
     local_player::InstanceHolder,
     prelude::*,
-    registry::EntityKind,
-    world::Instance,
 };
 use crossbeam::channel::TryRecvError;
 
-use crate::{
-    app::{RendererEvent, RendererHandle},
-    renderer::world_renderer::state::RenderState,
-};
+use crate::{app::{RendererEvent, RendererHandle}, renderer::RenderState};
 
 #[derive(Resource, Clone)]
 pub struct RendererResource {
@@ -96,7 +91,10 @@ fn get_entites(
 
     let (renderer, entity_kinds) = params.get(world);
     let entities_mutex = renderer.handle.entities.clone();
-    let entity_kinds = entity_kinds.iter().map(|(entity, entity_kind)| (entity, entity_kind.clone())).collect::<Vec<_>>();
+    let entity_kinds = entity_kinds
+        .iter()
+        .map(|(entity, entity_kind)| (entity, entity_kind.clone()))
+        .collect::<Vec<_>>();
     for (entity, entity_kind) in entity_kinds {
         if let Some(e) = RenderState::from_entity(world, entity_kind.0, entity) {
             entites.push(e);

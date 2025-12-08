@@ -31,6 +31,7 @@ impl Buffer {
 
     /// Destroy the buffer
     pub fn destroy(&mut self, ctx: &VkContext) {
+        ctx.label_object(self.buffer, format!("to_destory_manual: {}", self.size));
         unsafe {
             ctx.allocator()
                 .destroy_buffer(self.buffer, &mut self.allocation);
@@ -107,6 +108,7 @@ pub fn create_buffer(
 impl VkObject for Buffer {
     fn destroy(&self, ctx: &VkContext) {
         unsafe {
+            ctx.label_object(self.buffer, "to_destory");
             ctx.allocator()
                 .destroy_buffer(self.buffer, &mut self.allocation.clone());
         }

@@ -4,7 +4,6 @@ use vk_mem::Alloc;
 use crate::renderer::{
     frame_ctx::FrameCtx,
     vulkan::{context::VkContext, image::AllocatedImage},
-    world_renderer::render_targets::RenderTargets,
 };
 
 pub struct HiZPyramid {
@@ -398,14 +397,15 @@ impl HiZCompute {
         }
     }
 
-    pub fn dispatch_all_levels(&self, frame_ctx: &mut FrameCtx, render_targets: &RenderTargets) {
+    pub fn dispatch_all_levels(&self, frame_ctx: &mut FrameCtx) {
         let FrameCtx {
             ctx,
             cmd,
             image_index,
-            extent,
+            render_targets,
             ..
         } = frame_ctx;
+        let extent = render_targets.extent();
         let device = ctx.device();
         let pyramid = &render_targets.depth_pyramids[*image_index as usize];
 

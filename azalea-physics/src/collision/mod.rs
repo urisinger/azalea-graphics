@@ -129,7 +129,6 @@ pub struct MoveCtx<'world, 'state, 'a, 'b> {
 /// Move an entity by a given delta, checking for collisions.
 ///
 /// In Mojmap, this is `Entity.move`.
-#[allow(clippy::too_many_arguments)]
 pub fn move_colliding(ctx: &mut MoveCtx, mut movement: Vec3) {
     // TODO: do all these
 
@@ -492,7 +491,7 @@ pub fn legacy_blocks_motion(block: BlockState) -> bool {
 
 pub fn legacy_calculate_solid(block: BlockState) -> bool {
     // force_solid has to be checked before anything else
-    let block_trait = Box::<dyn azalea_block::BlockTrait>::from(block);
+    let block_trait = block.to_trait();
     if let Some(solid) = block_trait.behavior().force_solid {
         return solid;
     }

@@ -2,24 +2,23 @@ use ash::vk::{self};
 use vk_mem::MemoryUsage;
 
 use crate::renderer::{
-    vulkan::{
+    render_targets::RenderTargets, vulkan::{
         buffer::Buffer, context::VkContext, frame_sync::FrameSync, object::VkObject,
         timestamp::TimestampQueryPool,
-    },
-    world_renderer::WorldRendererConfig,
+    }, world_renderer::WorldRendererConfig
 };
 
 pub struct FrameCtx<'a> {
     pub ctx: &'a VkContext,
     pub cmd: vk::CommandBuffer,
     pub image_index: u32,
-    pub extent: vk::Extent2D,
     pub view_proj: glam::Mat4,
     pub camera_pos: glam::Vec3,
     pub frame_index: usize,
     pub config: WorldRendererConfig,
     pub timestamps: Option<&'a TimestampQueryPool>,
     pub frame_sync: &'a mut FrameSync,
+    pub render_targets: &'a RenderTargets,
 }
 
 impl FrameCtx<'_> {
@@ -48,6 +47,28 @@ impl FrameCtx<'_> {
             );
         }
         self.delete(staging);
+    }
+
+    pub fn begin_timestamp(&self, index: usize) {
+        if let Some(timestamps) = self.timestamps {
+            timestamps.write_timestamp(
+                self.ctx.device(),
+                self.cmd,
+                index as u32,
+                vk::PipelineStageFlags::TOP_OF_PIPE,
+            );
+        }
+    }
+
+    pub fn end_timestamp(&self, index: usize) {
+        if let Some(timestamps) = self.timestamps {
+            timestamps.write_timestamp(
+                self.ctx.device(),
+                self.cmd,
+                index as u32,
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+            );
+        }
     }
 
     /// Upload data to an image using a staging buffer that is automatically

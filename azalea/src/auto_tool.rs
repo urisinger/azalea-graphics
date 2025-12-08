@@ -76,7 +76,7 @@ pub fn accurate_best_tool_in_hotbar_for_block(
     let mut best_speed = 0.;
     let mut best_slot = None;
 
-    let block = Box::<dyn BlockTrait>::from(block);
+    let block = block.to_trait();
     let registry_block = block.as_registry_block();
 
     if matches!(
@@ -96,7 +96,7 @@ pub fn accurate_best_tool_in_hotbar_for_block(
         match item_slot {
             ItemStack::Empty => {
                 this_item_speed = Some(azalea_entity::mining::get_mine_progress(
-                    block.as_ref(),
+                    block,
                     azalea_registry::Item::Air,
                     menu,
                     fluid_on_eyes,
@@ -109,7 +109,7 @@ pub fn accurate_best_tool_in_hotbar_for_block(
                 // data yet
                 if !item_stack.component_patch.has::<components::Damage>() {
                     this_item_speed = Some(azalea_entity::mining::get_mine_progress(
-                        block.as_ref(),
+                        block,
                         item_stack.kind,
                         menu,
                         fluid_on_eyes,
@@ -133,7 +133,7 @@ pub fn accurate_best_tool_in_hotbar_for_block(
     for (i, item_slot) in hotbar_slots.iter().enumerate() {
         if let ItemStack::Present(item_slot) = item_slot {
             let this_item_speed = azalea_entity::mining::get_mine_progress(
-                block.as_ref(),
+                block,
                 item_slot.kind,
                 menu,
                 fluid_on_eyes,

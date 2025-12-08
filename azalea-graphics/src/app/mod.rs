@@ -1,9 +1,7 @@
 use std::{sync::Arc, time::Instant};
 
 use azalea::core::position::{ChunkPos, ChunkSectionPos};
-use clap::Parser;
 use crossbeam::channel::{Receiver, Sender, unbounded};
-use egui::ahash::HashMap;
 use parking_lot::{Mutex, RwLock};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use winit::{
@@ -14,7 +12,7 @@ use winit::{
     window::{CursorGrabMode, Window, WindowId},
 };
 
-use crate::renderer::{Renderer, world_renderer::state::RenderState};
+use crate::renderer::{RenderState, Renderer};
 
 pub enum WorldUpdate {
     ChunkAdded(ChunkPos),
@@ -120,7 +118,7 @@ impl ApplicationHandler for App {
             size,
             event_loop,
             &self.args,
-            self.entities.clone()
+            self.entities.clone(),
         )
         .expect("Failed to create renderer");
         self.renderer = Some(renderer);

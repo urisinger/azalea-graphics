@@ -4,7 +4,7 @@ use std::{
     io::Cursor,
     sync::{
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering},
     },
 };
 
@@ -52,6 +52,9 @@ struct WorkerContext {
     current_visibility: Mutex<Option<VisibilitySnapshot>>,
     result_tx: Sender<MeshResult>,
     should_stop: AtomicBool,
+
+    total_mesh_time_ns: AtomicU64,
+    total_meshes: AtomicU64,
 }
 
 pub struct Mesher {
@@ -65,6 +68,9 @@ pub struct Mesher {
     worker_ctx: Arc<WorkerContext>,
 
     worker_count: u32,
+
+    total_mesh_time_ns: AtomicU64,
+    total_meshes: AtomicU64,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -193,6 +199,8 @@ impl Mesher {
             current_visibility,
             result_tx,
             should_stop,
+            total_mesh_time_ns: AtomicU64::new(0),
+            total_meshes: AtomicU64::new(0),
         });
 
         {
@@ -224,7 +232,26 @@ impl Mesher {
             assets,
             worker_ctx,
             worker_count: num_threads,
+
+            total_mesh_time_ns: AtomicU64::new(0),
+            total_meshes: AtomicU64::new(0),
         }
+    }
+
+    pub fn average_mesh_time_ns(&self) -> f32 {
+        let count = self.worker_ctx.total_meshes.load(AtomicOrdering::Relaxed);
+        if count == 0 {
+            return 0.0;
+        }
+        let total_ns = self
+            .worker_ctx
+            .total_mesh_time_ns
+            .load(AtomicOrdering::Relaxed);
+        total_ns as f32 / count as f32
+    }
+
+    pub fn average_mesh_time_ms(&self) -> f32 {
+        self.average_mesh_time_ns() / 1_000_000.0
     }
 
     pub fn submit_section(&self, spos: ChunkSectionPos) {
@@ -269,8 +296,15 @@ impl Mesher {
                     if let Some(local) = build_local_section(&ctx.world, job.spos) {
                         let t0 = std::time::Instant::now();
                         let mesh = mesh_section(&local, &ctx.biome_cache, &ctx.assets);
+                        let elapsed = t0.elapsed();
+
+                        let nanos = elapsed.as_nanos() as u64;
+
+                        ctx.total_mesh_time_ns
+                            .fetch_add(nanos, AtomicOrdering::Relaxed);
+                        ctx.total_meshes.fetch_add(1, AtomicOrdering::Relaxed);
+
                         let _ = ctx.result_tx.send(mesh);
-                        log::debug!("Thread {} meshed {:?} in {:?}", id, job.spos, t0.elapsed());
                     }
                 }
             })

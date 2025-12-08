@@ -1,24 +1,33 @@
 use ash::vk;
 
-use crate::renderer::{vulkan::context::VkContext, world_renderer::entity_renderer::types::EntityVertex};
+use crate::renderer::{entity_renderer::types::{EntityPushConstants, EntityVertex}, vulkan::context::VkContext};
 
 pub fn create_entity_pipeline(
     ctx: &VkContext,
     module: vk::ShaderModule,
-    set_layout: vk::DescriptorSetLayout,
+    world_set_layout: vk::DescriptorSetLayout,
+    textures_set_layout: vk::DescriptorSetLayout,
     render_pass: vk::RenderPass,
 ) -> (vk::PipelineLayout, vk::Pipeline) {
     let device = ctx.device();
 
     let pipeline_layout = unsafe {
-        device.create_pipeline_layout(
-            &vk::PipelineLayoutCreateInfo::default().set_layouts(&[set_layout]),
-            None,
-        ).unwrap()
+        device
+            .create_pipeline_layout(
+                &vk::PipelineLayoutCreateInfo::default()
+                    .set_layouts(&[world_set_layout, textures_set_layout])
+                    .push_constant_ranges(&[vk::PushConstantRange {
+                        stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
+                        offset: 0,
+                        size: size_of::<EntityPushConstants>() as u32
+                    }]),
+                None,
+            )
+            .unwrap()
     };
 
-    let vert_entry = std::ffi::CString::new("entity:vert").unwrap();
-    let frag_entry = std::ffi::CString::new("entity:frag").unwrap();
+    let vert_entry = std::ffi::CString::new("entity::vert").unwrap();
+    let frag_entry = std::ffi::CString::new("entity::frag").unwrap();
 
     let shader_stages = [
         vk::PipelineShaderStageCreateInfo::default()
@@ -55,13 +64,12 @@ pub fn create_entity_pipeline(
     let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
         .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
-    let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
-        .color_write_mask(
-            vk::ColorComponentFlags::R
-                | vk::ColorComponentFlags::G
-                | vk::ColorComponentFlags::B
-                | vk::ColorComponentFlags::A,
-        );
+    let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default().color_write_mask(
+        vk::ColorComponentFlags::R
+            | vk::ColorComponentFlags::G
+            | vk::ColorComponentFlags::B
+            | vk::ColorComponentFlags::A,
+    );
 
     let depth_stencil = vk::PipelineDepthStencilStateCreateInfo::default()
         .depth_test_enable(true)

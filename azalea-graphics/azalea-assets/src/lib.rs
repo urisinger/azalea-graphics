@@ -55,7 +55,7 @@ impl Assets {
             .map(|colormap| sample_colormap_at_climate(colormap, temperature, downfall))
     }
 
-    pub fn get_path(&self, id: String) -> PathBuf {
+    pub fn get_path(&self, id: &str) -> PathBuf {
         self.path.join(id)
     }
 }
@@ -160,7 +160,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     let blockstate_to_models: Vec<Vec<VariantDesc>> = (0..=BlockState::MAX_STATE)
         .map(|raw: u16| {
             let bs = BlockState::try_from(raw).unwrap();
-            let dyn_block = Box::<dyn BlockTrait>::from(bs);
+            let dyn_block = bs.to_trait();
 
             let Some(render_state) = blockstate_defs.get(dyn_block.id()) else {
                 return vec![];

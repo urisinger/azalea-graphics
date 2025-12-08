@@ -258,7 +258,7 @@ pub fn compute_ao(local: IVec3, offset: IVec3, dir: Direction, section: &LocalSe
         }
         let state =
             section.blocks[p.x as usize][p.y as usize][p.z as usize].unwrap_or(BlockState::AIR);
-        let dyn_state: Box<dyn BlockTrait> = Box::from(state);
+        let dyn_state = state.to_trait();
 
         if state.is_air() {
             return false;

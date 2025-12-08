@@ -1,10 +1,8 @@
-use std::array::from_fn;
 
 use ash::{
     Device,
     vk::{self, WriteDescriptorSet},
 };
-use vk_mem::MemoryUsage;
 
 use crate::renderer::{
     frame_ctx::FrameCtx,

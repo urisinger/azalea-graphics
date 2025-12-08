@@ -6,20 +6,22 @@ use glam::{Mat4, Vec2, Vec3};
 use parking_lot::Mutex;
 use vk_mem::MemoryUsage;
 
+use self::{
+    pipelines::create_entity_pipeline,
+    state::RenderState,
+    types::{EntityPushConstants, EntityVertex},
+};
 use crate::renderer::{
+    entity_renderer::{render_pass::create_entity_render_pass},
     frame_ctx::FrameCtx,
-    vulkan::{buffer::Buffer, context::VkContext},
-    world_renderer::{
-        entity_renderer::{
-            pipelines::create_entity_pipeline,
-            state::RenderState,
-            types::{EntityPushConstants, EntityVertex},
-        },
-        texture_manager::TextureManager,
-    },
+    render_targets::RenderTargets,
+    texture_manager::TextureManager,
+    utils::create_framebuffers,
+    vulkan::{buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT},
 };
 
 mod pipelines;
+mod render_pass;
 mod renderers;
 pub mod state;
 mod types;
@@ -31,26 +33,32 @@ struct EntityModel {
 
 pub struct EntityRenderer {
     assets: Arc<Assets>,
+    render_pass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
 
     entity_pipeline: vk::Pipeline,
     entity_pipeline_layout: vk::PipelineLayout,
 
+    
     model_vertices: Buffer,
     loaded_models: HashMap<String, EntityModel>,
 
-    entities: Arc<Mutex<Vec<RenderState>>>,
+    uniform_descriptor_layout: vk::DescriptorSetLayout,
+    uniform_descriptor_pool: vk::DescriptorPool,
+    uniform_descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
-    texture_manager: Arc<TextureManager>,
+    entities: Arc<Mutex<Vec<RenderState>>>,
 }
 
 impl EntityRenderer {
     pub fn new(
         ctx: &VkContext,
         module: vk::ShaderModule,
-        render_pass: vk::RenderPass,
         assets: Arc<Assets>,
-        texture_manager: Arc<TextureManager>,
+        render_targets: &RenderTargets,
+        texture_manager: &TextureManager,
         entities: Arc<Mutex<Vec<RenderState>>>,
+        uniforms: &[Buffer; MAX_FRAMES_IN_FLIGHT],
     ) -> Self {
         let mut buf = Vec::new();
         let loaded_models = assets
@@ -81,35 +89,75 @@ impl EntityRenderer {
             MemoryUsage::AutoPreferDevice,
             false,
         );
-        ctx.end_one_time_commands(cmd);
 
-        let world_layout = unsafe {
+        ctx.end_one_time_commands(cmd);
+        
+        staging.destroy(ctx);
+
+        let render_pass = create_entity_render_pass(ctx, render_targets);
+        let framebuffers = create_framebuffers(ctx, render_targets, render_pass);
+
+        let uniform_descriptor_layout = unsafe {
             ctx.device()
                 .create_descriptor_set_layout(
                     &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
                         vk::DescriptorSetLayoutBinding::default()
                             .binding(0)
-                            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER),
+                            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                            .descriptor_count(1)
+                            .stage_flags(vk::ShaderStageFlags::VERTEX),
                     ]),
                     None,
                 )
                 .unwrap()
         };
 
+        let uniform_descriptor_pool = unsafe {
+            ctx.device()
+                .create_descriptor_pool(
+                    &vk::DescriptorPoolCreateInfo::default()
+                        .max_sets(MAX_FRAMES_IN_FLIGHT as u32)
+                        .pool_sizes(&[vk::DescriptorPoolSize {
+                            ty: vk::DescriptorType::UNIFORM_BUFFER,
+                            descriptor_count: MAX_FRAMES_IN_FLIGHT as u32,
+                        }]),
+                    None,
+                )
+                .unwrap()
+        };
+
+        let layouts = [uniform_descriptor_layout; MAX_FRAMES_IN_FLIGHT];
+        let uniform_descriptor_sets = unsafe {
+            ctx.device()
+                .allocate_descriptor_sets(
+                    &vk::DescriptorSetAllocateInfo::default()
+                        .descriptor_pool(uniform_descriptor_pool)
+                        .set_layouts(&layouts),
+                )
+                .unwrap()
+                .try_into()
+                .unwrap()
+        };
+
         let (entity_pipeline_layout, entity_pipeline) = create_entity_pipeline(
             ctx,
             module,
+            uniform_descriptor_layout,
             texture_manager.descriptor_set_layout(),
             render_pass,
         );
         Self {
             assets,
+            uniform_descriptor_layout,
+            uniform_descriptor_pool,
+            uniform_descriptor_sets,
+            render_pass,
+            framebuffers,
             loaded_models,
             model_vertices,
             entity_pipeline,
             entity_pipeline_layout,
             entities,
-            texture_manager,
         }
     }
 
@@ -141,12 +189,13 @@ impl EntityRenderer {
     fn render_model(
         &self,
         frame_ctx: &mut FrameCtx,
+        texture_manager: &mut TextureManager,
         model: &EntityModel,
         transform: Mat4,
         texture: &str,
     ) {
+        let tex = texture_manager.get_texture(frame_ctx, texture);
         let device = frame_ctx.ctx.device();
-        let tex = self.texture_manager.get_texture(frame_ctx, texture);
 
         let push_constants = EntityPushConstants {
             model: transform,
@@ -167,19 +216,19 @@ impl EntityRenderer {
         };
     }
 
-    pub fn render(&mut self, ctx: &mut FrameCtx) {
+    pub fn render(&mut self, frame_ctx: &mut FrameCtx, texture_manager: &mut TextureManager) {
         let states = self.entities.lock();
-        let device = ctx.ctx.device();
-        unsafe { device.cmd_bind_vertex_buffers(ctx.cmd, 0, &[self.model_vertices.buffer], &[0]) };
+        let device = frame_ctx.ctx.device();
+        unsafe {
+            device.cmd_bind_vertex_buffers(frame_ctx.cmd, 0, &[self.model_vertices.buffer], &[0])
+        };
         unsafe {
             device.cmd_bind_descriptor_sets(
-                ctx.cmd,
+                frame_ctx.cmd,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.entity_pipeline_layout,
                 0,
-                &[self
-                    .texture_manager
-                    .get_descriptor_set(device, ctx.frame_index)],
+                &[texture_manager.get_descriptor_set(device, frame_ctx.frame_index)],
                 &[],
             );
         }
@@ -196,10 +245,27 @@ impl EntityRenderer {
                         entity_model.z as f32,
                     ));
 
-                    self.render_model(ctx, zombie_model, transform, "");
+                    self.render_model(frame_ctx, texture_manager, zombie_model, transform, "");
                 }
             }
         }
+    }
+
+    pub fn destroy(&mut self, ctx: &VkContext) {
+        unsafe { ctx.device().destroy_render_pass(self.render_pass, None) };
+        for framebuffer in self.framebuffers.drain(..) {
+            unsafe {
+                ctx.device().destroy_framebuffer(framebuffer, None);
+            }
+        }
+        unsafe {
+            ctx.device()
+                .destroy_pipeline_layout(self.entity_pipeline_layout, None);
+            ctx.device().destroy_pipeline(self.entity_pipeline, None);
+            ctx.device().destroy_descriptor_set_layout(self.uniform_descriptor_layout, None);
+            ctx.device().destroy_descriptor_pool(self.uniform_descriptor_pool, None);
+        }
+        self.model_vertices.destroy(ctx);
     }
 }
 
@@ -291,3 +357,4 @@ pub enum ArmPose {
     TootHorn,
     Brush,
 }
+

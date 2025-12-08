@@ -5,52 +5,44 @@ use azalea::core::position::ChunkSectionPos;
 use azalea_assets::{Assets, processed::atlas::TextureEntry};
 use glam::{Vec3, Vec4};
 use image::GenericImageView;
-use parking_lot::Mutex;
 use vk_mem::MemoryUsage;
 
 use crate::{
     app::WorldUpdate,
     renderer::{
-        frame_ctx::FrameCtx,
-        timings,
-        vulkan::{
+        frame_ctx::FrameCtx, hiz, render_targets::RenderTargets, timings, utils::create_framebuffers, vulkan::{
             buffer::Buffer,
             context::VkContext,
             frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
-            swapchain::Swapchain,
             texture::Texture,
-        },
-        world_renderer::{
+        }, world_renderer::{
             aabb_renderer::AabbRenderer,
             animation::AnimationManager,
-            entity_renderer::EntityRenderer,
             mesher::Mesher,
-            state::RenderState,
-            types::{Uniform, VisibilityUniform},
+            render_pass::create_world_render_pass,
+            types::{VisibilityUniform},
             visibility::{buffers::VisibilityBuffers, compute::VisibilityCompute},
-        },
+        }
     },
 };
 
 mod aabb_renderer;
 mod animation;
 mod descriptors;
-mod hiz;
 mod mesher;
 mod meshes;
 mod pipelines;
-mod render_targets;
+mod render_pass;
 mod types;
 mod visibility;
 
 use descriptors::Descriptors;
 use meshes::MeshStore;
 use pipelines::{PipelineOptions, Pipelines};
-use render_targets::RenderTargets;
 use types::BlockVertex;
 
 pub struct WorldRenderer {
-    pub mesher: Option<Mesher>,
+    mesher: Option<Mesher>,
 
     animation_manager: AnimationManager,
     mesh_store: MeshStore,
@@ -60,13 +52,13 @@ pub struct WorldRenderer {
     visibility_buffers: Option<VisibilityBuffers>,
     aabb_renderer: AabbRenderer,
 
-    uniform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT],
     visibility_uniforms: [Buffer; MAX_FRAMES_IN_FLIGHT],
 
+    render_pass: vk::RenderPass,
+    framebuffers: Vec<vk::Framebuffer>,
 
     pipelines: Pipelines,
     descriptors: Descriptors,
-    render_targets: RenderTargets,
     blocks_texture: Texture,
     assets: Arc<Assets>,
 }
@@ -109,30 +101,24 @@ impl WorldRenderer {
         assets: Arc<Assets>,
         ctx: &VkContext,
         module: vk::ShaderModule,
-        swapchain: &Swapchain,
+        render_targets: &RenderTargets,
+        uniforms: &[Buffer; MAX_FRAMES_IN_FLIGHT],
         options: WorldRendererFeatures,
     ) -> Self {
         let atlas_image =
             animation::create_initial_atlas(&assets.block_atlas, &assets.block_textures);
         let blocks_texture = Texture::from_image(ctx, atlas_image);
 
-        let uniform_buffers: [_; MAX_FRAMES_IN_FLIGHT] = from_fn(|i| {
-            Buffer::new(
-                ctx,
-                size_of::<Uniform>() as u64,
-                vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
-                MemoryUsage::AutoPreferDevice,
-                false,
-            )
-        });
 
-        let descriptors = Descriptors::new(ctx.device(), &uniform_buffers, &blocks_texture);
 
-        let render_targets = RenderTargets::new(ctx, swapchain);
+        let render_pass = create_world_render_pass(ctx, render_targets);
+        let framebuffers = create_framebuffers(ctx, render_targets, render_pass);
+
+        let descriptors = Descriptors::new(ctx.device(), &uniforms, &blocks_texture);
 
         let pipelines = Pipelines::new(
             ctx,
-            render_targets.render_pass,
+            render_pass,
             descriptors.layout,
             module,
             PipelineOptions {
@@ -165,29 +151,24 @@ impl WorldRenderer {
             32,
             1,
         );
-        let aabb_renderer = AabbRenderer::new(
-            ctx,
-            &visibility_uniforms,
-            module,
-            render_targets.render_pass,
-        );
+        let aabb_renderer = AabbRenderer::new(ctx, &visibility_uniforms, module, render_pass);
 
         Self {
             mesher: None,
             animation_manager: AnimationManager::from_textures(&assets.block_textures),
             hiz_compute,
-            uniform_buffers,
 
             visibility_uniforms,
 
             visibility_compute,
             visibility_buffers: None,
             aabb_renderer,
+            render_pass,
+            framebuffers,
 
             mesh_store: Default::default(),
             pipelines,
             descriptors,
-            render_targets,
             blocks_texture,
             assets: assets.clone(),
         }
@@ -206,6 +187,14 @@ impl WorldRenderer {
             let snapshot = vis_bufs.snapshot(ctx, frame_index, cx, cz, min_y);
 
             mesher.update_visibility(snapshot);
+        }
+    }
+
+    pub fn average_mesh_time_ms(&self) -> f32 {
+        if let Some(mesher) = &self.mesher {
+            mesher.average_mesh_time_ms()
+        } else {
+            0.0
         }
     }
 
@@ -297,10 +286,6 @@ impl WorldRenderer {
         let camera_pos = frame_ctx.camera_pos;
         let view_proj = frame_ctx.view_proj;
 
-        frame_ctx.upload_to(
-            &[Uniform { view_proj }],
-            &self.uniform_buffers[frame_ctx.frame_index],
-        );
         if let Some(vb) = &mut self.visibility_buffers {
             const CHUNK: f32 = 16.0;
 
@@ -346,46 +331,16 @@ impl WorldRenderer {
         ctx.cmd_end_debug_label(frame_ctx.cmd);
 
         ctx.cmd_begin_debug_label(frame_ctx.cmd, "Update dirty textures");
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::START_UPLOAD_DIRTY as u32,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
-        }
+        frame_ctx.begin_timestamp(timings::START_UPLOAD_DIRTY);
 
         self.upload_dirty_textures(frame_ctx);
 
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::END_UPLOAD_DIRTY as u32,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            );
-        }
         ctx.cmd_end_debug_label(frame_ctx.cmd);
+        frame_ctx.end_timestamp(timings::END_UPLOAD_DIRTY);
 
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::START_TERRAIN_PASS as u32,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
-        }
-
+        frame_ctx.begin_timestamp(timings::START_TERRAIN_PASS);
         ctx.cmd_begin_debug_label(frame_ctx.cmd, "Main Render Pass");
-        self.render_targets.begin(
-            ctx.device(),
-            frame_ctx.cmd,
-            frame_ctx.image_index,
-            frame_ctx.extent,
-        );
-        let uniform = Uniform {
-            view_proj: frame_ctx.view_proj,
-        };
+        self.begin(frame_ctx);
         self.draw(frame_ctx, camera_pos);
 
         if let Some(vb) = &mut self.visibility_buffers {
@@ -403,49 +358,18 @@ impl WorldRenderer {
             }
         }
 
-        self.render_targets.end(ctx.device(), frame_ctx.cmd);
+        self.end(frame_ctx);
 
         ctx.cmd_end_debug_label(frame_ctx.cmd);
+        frame_ctx.end_timestamp(timings::END_TERRAIN_PASS);
 
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::END_TERRAIN_PASS as u32,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            );
-        }
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::START_HIZ_COMPUTE as u32,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
-        }
-
+        frame_ctx.begin_timestamp(timings::START_HIZ_COMPUTE);
         ctx.cmd_begin_debug_label(frame_ctx.cmd, "HiZ Pyramid Generation");
-        self.hiz_compute
-            .dispatch_all_levels(frame_ctx, &self.render_targets);
+        self.hiz_compute.dispatch_all_levels(frame_ctx);
         ctx.cmd_end_debug_label(frame_ctx.cmd);
+        frame_ctx.end_timestamp(timings::END_HIZ_COMPUTE);
 
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::END_HIZ_COMPUTE as u32,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            );
-        }
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::START_VISIBILITY_COMPUTE as u32,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
-        }
-
+        frame_ctx.end_timestamp(timings::START_VISIBILITY_COMPUTE);
         if let Some(vb) = &mut self.visibility_buffers
             && !frame_ctx.config.disable_visibilty
         {
@@ -471,16 +395,65 @@ impl WorldRenderer {
 
             ctx.cmd_end_debug_label(frame_ctx.cmd);
         };
-        ctx.cmd_end_debug_label(frame_ctx.cmd);
+        frame_ctx.end_timestamp(timings::END_VISIBILITY_COMPUTE);
 
-        if let Some(timestamps) = frame_ctx.timestamps {
-            timestamps.write_timestamp(
-                ctx.device(),
-                frame_ctx.cmd,
-                timings::END_VISIBILITY_COMPUTE as u32,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+        ctx.cmd_end_debug_label(frame_ctx.cmd);
+    }
+
+    pub fn begin(&self, frame_ctx: &mut FrameCtx) {
+        let device = frame_ctx.ctx.device();
+        let cmd = frame_ctx.cmd;
+        let extent = frame_ctx.render_targets.extent();
+        let clear_values = [
+            vk::ClearValue {
+                color: vk::ClearColorValue {
+                    float32: [0.0, 0.0, 0.0, 1.0],
+                },
+            },
+            vk::ClearValue {
+                depth_stencil: vk::ClearDepthStencilValue {
+                    depth: 0.0,
+                    stencil: 0,
+                },
+            },
+        ];
+
+        let rp_info = vk::RenderPassBeginInfo::default()
+            .render_pass(self.render_pass)
+            .framebuffer(self.framebuffers[frame_ctx.image_index as usize])
+            .render_area(vk::Rect2D {
+                offset: vk::Offset2D { x: 0, y: 0 },
+                extent,
+            })
+            .clear_values(&clear_values);
+
+        unsafe {
+            device.cmd_begin_render_pass(cmd, &rp_info, vk::SubpassContents::INLINE);
+            device.cmd_set_viewport(
+                cmd,
+                0,
+                &[vk::Viewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: extent.width as f32,
+                    height: extent.height as f32,
+                    min_depth: 0.0,
+                    max_depth: 1.0,
+                }],
+            );
+            device.cmd_set_scissor(
+                cmd,
+                0,
+                &[vk::Rect2D {
+                    offset: vk::Offset2D { x: 0, y: 0 },
+                    extent,
+                }],
             );
         }
+    }
+
+    pub fn end(&self, frame_ctx: &mut FrameCtx) {
+        unsafe { frame_ctx.ctx.device().cmd_end_render_pass(frame_ctx.cmd) };
     }
 
     pub fn draw(&mut self, frame_ctx: &mut FrameCtx, camera_pos: glam::Vec3) {
@@ -679,15 +652,19 @@ impl WorldRenderer {
         );
     }
 
-    pub fn recreate_swapchain(&mut self, ctx: &VkContext, swapchain: &Swapchain) {
-        self.render_targets.recreate(ctx, swapchain);
+    pub fn recreate_swapchain(&mut self, ctx: &VkContext, render_targets: &RenderTargets) {
+        for fb in self.framebuffers.drain(..) {
+            unsafe { ctx.device().destroy_framebuffer(fb, None) };
+        }
+        self.framebuffers = create_framebuffers(ctx, render_targets, self.render_pass);
+
         self.hiz_compute.recreate(
             ctx,
-            &self.render_targets.depth_pyramids,
-            &self.render_targets.depth_images,
+            &render_targets.depth_pyramids,
+            &render_targets.depth_images,
         );
         self.visibility_compute
-            .recreate_image_sets(ctx, &self.render_targets.depth_pyramids);
+            .recreate_image_sets(ctx, &render_targets.depth_pyramids);
     }
 
     pub fn destroy(&mut self, ctx: &VkContext) {
@@ -695,14 +672,19 @@ impl WorldRenderer {
 
         self.mesh_store.drain_and_destroy(ctx);
 
+        unsafe {
+            device.destroy_render_pass(self.render_pass, None);
+        }
+        for fb in self.framebuffers.drain(..) {
+            unsafe { device.destroy_framebuffer(fb, None) };
+        }
         self.hiz_compute.destroy(ctx);
-        self.render_targets.destroy(ctx);
         self.blocks_texture.destroy(ctx);
+
         if let Some(mut vb) = self.visibility_buffers.take() {
             vb.destroy(ctx);
         }
         for i in 0..MAX_FRAMES_IN_FLIGHT {
-            self.uniform_buffers[i].destroy(ctx);
             self.visibility_uniforms[i].destroy(ctx);
         }
         self.visibility_compute.destroy(ctx);

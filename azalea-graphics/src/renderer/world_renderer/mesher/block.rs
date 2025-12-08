@@ -150,6 +150,6 @@ fn face_is_occluded(local: IVec3, cull_dir: Direction, section: &LocalSection) -
         return false;
     }
 
-    let dyn_state: Box<dyn BlockTrait> = Box::from(neighbor_state);
+    let dyn_state = neighbor_state.to_trait();
     dyn_state.behavior().can_occlude && neighbor_state.is_collision_shape_full()
 }

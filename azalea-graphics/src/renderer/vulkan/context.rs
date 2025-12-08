@@ -405,8 +405,14 @@ impl VkContext {
 
         let extensions = [khr_swapchain::NAME.as_ptr()];
 
+        let mut indexing = vk::PhysicalDeviceDescriptorIndexingFeatures::default()
+            //.shader_sampled_image_array_non_uniform_indexing(true)
+            .runtime_descriptor_array(true)
+            .descriptor_binding_variable_descriptor_count(true);
+
         let create_info = vk::DeviceCreateInfo::default()
             .push_next(&mut vulkan_memory_model_features)
+            .push_next(&mut indexing)
             .queue_create_infos(&queue_infos)
             .enabled_extension_names(&extensions)
             .enabled_features(&enabled_features);

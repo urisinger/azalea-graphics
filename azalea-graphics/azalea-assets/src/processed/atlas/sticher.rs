@@ -165,7 +165,7 @@ pub fn stitch_sprites(
         });
     }
 
-    for (name, entry) in textures {
+    for (_name, entry) in textures {
         let (w, h) = entry.size();
         if w == 0 || h == 0 || w > max_width || h > max_height {
             return Err(StitchError::CannotFit {

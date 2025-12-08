@@ -1,13 +1,14 @@
-use std::{io::Cursor, sync::Arc, time::Duration};
+use std::{array::from_fn, io::Cursor, sync::Arc, time::Duration};
 
 use ash::{util::read_spv, vk};
 use crossbeam::channel::Receiver;
+pub use entity_renderer::state::RenderState;
 use parking_lot::Mutex;
 use raw_window_handle::{DisplayHandle, WindowHandle};
+use vk_mem::MemoryUsage;
 use vulkan::{
     context::VkContext,
     frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
-    swapchain::Swapchain,
 };
 use winit::{
     dpi::PhysicalSize,
@@ -25,7 +26,13 @@ use self::{
 use crate::{
     app::{RendererArgs, WorldUpdate},
     renderer::{
-        entity_renderer::EntityRenderer, frame_ctx::FrameCtx, texture_manager::TextureManager, timings::Timings, vulkan::timestamp::TimestampQueryPool, world_renderer::{WorldRendererConfig, state::RenderState}
+        entity_renderer::EntityRenderer,
+        frame_ctx::FrameCtx,
+        render_targets::RenderTargets,
+        texture_manager::TextureManager,
+        timings::Timings,
+        vulkan::{buffer::Buffer, timestamp::TimestampQueryPool},
+        world_renderer::WorldRendererConfig,
     },
 };
 
@@ -33,16 +40,25 @@ mod camera;
 pub mod chunk;
 mod entity_renderer;
 mod frame_ctx;
+mod hiz;
 mod mesh;
+mod render_targets;
 mod texture_manager;
 mod timings;
 mod ui;
+mod utils;
 pub mod vulkan;
 pub mod world_renderer;
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Uniform {
+    pub view_proj: glam::Mat4,
+}
+
 pub struct Renderer {
-    pub context: VkContext,
-    pub swapchain: Swapchain,
+    context: VkContext,
+    render_targets: RenderTargets,
     should_recreate: bool,
     width: u32,
     height: u32,
@@ -52,10 +68,13 @@ pub struct Renderer {
     command_buffers: [vk::CommandBuffer; MAX_FRAMES_IN_FLIGHT],
     timestamp_pools: Option<[TimestampQueryPool; MAX_FRAMES_IN_FLIGHT]>,
 
+    uniforms: [Buffer; MAX_FRAMES_IN_FLIGHT],
+
     sync: FrameSync,
 
     world: WorldRenderer,
     entity_renderer: EntityRenderer,
+    texture_manager: TextureManager,
 
     camera: Camera,
     projection: Projection,
@@ -77,7 +96,7 @@ impl Renderer {
         entities: Arc<Mutex<Vec<RenderState>>>,
     ) -> anyhow::Result<Self> {
         let context = VkContext::new(window_handle, display_handle, args);
-        let swapchain = Swapchain::new(&context, size.width, size.height);
+        let render_targets = RenderTargets::new(&context, size.width, size.height);
 
         let max_tex = unsafe {
             let props = context
@@ -86,7 +105,9 @@ impl Renderer {
             props.limits.max_image_dimension2_d
         };
 
-        let assets = azalea_assets::load_assets("assets/minecraft", max_tex);
+        let assets = Arc::new(azalea_assets::load_assets("assets/minecraft", max_tex));
+
+        let texture_manager = TextureManager::new(&context, assets.clone());
 
         let spirv = read_spv(&mut Cursor::new(include_bytes!(env!("SHADERS")))).unwrap();
         let module = unsafe {
@@ -95,12 +116,32 @@ impl Renderer {
                 .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&spirv), None)
                 .unwrap()
         };
+        let uniforms: [_; MAX_FRAMES_IN_FLIGHT] = from_fn(|i| {
+            Buffer::new(
+                &context,
+                size_of::<Uniform>() as u64,
+                vk::BufferUsageFlags::UNIFORM_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                MemoryUsage::AutoPreferDevice,
+                false,
+            )
+        });
 
-        let world = WorldRenderer::new(
-            Arc::new(assets),
+        let entity_renderer = EntityRenderer::new(
             &context,
             module,
-            &swapchain,
+            assets.clone(),
+            &render_targets,
+            &texture_manager,
+            entities,
+            &uniforms,
+        );
+
+        let world = WorldRenderer::new(
+            assets.clone(),
+            &context,
+            module,
+            &render_targets,
+            &uniforms,
             WorldRendererFeatures {
                 fill_mode_non_solid: context.features().fill_mode_non_solid,
             },
@@ -109,13 +150,19 @@ impl Renderer {
         let command_pool = create_command_pool(&context);
         let command_buffers = allocate_command_buffers(&context, command_pool);
 
-        let sync = FrameSync::new(context.device(), swapchain.images.len());
+        let sync = FrameSync::new(context.device(), render_targets.swapchain.images.len());
 
         let camera = Camera::new(glam::vec3(0.0, 250.0, 2.0), 0.0, 90.0);
         let projection = Projection::new(size.width, size.height, 90.0, 0.1);
         let camera_controller = CameraController::new(4.0, 1.0);
 
-        let egui = EguiVulkan::new(event_loop, &context, module, &swapchain, None)?;
+        let egui = EguiVulkan::new(
+            event_loop,
+            &context,
+            module,
+            &render_targets.swapchain,
+            None,
+        )?;
 
         let module = unsafe { context.device().destroy_shader_module(module, None) };
 
@@ -127,24 +174,15 @@ impl Renderer {
         } else {
             None
         };
-        let texture_manager = TextureManager::new(ctx, assets);
-
-        let entity_renderer = EntityRenderer::new(
-            ctx,
-            module,
-            render_targets.render_pass,
-            assets.clone(),
-            texture_manager,
-            entities,
-        );
 
         Ok(Self {
             context,
-            swapchain,
+            render_targets,
             should_recreate: false,
             width: size.width,
             height: size.height,
             renderer_config: Default::default(),
+            uniforms,
 
             command_pool,
             command_buffers,
@@ -156,6 +194,7 @@ impl Renderer {
             projection,
             camera_controller,
             entity_renderer,
+            texture_manager,
 
             egui,
 
@@ -261,6 +300,11 @@ impl Renderer {
                     self.world
                         .set_worker_threads(&self.context, self.renderer_config.worker_threads);
                 }
+
+                ui.label(format!(
+                    "Average mesh time: {}ms",
+                    self.world.average_mesh_time_ms()
+                ))
             });
         });
     }
@@ -327,7 +371,11 @@ impl Renderer {
 
         let device = self.context.device();
 
-        let image_index = match self.swapchain.acquire_next_image(&self.sync, frame) {
+        let image_index = match self
+            .render_targets
+            .swapchain
+            .acquire_next_image(&self.sync, frame)
+        {
             Ok(idx) => idx,
             Err(true) => {
                 self.should_recreate = true;
@@ -350,58 +398,46 @@ impl Renderer {
             .as_mut()
             .map(|arr| arr[frame].reset(device, cmd, 0, timings::TIMESTAMP_COUNT as u32));
 
-        if let Some(timestamps) = &self.timestamp_pools {
-            timestamps[frame].write_timestamp(
-                self.context.device(),
-                cmd,
-                timings::START_FRAME as u32,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
-        }
-
         let mut frame_ctx = FrameCtx {
             ctx: &self.context,
             cmd,
             image_index,
-            extent: self.swapchain.extent,
             view_proj: self.projection.calc_proj() * self.camera.calc_view(),
             camera_pos: self.camera.position,
             frame_index: frame,
             config: self.renderer_config,
             timestamps: self.timestamp_pools.as_ref().map(|arr| &arr[frame]),
             frame_sync: &mut self.sync,
+            render_targets: &self.render_targets,
         };
+        frame_ctx.upload_to(
+            &[Uniform {
+                view_proj: frame_ctx.view_proj,
+            }],
+            &self.uniforms[frame_ctx.frame_index],
+        );
+        frame_ctx.begin_timestamp(timings::START_FRAME);
 
         self.world.render(&mut frame_ctx);
-        if let Some(timestamps) = &self.timestamp_pools {
-            timestamps[frame].write_timestamp(
-                self.context.device(),
-                cmd,
-                timings::START_UI_PASS as u32,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
-            );
-        }
-        if let Err(e) = self.render_egui(cmd, image_index, frame) {
+        frame_ctx.begin_timestamp(timings::START_UI_PASS);
+        let dimensions = [
+            self.render_targets.swapchain.extent.width,
+            self.render_targets.swapchain.extent.height,
+        ];
+
+        if let Err(e) = self.egui.paint(
+            &self.context,
+            cmd,
+            dimensions,
+            image_index,
+            frame_ctx.frame_index,
+        ) {
             log::warn!("Failed to render egui: {}", e);
         }
 
-        if let Some(timestamps) = &self.timestamp_pools {
-            timestamps[frame].write_timestamp(
-                self.context.device(),
-                cmd,
-                timings::END_UI_PASS as u32,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            );
-        }
+        frame_ctx.begin_timestamp(timings::END_UI_PASS);
 
-        if let Some(timestamps) = &self.timestamp_pools {
-            timestamps[frame].write_timestamp(
-                self.context.device(),
-                cmd,
-                timings::END_FRAME as u32,
-                vk::PipelineStageFlags::BOTTOM_OF_PIPE,
-            );
-        }
+        frame_ctx.begin_timestamp(timings::END_FRAME);
 
         let device = self.context.device();
 
@@ -429,10 +465,11 @@ impl Renderer {
                 .unwrap();
         }
 
-        match self
-            .swapchain
-            .present(self.context.present_queue(), &self.sync, image_index)
-        {
+        match self.render_targets.swapchain.present(
+            self.context.present_queue(),
+            &self.sync,
+            image_index,
+        ) {
             Ok(true) => {}
             Ok(false) => self.should_recreate = true,
             Err(e) => panic!("Present failed: {:?}", e),
@@ -462,15 +499,16 @@ impl Renderer {
                     .queue_wait_idle(self.context.graphics_queue())
                     .unwrap();
             }
-            self.swapchain
+            self.render_targets
                 .recreate(&self.context, self.width, self.height);
 
             // Let the world renderer handle its own swapchain recreation
             self.world
-                .recreate_swapchain(&self.context, &self.swapchain);
+                .recreate_swapchain(&self.context, &self.render_targets);
 
             // Resize egui
-            self.egui.resize(&self.context, &self.swapchain);
+            self.egui
+                .resize(&self.context, &self.render_targets.swapchain);
 
             self.should_recreate = false;
         }
@@ -488,14 +526,20 @@ impl Renderer {
                 });
             });
 
-            self.world.destroy(&self.context);
+            for uniform in &mut self.uniforms {
+                uniform.destroy(&self.context);
+            }
 
             device.destroy_command_pool(self.command_pool, None);
         }
+        self.texture_manager.destroy(&self.context);
+
+        self.world.destroy(&self.context);
+        self.entity_renderer.destroy(&self.context);
 
         self.egui.destroy(&self.context);
 
-        self.swapchain.destroy(device);
+        self.render_targets.destroy(&self.context);
         self.sync.destroy(&self.context);
     }
 
@@ -503,18 +547,6 @@ impl Renderer {
     pub fn handle_egui_event(&mut self, window: &Window, event: &WindowEvent) -> bool {
         let response = self.egui.on_window_event(window, event);
         response.consumed
-    }
-
-    /// Render egui to the given command buffer.
-    pub fn render_egui(
-        &mut self,
-        cmd: vk::CommandBuffer,
-        image_index: u32,
-        frame_index: usize,
-    ) -> anyhow::Result<()> {
-        let dimensions = [self.swapchain.extent.width, self.swapchain.extent.height];
-        self.egui
-            .paint(&self.context, cmd, dimensions, image_index, frame_index)
     }
 }
 

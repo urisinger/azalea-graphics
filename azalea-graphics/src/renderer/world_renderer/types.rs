@@ -49,11 +49,6 @@ impl BlockVertex {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Uniform {
-    pub view_proj: glam::Mat4,
-}
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]

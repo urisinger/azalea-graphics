@@ -4,7 +4,7 @@ use azalea::{
     inventory::ItemStack,
 };
 
-use crate::renderer::world_renderer::entity_renderer::state::armed_entity::ArmedEntityRenderState;
+use crate::renderer::entity_renderer::state::armed_entity::ArmedEntityRenderState;
 
 #[derive(Debug, Clone)]
 pub struct BipedRenderState {

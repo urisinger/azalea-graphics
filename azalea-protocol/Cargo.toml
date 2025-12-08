@@ -12,7 +12,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [dependencies]
-async-recursion.workspace = true
 azalea-auth.workspace = true
 azalea-block.workspace = true
 azalea-brigadier = { workspace = true, features = ["azalea-buf"] }
@@ -44,6 +43,10 @@ uuid.workspace = true
 indexmap.workspace = true
 
 [features]
+default = ["packets", "online-mode"]
 connecting = []
-default = ["packets"]
 packets = ["connecting", "dep:azalea-core"]
+online-mode = ["azalea-auth/online-mode"]
+
+[lints]
+workspace = true
