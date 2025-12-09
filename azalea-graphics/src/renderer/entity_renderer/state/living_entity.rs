@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use azalea::{core::direction::Direction, ecs::{entity::Entity, world::World}};
 
 use crate::renderer::entity_renderer::{EntityPose, state::entity::EntityRenderState};
@@ -51,5 +53,14 @@ impl LivingEntityRenderState {
             pose: EntityPose::Standing, // matches Java default
             head_item_animation_progress: 0.0,
         }
+    }
+}
+
+// Deref allows accessing parent fields directly
+impl Deref for LivingEntityRenderState {
+    type Target = EntityRenderState;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.parent
     }
 }

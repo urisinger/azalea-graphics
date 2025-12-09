@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use azalea::{
     core::arm::Arm,
     ecs::{entity::Entity, world::World},
@@ -53,5 +55,14 @@ impl BipedRenderState {
             left_wing_yaw: 0.0,
             left_wing_roll: 0.0,
         }
+    }
+}
+
+// Deref chains automatically through all ancestors!
+impl Deref for BipedRenderState {
+    type Target = ArmedEntityRenderState;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.parent
     }
 }

@@ -9,16 +9,17 @@ use crate::terrain::WorldUniform;
 
 #[repr(C)]
 pub struct PC {
-    model: Mat4,
     texture: u32,
+    transform_offset: u32,
 }
 #[spirv(vertex)]
 pub fn vert(
     #[spirv(descriptor_set = 0, binding = 0, uniform)] uniform: &WorldUniform,
+    #[spirv(descriptor_set = 0, binding = 1, storage_buffer)] transforms: &[Mat4],
     #[spirv(push_constant)] pc: &PC,
 
     in_pos: Vec3,
-    _in_transform_id: u32,
+    in_transform_id: u32,
     in_uv: Vec2,
 
     out_uv: &mut Vec2,
@@ -26,7 +27,7 @@ pub fn vert(
 
     #[spirv(position)] out_pos: &mut Vec4,
 ) {
-    *out_pos = uniform.view_proj * pc.model * in_pos.extend(1.0);
+    *out_pos = uniform.view_proj * transforms[in_transform_id as usize + pc.transform_offset as usize] * in_pos.extend(1.0);
     *out_uv = in_uv;
     *out_texture = pc.texture;
 }
@@ -34,7 +35,7 @@ pub fn vert(
 #[spirv(fragment)]
 pub fn frag(
     in_uv: Vec2,
-    #[spirv(flat)]in_tex: u32,
+    #[spirv(flat)] in_tex: u32,
     #[spirv(descriptor_set = 1, binding = 0)] textures: &RuntimeArray<
         SampledImage<Image!(2D, type=f32, sampled)>,
     >,

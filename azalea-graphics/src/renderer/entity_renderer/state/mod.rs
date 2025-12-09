@@ -7,11 +7,11 @@ use azalea::{
 };
 use zombie::ZombieRenderState;
 
-mod armed_entity;
-mod biped;
-mod entity;
-mod living_entity;
-mod zombie;
+pub mod armed_entity;
+pub mod biped;
+pub mod entity;
+pub mod living_entity;
+pub mod zombie;
 
 pub enum RenderState {
     Zombie(ZombieRenderState),

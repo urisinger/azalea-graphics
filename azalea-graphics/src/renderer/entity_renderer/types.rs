@@ -44,6 +44,6 @@ impl EntityVertex {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct EntityPushConstants {
-    pub model: Mat4,
     pub tex_id: u32,
+    pub transform_offset: u32,
 }

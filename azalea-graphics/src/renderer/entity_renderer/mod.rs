@@ -1,14 +1,16 @@
 use std::{collections::HashMap, sync::Arc};
 
 use ash::vk;
-use azalea_assets::{Assets, entity::ModelPart};
-use glam::{Mat4, Vec2, Vec3};
+use azalea_assets::Assets;
+use glam::{Mat4, Vec3};
 use parking_lot::Mutex;
 use vk_mem::MemoryUsage;
 
 use self::{
+    models::zombie::ZombieModel,
     pipelines::create_entity_pipeline,
     state::RenderState,
+    transform::ModelTransforms,
     types::{EntityPushConstants, EntityVertex},
 };
 use crate::renderer::{
@@ -21,16 +23,18 @@ use crate::renderer::{
     vulkan::{buffer::Buffer, context::VkContext, frame_sync::MAX_FRAMES_IN_FLIGHT},
 };
 
+mod models;
 mod pipelines;
 mod render_pass;
 mod renderers;
 pub mod state;
+mod transform;
 mod types;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 struct EntityModel {
-    pub offset: u32,
-    pub size: u32,
+    offset: u32,
+    size: u32,
 }
 
 pub struct EntityRenderer {
@@ -40,20 +44,22 @@ pub struct EntityRenderer {
 
     entity_pipeline: vk::Pipeline,
     entity_pipeline_layout: vk::PipelineLayout,
-
-    model_vertices: Buffer,
     loaded_models: HashMap<String, EntityModel>,
 
-    uniform_descriptor_layout: vk::DescriptorSetLayout,
-    uniform_descriptor_pool: vk::DescriptorPool,
-    uniform_descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
+    model_vertices: Buffer,
+    transform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT],
+
+    world_descriptor_layout: vk::DescriptorSetLayout,
+    world_descriptor_pool: vk::DescriptorPool,
+    world_descriptor_sets: [vk::DescriptorSet; MAX_FRAMES_IN_FLIGHT],
 
     entities: Arc<Mutex<Vec<RenderState>>>,
 }
 
 struct PendingDraw {
-    model: EntityModel,
-    transform: Mat4,
+    vertex_offset: u32,
+    vertex_count: u32,
+    transform_offset: u32,
     texture: u32,
 }
 
@@ -68,14 +74,25 @@ impl EntityRenderer {
         uniforms: &[Buffer; MAX_FRAMES_IN_FLIGHT],
     ) -> Self {
         let mut buf = Vec::new();
+
         let loaded_models = assets
             .entity_models
             .iter()
             .map(|(name, model)| {
-                let offset = (buf.len()) as u32;
-                let size = Self::load_model_part(&mut buf, 0, model);
-
-                (name.clone(), EntityModel { offset, size })
+                let start = buf.len();
+                buf.extend(model.vertices.iter().map(|v| EntityVertex{
+                    pos: v.pos,
+                    uv: v.uv,
+                    transform_id: v.transform_id
+                }));
+                let end = buf.len();
+                (
+                    name.clone(),
+                    EntityModel {
+                        offset: start as u32,
+                        size: (end - start) as u32,
+                    },
+                )
             })
             .collect();
 
@@ -102,7 +119,20 @@ impl EntityRenderer {
         let render_pass = create_entity_render_pass(ctx, render_targets);
         let framebuffers = create_framebuffers(ctx, render_targets, render_pass);
 
-        let uniform_descriptor_layout = unsafe {
+        // Create transform buffers (storage buffers for entity transforms)
+        const MAX_TRANSFORMS: usize = 1024;
+        let transform_buffers: [Buffer; MAX_FRAMES_IN_FLIGHT] = std::array::from_fn(|_| {
+            Buffer::new(
+                ctx,
+                (MAX_TRANSFORMS * size_of::<Mat4>()) as vk::DeviceSize,
+                vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_DST,
+                MemoryUsage::AutoPreferDevice,
+                false,
+            )
+        });
+
+        // Descriptor set layout for world uniforms and transforms
+        let world_descriptor_layout = unsafe {
             ctx.device()
                 .create_descriptor_set_layout(
                     &vk::DescriptorSetLayoutCreateInfo::default().bindings(&[
@@ -111,32 +141,43 @@ impl EntityRenderer {
                             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
                             .descriptor_count(1)
                             .stage_flags(vk::ShaderStageFlags::VERTEX),
+                        vk::DescriptorSetLayoutBinding::default()
+                            .binding(1)
+                            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                            .descriptor_count(1)
+                            .stage_flags(vk::ShaderStageFlags::VERTEX),
                     ]),
                     None,
                 )
                 .unwrap()
         };
 
-        let uniform_descriptor_pool = unsafe {
+        let world_descriptor_pool = unsafe {
             ctx.device()
                 .create_descriptor_pool(
                     &vk::DescriptorPoolCreateInfo::default()
                         .max_sets(MAX_FRAMES_IN_FLIGHT as u32)
-                        .pool_sizes(&[vk::DescriptorPoolSize {
-                            ty: vk::DescriptorType::UNIFORM_BUFFER,
-                            descriptor_count: MAX_FRAMES_IN_FLIGHT as u32,
-                        }]),
+                        .pool_sizes(&[
+                            vk::DescriptorPoolSize {
+                                ty: vk::DescriptorType::UNIFORM_BUFFER,
+                                descriptor_count: MAX_FRAMES_IN_FLIGHT as u32,
+                            },
+                            vk::DescriptorPoolSize {
+                                ty: vk::DescriptorType::STORAGE_BUFFER,
+                                descriptor_count: MAX_FRAMES_IN_FLIGHT as u32,
+                            },
+                        ]),
                     None,
                 )
                 .unwrap()
         };
 
-        let layouts = [uniform_descriptor_layout; MAX_FRAMES_IN_FLIGHT];
-        let uniform_descriptor_sets: [_; _] = unsafe {
+        let layouts = [world_descriptor_layout; MAX_FRAMES_IN_FLIGHT];
+        let world_descriptor_sets: [_; _] = unsafe {
             ctx.device()
                 .allocate_descriptor_sets(
                     &vk::DescriptorSetAllocateInfo::default()
-                        .descriptor_pool(uniform_descriptor_pool)
+                        .descriptor_pool(world_descriptor_pool)
                         .set_layouts(&layouts),
                 )
                 .unwrap()
@@ -144,17 +185,30 @@ impl EntityRenderer {
                 .unwrap()
         };
 
+        // Update descriptor sets with uniform buffers and transform buffers
         for i in 0..MAX_FRAMES_IN_FLIGHT {
             unsafe {
                 ctx.device().update_descriptor_sets(
-                    &[vk::WriteDescriptorSet::default()
-                        .buffer_info(&[vk::DescriptorBufferInfo {
-                            offset: 0,
-                            range: size_of::<Uniform>() as u64,
-                            buffer: uniforms[i].buffer,
-                        }])
-                        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                        .dst_set(uniform_descriptor_sets[i])],
+                    &[
+                        vk::WriteDescriptorSet::default()
+                            .buffer_info(&[vk::DescriptorBufferInfo {
+                                offset: 0,
+                                range: size_of::<Uniform>() as u64,
+                                buffer: uniforms[i].buffer,
+                            }])
+                            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                            .dst_set(world_descriptor_sets[i])
+                            .dst_binding(0),
+                        vk::WriteDescriptorSet::default()
+                            .buffer_info(&[vk::DescriptorBufferInfo {
+                                offset: 0,
+                                range: vk::WHOLE_SIZE,
+                                buffer: transform_buffers[i].buffer,
+                            }])
+                            .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                            .dst_set(world_descriptor_sets[i])
+                            .dst_binding(1),
+                    ],
                     &[],
                 )
             };
@@ -163,62 +217,33 @@ impl EntityRenderer {
         let (entity_pipeline_layout, entity_pipeline) = create_entity_pipeline(
             ctx,
             module,
-            uniform_descriptor_layout,
+            world_descriptor_layout,
             texture_manager.descriptor_set_layout(),
             render_pass,
         );
 
         Self {
             assets,
-            uniform_descriptor_layout,
-            uniform_descriptor_pool,
-            uniform_descriptor_sets,
+            world_descriptor_layout,
+            world_descriptor_pool,
+            world_descriptor_sets,
+            loaded_models,
             render_pass,
             framebuffers,
-            loaded_models,
             model_vertices,
+            transform_buffers,
             entity_pipeline,
             entity_pipeline_layout,
             entities,
         }
     }
 
-    fn load_model_part(
-        vertices: &mut Vec<EntityVertex>,
-        transform_id: u32,
-        model_part: &ModelPart,
-    ) -> u32 {
-        let mut num_vertices = 0;
-        for cuboid in &model_part.cuboids {
-            for side in &cuboid.sides {
-                for vertex in &side.vertices {
-                    vertices.push(EntityVertex {
-                        pos: vertex.pos,
-                        transform_id,
-                        uv: vertex.uv.unwrap_or(Vec2::ZERO),
-                    });
-
-                    num_vertices += 1;
-                }
-            }
-        }
-        for (_, child) in &model_part.children {
-            num_vertices += Self::load_model_part(vertices, transform_id + 1, &child);
-        }
-        num_vertices
-    }
-    fn render_model(
-        &self,
-        frame_ctx: &mut FrameCtx,
-        model: &EntityModel,
-        transform: Mat4,
-        tex_id: u32,
-    ) {
+    fn render_model(&self, frame_ctx: &mut FrameCtx, draw: &PendingDraw) {
         let device = frame_ctx.ctx.device();
 
         let push_constants = EntityPushConstants {
-            model: transform,
-            tex_id,
+            tex_id: draw.texture,
+            transform_offset: draw.transform_offset,
         };
         unsafe {
             device.cmd_push_constants(
@@ -231,39 +256,78 @@ impl EntityRenderer {
                     std::mem::size_of::<EntityPushConstants>(),
                 ),
             );
-            device.cmd_draw(frame_ctx.cmd, model.size, 1, model.offset, 0)
+            device.cmd_draw(frame_ctx.cmd, draw.vertex_count, 1, draw.vertex_offset, 0)
         };
     }
 
     pub fn render(&mut self, frame_ctx: &mut FrameCtx, texture_manager: &mut TextureManager) {
-        let mut pending = Vec::new();
-        {
-            let states = self.entities.lock();
-            for state in states.iter() {
-                match state {
-                    RenderState::Zombie(s) => {
-                        let entity_model = &s.parent.parent.parent.parent;
-                        let zombie_model = &self.loaded_models["minecraft:zombie#main"];
-                        let transform = Mat4::from_translation(Vec3::new(
-                            entity_model.x as f32,
-                            entity_model.y as f32,
-                            entity_model.z as f32,
-                        ));
+        let states = self.entities.lock();
+        if states.is_empty() {
+            return;
+        }
 
-                        pending.push(PendingDraw {
-                            model: *zombie_model,
-                            transform,
-                            texture: texture_manager
-                                .get_texture(frame_ctx, "textures/entity/zombie/zombie.png"),
-                        });
-                    }
+        // Collect all transforms and prepare draw calls
+        let mut all_transforms = Vec::new();
+        let mut pending: Vec<PendingDraw> = Vec::new();
+
+        let zombie_model_data = self
+            .assets
+            .entity_models
+            .get("minecraft:zombie#main")
+            .expect("Zombie model not found");
+        let zombie_model = ZombieModel::new(zombie_model_data);
+
+        for state in states.iter() {
+            match state {
+                RenderState::Zombie(s) => {
+                    let transform_offset = all_transforms.len() as u32;
+
+                    // Create transforms and animate
+                    let mut model_transforms = ModelTransforms::new(zombie_model_data);
+                    zombie_model.set_angles(&mut model_transforms, s);
+
+                    // Build world transform following Minecraft's matrix stack operations:
+                    // matrixStack.scale(baseScale, baseScale, baseScale)
+                    // setupTransforms() -> rotation by bodyYaw
+                    // matrixStack.scale(-1, -1, 1)
+                    // matrixStack.translate(0, -1.501, 0)
+                    
+                    // Start with world position
+                    let mut world_transform = Mat4::from_scale(Vec3::splat(s.base_scale));
+                    
+
+                    world_transform *= Mat4::from_translation(Vec3::new(s.x as f32, s.y as f32, s.z as f32));
+
+                    // Convert to Mat4 array and add to buffer
+                    let transforms =
+                        model_transforms.to_transforms(zombie_model_data, world_transform);
+                    all_transforms.extend(transforms);
+
+                    let texture =
+                        texture_manager.get_texture(frame_ctx, "textures/entity/zombie/zombie.png");
+                    let model = self.loaded_models["minecraft:zombie#main"];
+
+                    pending.push(PendingDraw {
+                        vertex_offset: model.offset,
+                        vertex_count: model.size,
+                        transform_offset,
+                        texture,
+                    });
                 }
             }
         }
 
+        drop(states); // Release lock
+
         if pending.is_empty() {
             return;
         }
+
+        // Upload transforms to GPU
+        frame_ctx.upload_to(
+            &all_transforms,
+            &self.transform_buffers[frame_ctx.frame_index],
+        );
 
         let device = frame_ctx.ctx.device();
         self.begin(frame_ctx);
@@ -281,16 +345,16 @@ impl EntityRenderer {
                 self.entity_pipeline_layout,
                 0,
                 &[
-                    self.uniform_descriptor_sets[frame_ctx.frame_index],
+                    self.world_descriptor_sets[frame_ctx.frame_index],
                     texture_manager.get_descriptor_set(device, frame_ctx.frame_index),
                 ],
                 &[],
             );
         }
 
-        // Replay draws that we collected
+        // Render all entities
         for draw in pending.iter() {
-            self.render_model(frame_ctx, &draw.model, draw.transform, draw.texture);
+            self.render_model(frame_ctx, draw);
         }
 
         self.end(frame_ctx);
@@ -374,11 +438,14 @@ impl EntityRenderer {
                 .destroy_pipeline_layout(self.entity_pipeline_layout, None);
             ctx.device().destroy_pipeline(self.entity_pipeline, None);
             ctx.device()
-                .destroy_descriptor_set_layout(self.uniform_descriptor_layout, None);
+                .destroy_descriptor_set_layout(self.world_descriptor_layout, None);
             ctx.device()
-                .destroy_descriptor_pool(self.uniform_descriptor_pool, None);
+                .destroy_descriptor_pool(self.world_descriptor_pool, None);
         }
         self.model_vertices.destroy(ctx);
+        for buffer in &mut self.transform_buffers {
+            buffer.destroy(ctx);
+        }
     }
 }
 

@@ -1,9 +1,8 @@
-pub mod entity;
 pub mod processed;
 mod raw;
-use std::{collections::HashMap, fs, ops::Deref, path::PathBuf, sync::Arc, time::Instant};
+use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
 
-use azalea_block::{BlockState, BlockTrait};
+use azalea_block::BlockState;
 use log::*;
 use raw::{
     block_state::{BlockRenderState, Variant},
@@ -18,7 +17,7 @@ use self::{
     },
     raw::atlas::SpriteAtlas,
 };
-use crate::processed::atlas::TextureEntry;
+use crate::processed::{atlas::TextureEntry, entity_model::Model};
 
 pub struct Assets {
     path: PathBuf,
@@ -30,7 +29,7 @@ pub struct Assets {
 
     pub block_textures: HashMap<String, TextureEntry>,
 
-    pub entity_models: HashMap<String, entity::ModelPart>,
+    pub entity_models: HashMap<String, Model>,
 }
 
 impl Assets {
@@ -213,7 +212,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
                     .filter(|case| {
                         case.when
                             .as_ref()
-                            .map_or(true, |cond| cond.matches(dyn_block.deref()))
+                            .map_or(true, |cond| cond.matches(dyn_block))
                     })
                     .filter_map(|case| match &case.apply {
                         Variant::Single(desc) => Some(desc),
@@ -236,11 +235,16 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     info!("Mapped blockstates to models in {:?}", start.elapsed());
 
     let entity_models_path = path.join("entity_models.json");
-    let entity_models: HashMap<String, entity::ModelPart> = serde_json::from_str(
+    let raw_entity_models: HashMap<String, raw::entity_model::ModelPart> = serde_json::from_str(
         &fs::read_to_string(&entity_models_path)
             .unwrap_or_else(|_| panic!("missing {}", entity_models_path.display())),
     )
     .expect("invalid entity_models.json");
+
+    let entity_models = raw_entity_models
+        .into_iter()
+        .map(|(name, raw)| (name, Model::from_raw(raw)))
+        .collect();
 
     let start = Instant::now();
 
@@ -316,8 +320,4 @@ fn load_colormap(textures_root: &PathBuf, relative_path: &str) -> Option<image::
             None
         }
     }
-}
-
-fn strip_namespace(model_name: &str) -> &str {
-    model_name.strip_prefix("minecraft:").unwrap_or(model_name)
 }

@@ -5,6 +5,7 @@ use crate::processed::model::BlockModel;
 pub mod animation;
 pub mod atlas;
 pub mod model;
+pub mod entity_model;
 
 #[derive(Debug, Clone)]
 pub struct VariantDesc {

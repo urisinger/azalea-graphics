@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use azalea::{ecs::{entity::Entity, world::World}, entity::metadata::{Aggressive, DrownedConversion}};
 
 use super::biped::BipedRenderState;
@@ -15,5 +17,14 @@ impl ZombieRenderState {
             attacking: world.get::<Aggressive>(entity).unwrap().0,
             converting_in_water: world.get::<DrownedConversion>(entity).unwrap().0,
         }
+    }
+}
+
+// Deref chains through all ancestors
+impl Deref for ZombieRenderState {
+    type Target = BipedRenderState;
+    
+    fn deref(&self) -> &Self::Target {
+        &self.parent
     }
 }
