@@ -1,15 +1,15 @@
 use azalea::{
     ecs::{entity::Entity, world::World},
-    entity::Position,
+    entity::{EntityKindComponent, Position, metadata::Invisible},
     physics::collision::VoxelShape,
+    registry::EntityKind,
 };
 use glam::Vec3;
 
 #[derive(Debug, Clone)]
 pub struct EntityRenderState {
-    pub x: f64,
-    pub y: f64,
-    pub z: f64,
+    pub kind: EntityKind,
+    pub pos: Vec3,
     pub age: f32,
     pub width: f32,
     pub height: f32,
@@ -66,17 +66,18 @@ pub struct ShadowPiece {
 
 impl EntityRenderState {
     pub fn new(world: &mut World, entity: Entity) -> Self {
-        let pos = world.get::<Position>(entity).unwrap();
+        let pos: &Position = world.get(entity).unwrap();
+        let kind: &EntityKindComponent = world.get(entity).unwrap();
+        let invisible: &Invisible = world.get(entity).unwrap();
         Self {
-            x: pos.x,
-            y: pos.y,
-            z: pos.z,
+            kind: kind.0,
+            pos: Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32),
+            invisible: invisible.0,
             age: 0.0,
             width: 0.0,
             height: 0.0,
             standing_eye_height: 0.0,
             squared_distance_to_camera: 0.0,
-            invisible: false,
             sneaking: false,
             on_fire: false,
             light: 0,

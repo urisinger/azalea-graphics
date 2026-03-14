@@ -80,10 +80,10 @@ impl EntityRenderer {
             .iter()
             .map(|(name, model)| {
                 let start = buf.len();
-                buf.extend(model.vertices.iter().map(|v| EntityVertex{
+                buf.extend(model.vertices.iter().map(|v| EntityVertex {
                     pos: v.pos,
                     uv: v.uv,
-                    transform_id: v.transform_id
+                    transform_id: v.transform_id,
                 }));
                 let end = buf.len();
                 (
@@ -291,12 +291,22 @@ impl EntityRenderer {
                     // setupTransforms() -> rotation by bodyYaw
                     // matrixStack.scale(-1, -1, 1)
                     // matrixStack.translate(0, -1.501, 0)
-                    
+
                     // Start with world position
                     let mut world_transform = Mat4::from_scale(Vec3::splat(s.base_scale));
-                    
 
-                    world_transform *= Mat4::from_translation(Vec3::new(s.x as f32, s.y as f32, s.z as f32));
+                    // Apply rotation (180 - bodyYaw)
+                    world_transform =
+                        world_transform * Mat4::from_rotation_y((180.0 - s.body_yaw).to_radians());
+
+                    // Apply model origin offset
+                    world_transform =
+                        world_transform * Mat4::from_translation(Vec3::new(0.0, -1.501, 0.0));
+                    world_transform *= Mat4::from_translation(Vec3::new(
+                        s.pos.x as f32,
+                        s.pos.y as f32,
+                        s.pos.z as f32,
+                    ));
 
                     // Convert to Mat4 array and add to buffer
                     let transforms =
