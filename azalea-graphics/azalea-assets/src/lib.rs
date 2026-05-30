@@ -240,10 +240,16 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     )
     .expect("invalid entity_models.json");
 
-    let entity_models = raw_entity_models
+    let entity_models: HashMap<String, Model> = raw_entity_models
         .into_iter()
         .map(|(name, raw)| (name, Model::from_raw(raw)))
         .collect();
+
+    fs::write(
+        "baked_models_debug.json",
+        serde_json::to_string_pretty(&entity_models).unwrap(),
+    )
+    .unwrap();
 
     let start = Instant::now();
 

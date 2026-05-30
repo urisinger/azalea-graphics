@@ -5,7 +5,7 @@ pub use raw::Transform;
 
 use super::super::raw::entity_model as raw;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Model {
     pub vertices: Vec<Vertex>,
     pub part: ModelPart,
@@ -25,7 +25,7 @@ impl Model {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ModelPart {
     pub children: HashMap<String, ModelPart>,
     pub id: usize,
@@ -54,7 +54,7 @@ impl ModelPart {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub struct Vertex {
     pub pos: Vec3,
     pub uv: Vec2,
@@ -65,56 +65,67 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
     let mut min_x = cube.origin.x;
     let mut min_y = cube.origin.y;
     let mut min_z = cube.origin.z;
-    let mut max_x = min_x + cube.dimensions.x;
-    let mut max_y = min_y + cube.dimensions.y;
-    let mut max_z = min_z + cube.dimensions.z;
+    let width = cube.dimensions.x;
+    let height = cube.dimensions.y;
+    let depth = cube.dimensions.z;
 
-    min_x -= cube.grow.x;
-    min_y -= cube.grow.y;
-    min_z -= cube.grow.z;
-    max_x += cube.grow.x;
-    max_y += cube.grow.y;
-    max_z += cube.grow.z;
+    let mut max_x = min_x + width;
+    let mut max_y = min_y + height;
+    let mut max_z = min_z + depth;
+
+    let grow_x = cube.grow.x;
+    let grow_y = cube.grow.y;
+    let grow_z = cube.grow.z;
+
+    min_x -= grow_x;
+    min_y -= grow_y;
+    min_z -= grow_z;
+    max_x += grow_x;
+    max_y += grow_y;
+    max_z += grow_z;
 
     if cube.mirror {
-        std::mem::swap(&mut min_x, &mut max_x);
+        let tmp = max_x;
+        max_x = min_x;
+        min_x = tmp;
     }
 
     let t0 = Vec3::new(min_x, min_y, min_z);
     let t1 = Vec3::new(max_x, min_y, min_z);
     let t2 = Vec3::new(max_x, max_y, min_z);
     let t3 = Vec3::new(min_x, max_y, min_z);
+    
     let l0 = Vec3::new(min_x, min_y, max_z);
     let l1 = Vec3::new(max_x, min_y, max_z);
     let l2 = Vec3::new(max_x, max_y, max_z);
     let l3 = Vec3::new(min_x, max_y, max_z);
 
-    let u_offs = cube.tex_coord.x;
-    let v_offs = cube.tex_coord.y;
-    let width = cube.dimensions.x;
-    let height = cube.dimensions.y;
-    let depth = cube.dimensions.z;
+    let x_tex_offs = cube.tex_coord.x;
+    let y_tex_offs = cube.tex_coord.y;
 
-    let u0 = u_offs;
-    let u1 = u_offs + depth;
-    let u2 = u_offs + depth + width;
-    let u22 = u_offs + depth + width + width;
-    let u3 = u_offs + depth + width + depth;
-    let u4 = u_offs + depth + width + depth + width;
+    let u0 = x_tex_offs;
+    let u1 = x_tex_offs + depth;
+    let u2 = x_tex_offs + depth + width;
+    let u22 = x_tex_offs + depth + width + width;
+    let u3 = x_tex_offs + depth + width + depth;
+    let u4 = x_tex_offs + depth + width + depth + width;
 
-    let v0 = v_offs;
-    let v1 = v_offs + depth;
-    let v2 = v_offs + depth + height;
+    let v0 = y_tex_offs;
+    let v1 = y_tex_offs + depth;
+    let v2 = y_tex_offs + depth + height;
 
     let tex_scale_x = cube.tex_scale.x;
     let tex_scale_y = cube.tex_scale.y;
 
-    let mut add_quad = |mut points: [Vec3; 4], u0: f32, v0: f32, u1: f32, v1: f32| {
+    let mut add_polygon = |mut points: [Vec3; 4], u0: f32, v0: f32, u1: f32, v1: f32| {
+        let us = 0.0 / tex_scale_x;
+        let vs = 0.0 / tex_scale_y;
+
         let mut uvs = [
-            Vec2::new(u1 / tex_scale_x, v0 / tex_scale_y),
-            Vec2::new(u0 / tex_scale_x, v0 / tex_scale_y),
-            Vec2::new(u0 / tex_scale_x, v1 / tex_scale_y),
-            Vec2::new(u1 / tex_scale_x, v1 / tex_scale_y),
+            Vec2::new(u1 / tex_scale_x - us, v0 / tex_scale_y + vs),
+            Vec2::new(u0 / tex_scale_x + us, v0 / tex_scale_y + vs),
+            Vec2::new(u0 / tex_scale_x + us, v1 / tex_scale_y - vs),
+            Vec2::new(u1 / tex_scale_x - us, v1 / tex_scale_y - vs),
         ];
 
         if cube.mirror {
@@ -122,6 +133,9 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
             uvs.reverse();
         }
 
+        // Java: builder.addVertex(pos.x(), pos.y(), pos.z(), ...)
+        // worldX() = x / 16.0F
+        
         // triangle 1
         vertices.push(Vertex {
             pos: points[0],
@@ -157,28 +171,22 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
         });
     };
 
-    // DOWN (0)
-    if cube.visible_faces[0] {
-        add_quad([l1, l0, t0, t1], u1, v0, u2, v1);
+    if cube.visible_faces[0] { // DOWN
+        add_polygon([l1, l0, t0, t1], u1, v0, u2, v1);
     }
-    // UP (1)
-    if cube.visible_faces[1] {
-        add_quad([t2, t3, l3, l2], u2, v1, u22, v0);
+    if cube.visible_faces[1] { // UP
+        add_polygon([t2, t3, l3, l2], u2, v1, u22, v0);
     }
-    // WEST (4)
-    if cube.visible_faces[4] {
-        add_quad([t0, l0, l3, t3], u0, v1, u1, v2);
+    if cube.visible_faces[4] { // WEST
+        add_polygon([t0, l0, l3, t3], u0, v1, u1, v2);
     }
-    // NORTH (2)
-    if cube.visible_faces[2] {
-        add_quad([t1, t0, t3, t2], u1, v1, u2, v2);
+    if cube.visible_faces[2] { // NORTH
+        add_polygon([t1, t0, t3, t2], u1, v1, u2, v2);
     }
-    // EAST (5)
-    if cube.visible_faces[5] {
-        add_quad([l1, t1, t2, l2], u2, v1, u3, v2);
+    if cube.visible_faces[5] { // EAST
+        add_polygon([l1, t1, t2, l2], u2, v1, u3, v2);
     }
-    // SOUTH (3)
-    if cube.visible_faces[3] {
-        add_quad([l0, l1, l2, l3], u3, v1, u4, v2);
+    if cube.visible_faces[3] { // SOUTH
+        add_polygon([l0, l1, l2, l3], u3, v1, u4, v2);
     }
 }

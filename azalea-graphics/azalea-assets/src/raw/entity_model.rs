@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use glam::{Mat4, Quat, Vec2, Vec3};
 
@@ -14,7 +14,7 @@ impl Transform {
         let translation = Mat4::from_translation(self.pivot);
 
         let rotation = Mat4::from_quat(Quat::from_euler(
-            glam::EulerRot::XYZ,
+            glam::EulerRot::ZYX,
             self.rotation.x,
             self.rotation.y,
             self.rotation.z,
@@ -42,5 +42,5 @@ pub struct CubeDefinition {
 pub struct PartDefinition {
     pub cubes: Vec<CubeDefinition>,
     pub transform: Transform,
-    pub children: HashMap<String, PartDefinition>,
+    pub children: BTreeMap<String, PartDefinition>,
 }
