@@ -3,7 +3,7 @@ use std::f32::consts::PI;
 use azalea_assets::processed::entity_model::{Model, Transform};
 
 use crate::renderer::entity_renderer::{
-    models::biped::HumanoidModel, state::zombie::ZombieRenderState, transform::ModelTransforms,
+    models::humanoid::HumanoidModel, state::zombie::ZombieRenderState, transform::ModelTransforms,
 };
 
 pub struct ZombieModel<'a> {

@@ -63,7 +63,11 @@ impl BlockModel {
         }
 
         for (k, v) in &raw.textures {
-            textures.insert(k.clone(), v.clone());
+            let value = match v {
+                raw::model::TextureValue::String(s) => s.clone(),
+                raw::model::TextureValue::Object { sprite, .. } => sprite.clone(),
+            };
+            textures.insert(k.clone(), value);
         }
 
         Self {

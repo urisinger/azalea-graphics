@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use azalea::{
-    blocks::BlockState,
+    block::BlockState,
     core::position::{ChunkSectionBiomePos, ChunkSectionBlockPos, ChunkSectionPos},
-    registry::Biome,
+    registry::data::Biome,
     world::Chunk,
 };
 use parking_lot::RwLock;

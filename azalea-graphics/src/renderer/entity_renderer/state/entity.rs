@@ -2,7 +2,7 @@ use azalea::{
     ecs::{entity::Entity, world::World},
     entity::{EntityKindComponent, Position, metadata::Invisible},
     physics::collision::VoxelShape,
-    registry::EntityKind,
+    registry::builtin::EntityKind,
 };
 use glam::Vec3;
 

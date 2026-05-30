@@ -17,7 +17,7 @@ use crate::renderer::{RenderState, Renderer};
 pub enum WorldUpdate {
     ChunkAdded(ChunkPos),
     SectionChange(ChunkSectionPos),
-    WorldAdded(Arc<RwLock<azalea::world::Instance>>),
+    WorldAdded(Arc<RwLock<azalea::world::World>>),
 }
 
 pub enum RendererEvent {
@@ -41,7 +41,7 @@ impl RendererHandle {
         _ = self.tx.send(WorldUpdate::SectionChange(pos));
     }
 
-    pub fn add_world(&self, world: Arc<RwLock<azalea::world::Instance>>) {
+    pub fn add_world(&self, world: Arc<RwLock<azalea::world::World>>) {
         _ = self.tx.send(WorldUpdate::WorldAdded(world));
     }
 }

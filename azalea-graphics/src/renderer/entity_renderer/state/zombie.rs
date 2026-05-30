@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use azalea::{ecs::{entity::Entity, world::World}, entity::metadata::{Aggressive, DrownedConversion}};
 
-use super::biped::BipedRenderState;
+use super::humanoid::BipedRenderState;
 
 pub struct ZombieRenderState {
     pub parent: BipedRenderState,

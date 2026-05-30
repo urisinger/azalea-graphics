@@ -5,9 +5,21 @@ pub struct BlockModel {
     pub ambientocclusion: Option<bool>,
     pub parent: Option<String>,
     #[serde(default)]
-    pub textures: HashMap<String, String>,
+    pub textures: HashMap<String, TextureValue>,
     pub elements: Option<Vec<Cube>>,
     pub display: Option<HashMap<String, Display>>,
+    pub gui_light: Option<String>,
+}
+
+#[derive(serde::Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum TextureValue {
+    String(String),
+    Object {
+        sprite: String,
+        #[serde(default)]
+        force_translucent: bool,
+    },
 }
 
 impl BlockModel {
@@ -19,9 +31,9 @@ impl BlockModel {
 #[allow(unused)]
 #[derive(serde::Deserialize, Debug)]
 pub struct Display {
-    rotation: Option<glam::Vec3>,
-    translation: Option<glam::Vec3>,
-    scale: Option<glam::Vec3>,
+    pub rotation: Option<glam::Vec3>,
+    pub translation: Option<glam::Vec3>,
+    pub scale: Option<glam::Vec3>,
 }
 
 #[derive(serde::Deserialize, Debug, Clone)]
@@ -29,6 +41,10 @@ pub struct Cube {
     pub from: glam::Vec3,
     pub to: glam::Vec3,
     pub rotation: Option<Rotation>,
+    #[serde(default = "default_true")]
+    pub shade: bool,
+    #[serde(default)]
+    pub light_emission: i32,
     pub faces: Faces,
 }
 
@@ -57,11 +73,18 @@ fn neg_one() -> i32 {
     -1
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Rotation {
     pub origin: glam::Vec3,
-    pub axis: Axis,
-    pub angle: f32,
+    pub axis: Option<Axis>,
+    pub angle: Option<f32>,
+    pub x: Option<f32>,
+    pub y: Option<f32>,
+    pub z: Option<f32>,
     #[serde(default)]
     pub rescale: bool,
 }

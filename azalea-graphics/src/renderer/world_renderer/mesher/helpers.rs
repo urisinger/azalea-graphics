@@ -1,5 +1,5 @@
 use azalea::{
-    blocks::BlockState,
+    block::BlockState,
     core::direction::Direction,
     physics::collision::BlockWithShape,
 };

@@ -1,9 +1,8 @@
-use std::{net::SocketAddr, thread};
+use std::thread;
 
 use azalea::{
     ClientInformation,
     prelude::*,
-    protocol::address::{ResolvedAddr, ServerAddr},
 };
 use azalea_graphics::{
     app::{App, RendererArgs, RendererHandle},
@@ -42,7 +41,7 @@ fn main() {
     println!("Connecting to: {}", server_address);
 
     let (handle, app) = App::new(args.renderer);
-    let azalea_thread = thread::spawn(move || {
+    let _azalea_thread = thread::spawn(move || {
         let rt = Runtime::new().unwrap();
         rt.block_on(run_azalea(handle, server_address));
     });

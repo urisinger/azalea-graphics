@@ -1,7 +1,6 @@
 use std::{
     cmp::Ordering,
     collections::HashSet,
-    io::Cursor,
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering as AtomicOrdering},

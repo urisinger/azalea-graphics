@@ -2,14 +2,14 @@ use std::ops::Deref;
 
 use azalea::{
     ecs::{entity::Entity, world::World},
-    registry::EntityKind,
+    registry::builtin::EntityKind,
 };
 use zombie::ZombieRenderState;
 
 use crate::renderer::entity_renderer::state::entity::EntityRenderState;
 
 pub mod armed_entity;
-pub mod biped;
+pub mod humanoid;
 pub mod entity;
 pub mod living_entity;
 pub mod zombie;

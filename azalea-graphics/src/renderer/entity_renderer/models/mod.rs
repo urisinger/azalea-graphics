@@ -1,2 +1,2 @@
-pub mod biped;
+pub mod humanoid;
 pub mod zombie;
