@@ -3,7 +3,7 @@ use azalea_buf::AzBuf;
 use crate::position::{BlockPos, Vec3, Vec3i};
 
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Clone, Copy, Debug, AzBuf, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, AzBuf, Default, Eq, PartialEq, Hash)]
 pub enum Direction {
     #[default]
     Down = 0,
