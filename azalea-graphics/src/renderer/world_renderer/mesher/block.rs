@@ -1,5 +1,5 @@
 use azalea::{
-    blocks::{BlockState},
+    block::{BlockState},
     core::direction::Direction,
     physics::collision::BlockWithShape,
 };
@@ -12,11 +12,10 @@ use glam::{IVec3, Vec3};
 use crate::renderer::{
     chunk::LocalSection,
     world_renderer::{
-        BlockVertex,
         mesher::{
             MeshBuilder,
             helpers::{FACES, compute_ao, generate_uv, offset_to_coord, remap_uv_to_atlas},
-        },
+        }, types::BlockVertex,
     },
 };
 
@@ -38,7 +37,7 @@ pub fn mesh_block(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
                     let tint = builder.block_colors.get_color(
                         block,
                         builder.section,
-                        builder.biome_cache,
+                        builder.biome_registry,
                         local,
                         model_face.tintindex,
                         builder.assets,

@@ -14,7 +14,7 @@ use azalea::{
         world::World,
     },
     entity::EntityKindComponent,
-    local_player::InstanceHolder,
+    local_player::{WorldHolder},
     prelude::*,
 };
 use crossbeam::channel::TryRecvError;
@@ -52,11 +52,11 @@ impl Plugin for RendererPlugin {
 }
 
 pub fn handle_block_updates(
-    query: Query<(&QueuedServerBlockUpdates, &InstanceHolder)>,
+    query: Query<(&QueuedServerBlockUpdates, &WorldHolder)>,
     renderer: Res<RendererResource>,
 ) {
     for (queued, instance_holder) in query.iter() {
-        let world = instance_holder.instance.read();
+        let world = instance_holder.shared.read();
         for (pos, block_state) in &queued.list {
             renderer.handle.send_section(ChunkSectionPos::from(pos));
         }
@@ -76,11 +76,11 @@ fn forward_chunk_updates(
 
 fn add_world(
     renderer: Res<RendererResource>,
-    added: Query<&InstanceHolder, Changed<InstanceHolder>>,
+    added: Query<&WorldHolder, Changed<WorldHolder>>,
 ) {
     for holder in added {
         println!("added");
-        renderer.handle.add_world(holder.instance.clone());
+        renderer.handle.add_world(holder.shared.clone());
     }
 }
 

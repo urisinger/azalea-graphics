@@ -6,7 +6,6 @@ use cargo_gpu_install::{
 };
 
 pub fn main() -> anyhow::Result<()> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let crate_path = PathBuf::from("./shaders");
 
     let install = Install::from_shader_crate(crate_path.clone())

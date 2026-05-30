@@ -186,12 +186,12 @@ impl ToNbtTag for BiomePrecipitation {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[cfg_attr(feature = "strict_registry", simdnbt(deny_unknown_fields))]
 pub struct BiomeEffects {
-    pub sky_color: u32,
-    pub fog_color: u32,
-    pub water_color: u32,
-    pub water_fog_color: u32,
-    pub foliage_color: Option<u32>,
-    pub grass_color: Option<u32>,
+    pub sky_color: i32,
+    pub fog_color: i32,
+    pub water_color: i32,
+    pub water_fog_color: i32,
+    pub foliage_color: Option<i32>,
+    pub grass_color: Option<i32>,
     pub grass_color_modifier: Option<String>,
     pub music: Option<BiomeMusic>,
     pub mood_sound: BiomeMoodSound,

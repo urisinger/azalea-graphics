@@ -63,6 +63,7 @@ macro_rules! define_default_deserializes_to {
 }
 
 define_deserializes_to! {
+    data::Biome => crate::registry_holder::dimension_type::WorldTypeElement,
     data::DimensionKind => crate::registry_holder::dimension_type::DimensionKindElement,
     data::Enchantment => crate::registry_holder::enchantment::EnchantmentData,
 }
@@ -78,5 +79,4 @@ define_default_deserializes_to! {
     data::PigVariant,
     data::PaintingVariant,
     data::WolfVariant,
-    data::Biome,
 }

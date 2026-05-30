@@ -12,22 +12,19 @@ use azalea::{
     block::BlockState,
     core::{
         position::{ChunkPos, ChunkSectionPos},
-        registry_holder::RegistryHolder,
+        registry_holder::{dimension_type::WorldTypeElement},
     },
-    registry::{ DataRegistry, builtin::BlockKind},
+    registry::{builtin::BlockKind},
 };
 use azalea_assets::Assets;
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use glam::IVec3;
 use parking_lot::{Mutex, RwLock};
-use simdnbt::Deserialize;
 
 use crate::renderer::{
     chunk::{LocalChunk, LocalSection},
     world_renderer::{
-        BlockVertex,
-        mesher::{block::mesh_block, water::mesh_water},
-        visibility::buffers::VisibilitySnapshot,
+        mesher::{block::mesh_block, water::mesh_water}, types::BlockVertex, visibility::buffers::VisibilitySnapshot
     },
 };
 
@@ -46,7 +43,7 @@ struct WorkerContext {
     world: Arc<RwLock<azalea::world::World>>,
     dirty: Arc<Mutex<HashSet<ChunkSectionPos>>>,
     assets: Arc<Assets>,
-    biome_cache: BiomeCache,
+    biome_registry: Vec<WorldTypeElement>,
     shared_queue: SharedQueue,
     current_visibility: Mutex<Option<VisibilitySnapshot>>,
     result_tx: Sender<MeshResult>,
@@ -177,7 +174,7 @@ impl SharedQueue {
 }
 
 impl Mesher {
-    pub fn new(assets: Arc<Assets>, world: Arc<RwLock<azalea::world::Instance>>) -> Self {
+    pub fn new(assets: Arc<Assets>, world: Arc<RwLock<azalea::world::World>>) -> Self {
         let num_threads = num_cpus::get().max(1) as u32 / 2;
 
         let (result_tx, result_rx) = unbounded::<MeshResult>();
@@ -185,15 +182,22 @@ impl Mesher {
 
         let dirty = Arc::new(Mutex::new(HashSet::new()));
         let shared_queue = SharedQueue::new();
+        let biome_registry: Vec<_> = world
+            .read()
+            .registries
+            .biome
+            .map
+            .values()
+            .cloned()
+            .collect();
         let current_visibility = Mutex::new(None::<VisibilitySnapshot>);
-        let biome_cache = BiomeCache::from_registries(&world.read().registries);
         let should_stop = AtomicBool::new(false);
 
         let worker_ctx = Arc::new(WorkerContext {
             world: Arc::clone(&world),
             dirty: Arc::clone(&dirty),
             assets: Arc::clone(&assets),
-            biome_cache,
+            biome_registry,
             shared_queue,
             current_visibility,
             result_tx,
@@ -259,8 +263,8 @@ impl Mesher {
 
     pub fn submit_chunk(&self, pos: ChunkPos) {
         let world = self.world.read();
-        let min = world.chunks.min_y / 16;
-        let max = min + world.chunks.height as i32 / 16;
+        let min = world.chunks.min_y() / 16;
+        let max = min + world.chunks.height() as i32 / 16;
         for y in min..max {
             let spos = ChunkSectionPos::new(pos.x, y, pos.z);
             self.submit_section(spos);
@@ -294,7 +298,7 @@ impl Mesher {
 
                     if let Some(local) = build_local_section(&ctx.world, job.spos) {
                         let t0 = std::time::Instant::now();
-                        let mesh = mesh_section(&local, &ctx.biome_cache, &ctx.assets);
+                        let mesh = mesh_section(&local, &ctx.biome_registry, &ctx.assets);
                         let elapsed = t0.elapsed();
 
                         let nanos = elapsed.as_nanos() as u64;
@@ -324,7 +328,7 @@ impl Mesher {
         }
 
         self.worker_count = new_thread_count;
-        log::info!(
+        tracing::info!(
             "Worker thread count changed from {} to {}",
             current,
             new_thread_count
@@ -350,7 +354,7 @@ impl Drop for Mesher {
 }
 
 fn build_local_section(
-    world: &Arc<RwLock<azalea::world::Instance>>,
+    world: &Arc<RwLock<azalea::world::World>>,
     spos: ChunkSectionPos,
 ) -> Option<LocalSection> {
     let world_guard = world.read();
@@ -382,7 +386,7 @@ fn build_local_section(
     let local_chunk = LocalChunk {
         center,
         neighbors,
-        min_y: world_guard.chunks.min_y / 16,
+        min_y: world_guard.chunks.min_y() / 16,
     };
     drop(world_guard);
 
@@ -399,7 +403,7 @@ pub struct MeshBuilder<'a> {
     pub block_colors: &'a block_colors::BlockColors,
     pub section: &'a LocalSection,
 
-    pub biome_cache: &'a BiomeCache,
+    pub biome_registry: &'a [WorldTypeElement],
 
     block_vertices: Vec<BlockVertex>,
     block_indices: Vec<u32>,
@@ -454,57 +458,9 @@ impl<'a> MeshBuilder<'a> {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct BiomeData {
-    pub temperature: f32,
-    pub downfall: f32,
-    pub has_precipitation: bool,
-    pub effects: BiomeEffects,
-}
-
-#[derive(Clone, Debug)]
-pub struct BiomeCache {
-    pub biomes: Vec<BiomeData>,
-}
-
-
-impl BiomeCache {
-    fn from_registries(registries: &RegistryHolder) -> Self {
-        let mut biomes = Vec::new();
-
-        if let Some(biome_registry) = registries.map.get(&azalea::Identifier::new(Biome::NAME)) {
-            for (_key, value) in biome_registry {
-                let mut nbt_bytes = Vec::new();
-                value.write(&mut nbt_bytes);
-
-                let nbt_borrow_compound =
-                    match simdnbt::borrow::read_compound(&mut Cursor::new(&nbt_bytes)) {
-                        Ok(compound) => compound,
-                        Err(e) => {
-                            error!("Failed to read NBT compound for biome: {}", e);
-                            continue;
-                        }
-                    };
-
-                let biome_data = match BiomeData::from_compound((&nbt_borrow_compound).into()) {
-                    Ok(value) => value,
-                    Err(e) => {
-                        error!("Failed to parse BiomeData: {}, {value:?}", e);
-                        continue;
-                    }
-                };
-
-                biomes.push(biome_data);
-            }
-        }
-
-        BiomeCache { biomes }
-    }
-}
-
 pub fn mesh_section(
     section: &LocalSection,
-    biome_cache: &BiomeCache,
+    biome_registry: &[WorldTypeElement],
     assets: &Assets,
 ) -> MeshResult {
     let block_colors = block_colors::BlockColors::create_default();
@@ -513,7 +469,7 @@ pub fn mesh_section(
         assets,
         block_colors: &block_colors,
         section,
-        biome_cache,
+        biome_registry,
         block_vertices: Vec::with_capacity(1000),
         block_indices: Vec::with_capacity(1000),
         water_vertices: Vec::with_capacity(500),

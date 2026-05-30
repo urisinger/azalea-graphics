@@ -39,7 +39,6 @@ mod visibility;
 use descriptors::Descriptors;
 use meshes::MeshStore;
 use pipelines::{PipelineOptions, Pipelines};
-use types::BlockVertex;
 
 pub struct WorldRenderer {
     mesher: Option<Mesher>,
@@ -183,7 +182,7 @@ impl WorldRenderer {
             let cx = (camera_pos.x / 16.0).floor() as i32;
             let cy = (camera_pos.y / 16.0).floor() as i32;
             let cz = (camera_pos.z / 16.0).floor() as i32;
-            let min_y = self.mesher.as_ref().unwrap().world.read().chunks.min_y;
+            let min_y = self.mesher.as_ref().unwrap().world.read().chunks.min_y();
             let snapshot = vis_bufs.snapshot(ctx, frame_index, cx, cz, min_y);
 
             mesher.update_visibility(snapshot);
@@ -221,7 +220,7 @@ impl WorldRenderer {
             WorldUpdate::WorldAdded(world) => {
                 unsafe { ctx.device().queue_wait_idle(ctx.graphics_queue()).unwrap() };
                 let world_read = world.read();
-                let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
+                let max_height = world_read.chunks.height() as i32 - world_read.chunks.min_y();
                 drop(world_read);
 
                 let radius = config.render_distance as i32;
@@ -252,7 +251,7 @@ impl WorldRenderer {
     pub fn set_render_distance(&mut self, ctx: &VkContext, new_distance: u32) {
         if let Some(mesher) = &self.mesher {
             let world_read = mesher.world.read();
-            let max_height = world_read.chunks.height as i32 - world_read.chunks.min_y;
+            let max_height = world_read.chunks.height() as i32 - world_read.chunks.min_y();
             drop(world_read);
 
             let radius = new_distance as i32;
@@ -298,7 +297,7 @@ impl WorldRenderer {
                 (self
                     .mesher
                     .as_ref()
-                    .map(|m| m.world.read().chunks.min_y)
+                    .map(|m| m.world.read().chunks.min_y())
                     .unwrap_or(0)
                     / 16) as f32
                     * CHUNK,

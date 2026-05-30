@@ -22,7 +22,7 @@ rustflags = [
     # - Ubuntu: `sudo apt-get install lld clang`
     # - Fedora: `sudo dnf install lld clang`
     # - Arch: `sudo pacman -S lld clang`
-    #"-Clink-arg=-fuse-ld=lld",
+    "-Clink-arg=-fuse-ld=lld",
 
     # Mold linker
     #
@@ -31,7 +31,7 @@ rustflags = [
     # - Ubuntu: `sudo apt-get install mold clang`
     # - Fedora: `sudo dnf install mold clang`
     # - Arch: `sudo pacman -S mold clang`
-    "-Clink-arg=-fuse-ld=mold",
+    #"-Clink-arg=-fuse-ld=mold",
 
     # Nightly
     "-Zshare-generics=y",
@@ -55,5 +55,6 @@ rustflags = [
 # Optional: Uncommenting the following improves compile times, but reduces the amount of debug info to 'line number tables only'
 # In most cases the gains are negligible, but if you are on macos and have slow compile times you should see significant gains.
 [profile.dev]
-debug = 0
-codegen-backend = "cranelift"
+#debug = 0
+#codegen-backend = "cranelift"
+

@@ -1,6 +1,10 @@
 use std::{net::SocketAddr, thread};
 
-use azalea::{ClientInformation, prelude::*};
+use azalea::{
+    ClientInformation,
+    prelude::*,
+    protocol::address::{ResolvedAddr, ServerAddr},
+};
 use azalea_graphics::{
     app::{App, RendererArgs, RendererHandle},
     plugin::RendererPlugin,
@@ -14,20 +18,19 @@ struct Args {
     renderer: RendererArgs,
 
     #[arg(long, short, default_value = "127.0.0.1:25565")]
-    addr: SocketAddr,
+    addr: String,
 }
 
-async fn run_azalea(render_handle: RendererHandle, server_address: SocketAddr) {
+async fn run_azalea(render_handle: RendererHandle, server_address: String) {
     let account = Account::offline("bot");
 
-    ClientBuilder::new()
+    _ = ClientBuilder::new()
         .add_plugins(RendererPlugin {
             handle: render_handle,
         })
         .set_handler(handle)
         .start(account, server_address)
-        .await
-        .unwrap();
+        .await;
 }
 
 fn main() {
@@ -46,7 +49,6 @@ fn main() {
 
     app.run();
 
-    let _ = azalea_thread.join();
 }
 
 #[derive(Component, Default, Clone)]
@@ -57,7 +59,7 @@ async fn handle(bot: Client, event: azalea::Event, _state: State) -> anyhow::Res
         azalea::Event::Init => bot.set_client_information(ClientInformation {
             view_distance: 32,
             ..Default::default()
-        }),
+        })?,
         _ => {}
     }
     Ok(())

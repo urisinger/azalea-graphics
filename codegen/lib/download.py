@@ -4,8 +4,8 @@ import requests
 import json
 import os
 
-PUMPKIN_EXTRACTOR_COMMIT = "f3019d598c06f0d6fd4f3568fbf2d5bebae71173q"
-BURGER_COMMIT = "bb84700e43bf7090877d9a4eb5d87c3125a8d22e"
+PUMPKIN_EXTRACTOR_COMMIT = "f9ecdf749def29e5ae9a288910f448931990f6c7"
+BURGER_COMMIT = "2d8fddb95c3e1ae1d8642f546e062e986148bb8d"
 
 # make sure the cache directory exists
 print("Making __cache__")
@@ -18,7 +18,7 @@ def get_burger():
     if not os.path.exists(get_dir_location("__cache__/azalea-burger")):
         print("\033[92mDownloading azalea-burger...\033[m")
         os.system(
-            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/Burger-occlude.git azalea-burger && cd azalea-burger && git pull"
+            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/Burger-occlude.git azalea-burger && cd azalea-burger && git pull && git reset --hard {BURGER_COMMIT}"
         )
 
         print("\033[92mInstalling dependencies...\033[m")

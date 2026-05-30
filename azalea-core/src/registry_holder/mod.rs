@@ -16,7 +16,7 @@ pub mod value;
 
 use std::{collections::HashMap, io::Cursor};
 
-use azalea_registry::identifier::Identifier;
+use azalea_registry::{DataRegistry, data::{Biome, DimensionKind, Enchantment}, identifier::Identifier};
 use indexmap::IndexMap;
 use simdnbt::{DeserializeError, FromNbtTag, borrow, owned::NbtCompound};
 use thiserror::Error;
@@ -41,6 +41,8 @@ pub struct RegistryHolder {
     pub dimension_type: RegistryType<dimension_type::DimensionKindElement>,
 
     pub enchantment: RegistryType<enchantment::EnchantmentData>,
+
+    pub biome: RegistryType<dimension_type::WorldTypeElement>,
 
     /// Registries that we haven't implemented deserializable types for.
     ///
@@ -112,7 +114,7 @@ macro_rules! registry_holder {
     };
 }
 
-registry_holder!(dimension_type, enchantment);
+registry_holder!(dimension_type, enchantment, biome);
 
 fn nbt_to_serializable_type<T: simdnbt::Deserialize>(
     value: &NbtCompound,
@@ -193,7 +195,7 @@ impl RegistryDeserializesTo for dimension_type::DimensionKindElement {
         registry_name: &'static str,
         protocol_id: u32,
     ) -> Option<(&'a Identifier, &'a Self)> {
-        if registry_name != "dimension_type" {
+        if registry_name != DimensionKind::NAME {
             error!(
                 "called RegistryDeserializesTo::get_for_registry with the wrong registry: {registry_name}"
             );
@@ -210,12 +212,27 @@ impl RegistryDeserializesTo for enchantment::EnchantmentData {
         registry_name: &'static str,
         protocol_id: u32,
     ) -> Option<(&'a Identifier, &'a Self)> {
-        if registry_name != "enchantment" {
+        if registry_name != Enchantment::NAME {
             error!(
                 "called RegistryDeserializesTo::get_for_registry with the wrong registry: {registry_name}"
             );
         }
         registries.enchantment.map.get_index(protocol_id as usize)
+    }
+}
+impl RegistryDeserializesTo for dimension_type::WorldTypeElement {
+    fn get_for_registry<'a>(
+        registries: &'a RegistryHolder,
+        registry_name: &'static str,
+        protocol_id: u32,
+    ) -> Option<(&'a Identifier, &'a Self)> {
+        if registry_name != Biome::NAME {
+            error!(
+                "called RegistryDeserializesTo::get_for_registry with the wrong registry: {registry_name}"
+            );
+        }
+
+        registries.biome.map.get_index(protocol_id as usize)
     }
 }
 

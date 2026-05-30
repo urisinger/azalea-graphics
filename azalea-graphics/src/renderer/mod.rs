@@ -433,7 +433,7 @@ impl Renderer {
             image_index,
             frame_ctx.frame_index,
         ) {
-            log::warn!("Failed to render egui: {}", e);
+            tracing::warn!("Failed to render egui: {}", e);
         }
 
         frame_ctx.begin_timestamp(timings::END_UI_PASS);
