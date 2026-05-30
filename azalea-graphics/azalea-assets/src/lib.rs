@@ -234,7 +234,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     tracing::info!("Mapped blockstates to models in {:?}", start.elapsed());
 
     let entity_models_path = path.join("entity_models.json");
-    let raw_entity_models: HashMap<String, raw::entity_model::PartDefinition> = serde_json::from_str(
+    let raw_entity_models: HashMap<String, raw::entity_model::LayerDefinition> = serde_json::from_str(
         &fs::read_to_string(&entity_models_path)
             .unwrap_or_else(|_| panic!("missing {}", entity_models_path.display())),
     )

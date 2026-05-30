@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use glam::{Mat4, Quat, Vec2, Vec3};
 
@@ -27,8 +27,14 @@ impl Transform {
 }
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct LayerDefinition {
+    pub texture_size: [i32; 2],
+    #[serde(flatten)]
+    pub root: PartDefinition,
+}
+
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct CubeDefinition {
-    pub comment: Option<String>,
     pub origin: Vec3,
     pub dimensions: Vec3,
     pub grow: Vec3,
@@ -42,5 +48,5 @@ pub struct CubeDefinition {
 pub struct PartDefinition {
     pub cubes: Vec<CubeDefinition>,
     pub transform: Transform,
-    pub children: BTreeMap<String, PartDefinition>,
+    pub children: HashMap<String, PartDefinition>,
 }

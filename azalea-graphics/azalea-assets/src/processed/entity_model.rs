@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use glam::{Vec2, Vec3};
+use glam::{IVec2, Vec2, Vec3};
 pub use raw::Transform;
 
 use super::super::raw::entity_model as raw;
@@ -13,10 +13,16 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn from_raw(raw: raw::PartDefinition) -> Self {
+    pub fn from_raw(raw: raw::LayerDefinition) -> Self {
         let mut vertices = Vec::new();
         let mut default_transforms = Vec::new();
-        let part = ModelPart::from_raw(raw, &mut vertices, &mut default_transforms);
+        let texture_size = Vec2::new(raw.texture_size[0] as f32, raw.texture_size[1] as f32);
+        let part = ModelPart::from_raw(
+            raw.root,
+            texture_size,
+            &mut vertices,
+            &mut default_transforms,
+        );
         Self {
             vertices,
             part,
@@ -34,6 +40,7 @@ pub struct ModelPart {
 impl ModelPart {
     fn from_raw(
         raw: raw::PartDefinition,
+        texture_size: Vec2,
         vertices: &mut Vec<Vertex>,
         default_transforms: &mut Vec<Transform>,
     ) -> Self {
@@ -41,12 +48,12 @@ impl ModelPart {
         default_transforms.push(raw.transform);
 
         for cube in raw.cubes {
-            bake_cube(&cube, id as u32, vertices);
+            bake_cube(&cube, texture_size, id as u32, vertices);
         }
 
         let mut children = HashMap::new();
         for (name, child) in raw.children {
-            let child_part = ModelPart::from_raw(child, vertices, default_transforms);
+            let child_part = ModelPart::from_raw(child, texture_size, vertices, default_transforms);
             children.insert(name, child_part);
         }
 
@@ -61,7 +68,13 @@ pub struct Vertex {
     pub transform_id: u32,
 }
 
-fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<Vertex>) {
+fn bake_cube(
+    cube: &raw::CubeDefinition,
+    texture_size: Vec2,
+
+    transform_id: u32,
+    vertices: &mut Vec<Vertex>,
+) {
     let mut min_x = cube.origin.x;
     let mut min_y = cube.origin.y;
     let mut min_z = cube.origin.z;
@@ -94,7 +107,7 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
     let t1 = Vec3::new(max_x, min_y, min_z);
     let t2 = Vec3::new(max_x, max_y, min_z);
     let t3 = Vec3::new(min_x, max_y, min_z);
-    
+
     let l0 = Vec3::new(min_x, min_y, max_z);
     let l1 = Vec3::new(max_x, min_y, max_z);
     let l2 = Vec3::new(max_x, max_y, max_z);
@@ -114,8 +127,8 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
     let v1 = y_tex_offs + depth;
     let v2 = y_tex_offs + depth + height;
 
-    let tex_scale_x = cube.tex_scale.x;
-    let tex_scale_y = cube.tex_scale.y;
+    let tex_scale_x = texture_size.x * cube.tex_scale.x;
+    let tex_scale_y = texture_size.y * cube.tex_scale.y;
 
     let mut add_polygon = |mut points: [Vec3; 4], u0: f32, v0: f32, u1: f32, v1: f32| {
         let us = 0.0 / tex_scale_x;
@@ -135,7 +148,7 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
 
         // Java: builder.addVertex(pos.x(), pos.y(), pos.z(), ...)
         // worldX() = x / 16.0F
-        
+
         // triangle 1
         vertices.push(Vertex {
             pos: points[0],
@@ -171,22 +184,28 @@ fn bake_cube(cube: &raw::CubeDefinition, transform_id: u32, vertices: &mut Vec<V
         });
     };
 
-    if cube.visible_faces[0] { // DOWN
+    if cube.visible_faces[0] {
+        // DOWN
         add_polygon([l1, l0, t0, t1], u1, v0, u2, v1);
     }
-    if cube.visible_faces[1] { // UP
+    if cube.visible_faces[1] {
+        // UP
         add_polygon([t2, t3, l3, l2], u2, v1, u22, v0);
     }
-    if cube.visible_faces[4] { // WEST
+    if cube.visible_faces[4] {
+        // WEST
         add_polygon([t0, l0, l3, t3], u0, v1, u1, v2);
     }
-    if cube.visible_faces[2] { // NORTH
+    if cube.visible_faces[2] {
+        // NORTH
         add_polygon([t1, t0, t3, t2], u1, v1, u2, v2);
     }
-    if cube.visible_faces[5] { // EAST
+    if cube.visible_faces[5] {
+        // EAST
         add_polygon([l1, t1, t2, l2], u2, v1, u3, v2);
     }
-    if cube.visible_faces[3] { // SOUTH
+    if cube.visible_faces[3] {
+        // SOUTH
         add_polygon([l0, l1, l2, l3], u3, v1, u4, v2);
     }
 }
