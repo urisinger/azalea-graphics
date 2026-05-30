@@ -337,6 +337,19 @@ impl Mesher {
     }
 }
 
+impl Drop for Mesher {
+    fn drop(&mut self) {
+        self.worker_ctx
+            .should_stop
+            .store(true, AtomicOrdering::Release);
+
+        let parked = self.worker_ctx.shared_queue.parked_threads.lock();
+        for thread in parked.iter() {
+            thread.unpark();
+        }
+    }
+}
+
 fn build_local_section(
     world: &Arc<RwLock<azalea::world::Instance>>,
     spos: ChunkSectionPos,
@@ -451,10 +464,7 @@ impl BiomeCache {
     fn from_registries(registries: &RegistryHolder) -> Self {
         let mut biomes = Vec::new();
 
-        if let Some(biome_registry) = registries
-            .map
-            .get(&azalea::Identifier::new(Biome::NAME))
-        {
+        if let Some(biome_registry) = registries.map.get(&azalea::Identifier::new(Biome::NAME)) {
             for (_key, value) in biome_registry {
                 let mut nbt_bytes = Vec::new();
                 value.write(&mut nbt_bytes);

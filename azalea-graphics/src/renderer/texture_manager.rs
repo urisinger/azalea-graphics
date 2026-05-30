@@ -91,20 +91,21 @@ impl TextureManager {
         self.descriptor_sets[frame_index]
     }
 
-    pub fn get_texture(&mut self, ctx: &mut FrameCtx, id: &str) -> u32 {
+    pub fn get_texture(&mut self, ctx: &mut FrameCtx, id: &str) -> Option<u32> {
         if let Some(&texture_id) = self.name_to_index.get(id) {
-            texture_id
+            
+            Some(texture_id)
         } else {
             let path = self.assets.get_path(id);
             let image = if let Ok(image) = image::open(path) {
                 image
             } else {
-                return 0;
+                return None;
             };
             let image = if let Some(image) = image.as_rgba8() {
                 image
             } else {
-                return 0;
+                return None;
             };
 
             let (width, height) = image.dimensions();
@@ -126,7 +127,7 @@ impl TextureManager {
                 *dirty = true;
             }
             
-            texture_id
+            Some(texture_id)
         }
     }
 

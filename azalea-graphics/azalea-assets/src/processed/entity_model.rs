@@ -5,6 +5,7 @@ pub use raw::Transform;
 
 use super::super::raw::entity_model as raw;
 
+#[derive(Debug)]
 pub struct Model {
     pub vertices: Vec<Vertex>,
     pub part: ModelPart,
@@ -24,6 +25,7 @@ impl Model {
     }
 }
 
+#[derive(Debug)]
 pub struct ModelPart {
     pub children: HashMap<String, ModelPart>,
 
@@ -41,10 +43,20 @@ impl ModelPart {
 
         for cuboid in raw.cuboids {
             for side in cuboid.sides {
-                for vertex in side.vertices {
+                let v = &side.vertices;
+
+                for i in [0, 1, 2] {
                     vertices.push(Vertex {
-                        pos: vertex.pos,
-                        uv: vertex.uv.unwrap_or(Vec2::ZERO),
+                        pos: v[i].pos,
+                        uv: v[i].uv.unwrap_or(Vec2::ZERO),
+                        transform_id: id as u32,
+                    });
+                }
+
+                for i in [0, 2, 3] {
+                    vertices.push(Vertex {
+                        pos: v[i].pos,
+                        uv: v[i].uv.unwrap_or(Vec2::ZERO),
                         transform_id: id as u32,
                     });
                 }
@@ -57,13 +69,11 @@ impl ModelPart {
             children.insert(name, child_part);
         }
 
-        Self {
-            children,
-            id,
-        }
+        Self { children, id }
     }
 }
 
+#[derive(Debug)]
 pub struct Vertex {
     pub pos: Vec3,
     pub uv: Vec2,

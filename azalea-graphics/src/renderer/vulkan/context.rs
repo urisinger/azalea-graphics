@@ -434,9 +434,13 @@ impl Drop for VkContext {
     fn drop(&mut self) {
         unsafe {
             self.device.destroy_command_pool(self.command_pool, None);
+
             ManuallyDrop::drop(&mut self.allocator);
+
             self.device.destroy_device(None);
+
             self.surface.destroy_surface(self.surface_khr, None);
+
             if let Some(debug) = self.debug.take() {
                 debug
                     .utils

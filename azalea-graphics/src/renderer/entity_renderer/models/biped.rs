@@ -7,7 +7,7 @@ use crate::renderer::entity_renderer::{
     transform::ModelTransforms,
 };
 
-pub struct BipedModel<'a> {
+pub struct HumanoidModel<'a> {
     pub head: &'a ModelPart,
     pub hat: &'a ModelPart,
     pub body: &'a ModelPart,
@@ -17,7 +17,7 @@ pub struct BipedModel<'a> {
     pub left_leg: &'a ModelPart,
 }
 
-impl<'a> BipedModel<'a> {
+impl<'a> HumanoidModel<'a> {
     pub fn new(model: &'a Model) -> Self {
         let root = &model.part;
         

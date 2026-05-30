@@ -1,7 +1,7 @@
 use std::mem::offset_of;
 
 use ash::vk;
-use glam::{Mat4, Vec2, Vec3};
+use glam::{Vec2, Vec3};
 
 pub struct EntityVertex {
     pub pos: Vec3,

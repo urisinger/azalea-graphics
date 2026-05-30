@@ -34,15 +34,15 @@ pub struct RendererHandle {
 
 impl RendererHandle {
     pub fn send_chunk(&self, pos: ChunkPos) {
-        self.tx.send(WorldUpdate::ChunkAdded(pos)).unwrap()
+        _ = self.tx.send(WorldUpdate::ChunkAdded(pos));
     }
 
     pub fn send_section(&self, pos: ChunkSectionPos) {
-        self.tx.send(WorldUpdate::SectionChange(pos)).unwrap()
+        _ = self.tx.send(WorldUpdate::SectionChange(pos));
     }
 
     pub fn add_world(&self, world: Arc<RwLock<azalea::world::Instance>>) {
-        self.tx.send(WorldUpdate::WorldAdded(world)).unwrap()
+        _ = self.tx.send(WorldUpdate::WorldAdded(world));
     }
 }
 
@@ -237,6 +237,8 @@ impl ApplicationHandler for App {
     fn exiting(&mut self, _el: &ActiveEventLoop) {
         if let Some(renderer) = &mut self.renderer {
             renderer.destroy();
+            println!("exited");
+            self.renderer = None;
         }
     }
 }

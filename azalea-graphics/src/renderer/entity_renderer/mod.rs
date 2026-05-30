@@ -261,11 +261,6 @@ impl EntityRenderer {
     }
 
     pub fn render(&mut self, frame_ctx: &mut FrameCtx, texture_manager: &mut TextureManager) {
-        let states = self.entities.lock();
-        if states.is_empty() {
-            return;
-        }
-
         // Collect all transforms and prepare draw calls
         let mut all_transforms = Vec::new();
         let mut pending: Vec<PendingDraw> = Vec::new();
@@ -277,6 +272,10 @@ impl EntityRenderer {
             .expect("Zombie model not found");
         let zombie_model = ZombieModel::new(zombie_model_data);
 
+        let states = self.entities.lock();
+        if states.is_empty() {
+            return;
+        }
         for state in states.iter() {
             match state {
                 RenderState::Zombie(s) => {
@@ -285,14 +284,7 @@ impl EntityRenderer {
                     // Create transforms and animate
                     let mut model_transforms = ModelTransforms::new(zombie_model_data);
                     zombie_model.set_angles(&mut model_transforms, s);
-
-                    // Build world transform following Minecraft's matrix stack operations:
-                    // matrixStack.scale(baseScale, baseScale, baseScale)
-                    // setupTransforms() -> rotation by bodyYaw
-                    // matrixStack.scale(-1, -1, 1)
-                    // matrixStack.translate(0, -1.501, 0)
-
-                    // Start with world position
+                    
                     let mut world_transform = Mat4::from_scale(Vec3::splat(s.base_scale));
 
                     // Apply rotation (180 - bodyYaw)
@@ -313,8 +305,13 @@ impl EntityRenderer {
                         model_transforms.to_transforms(zombie_model_data, world_transform);
                     all_transforms.extend(transforms);
 
-                    let texture =
-                        texture_manager.get_texture(frame_ctx, "textures/entity/zombie/zombie.png");
+                    let texture = if let Some(tex) =
+                        texture_manager.get_texture(frame_ctx, "textures/entity/zombie/zombie.png")
+                    {
+                        tex
+                    } else {
+                        0
+                    };
                     let model = self.loaded_models["minecraft:zombie#main"];
 
                     pending.push(PendingDraw {
