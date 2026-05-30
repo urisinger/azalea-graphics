@@ -9,13 +9,13 @@ use crate::{
     tree::CommandNode,
 };
 
-pub struct ParseResults<'a, S> {
-    pub context: CommandContextBuilder<'a, S>,
+pub struct ParseResults<'a, S, R> {
+    pub context: CommandContextBuilder<'a, S, R>,
     pub reader: StringReader,
-    pub exceptions: HashMap<Rc<CommandNode<S>>, CommandSyntaxError>,
+    pub exceptions: HashMap<Rc<CommandNode<S, R>>, CommandSyntaxError>,
 }
 
-impl<S> Debug for ParseResults<'_, S> {
+impl<S, R> Debug for ParseResults<'_, S, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ParseResults")
             .field("context", &self.context)

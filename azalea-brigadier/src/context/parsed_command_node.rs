@@ -6,12 +6,12 @@ use super::string_range::StringRange;
 use crate::tree::CommandNode;
 
 #[derive(Debug)]
-pub struct ParsedCommandNode<S> {
-    pub node: Arc<RwLock<CommandNode<S>>>,
+pub struct ParsedCommandNode<S, R> {
+    pub node: Arc<RwLock<CommandNode<S, R>>>,
     pub range: StringRange,
 }
 
-impl<S> Clone for ParsedCommandNode<S> {
+impl<S, R> Clone for ParsedCommandNode<S, R> {
     fn clone(&self) -> Self {
         Self {
             node: self.node.clone(),

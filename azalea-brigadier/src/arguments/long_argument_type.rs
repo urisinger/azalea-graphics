@@ -43,7 +43,7 @@ impl ArgumentType for Long {
     fn examples(&self) -> Vec<String> {
         vec!["0", "123", "-123"]
             .into_iter()
-            .map(|s| s.to_string())
+            .map(|s| s.to_owned())
             .collect()
     }
 }
@@ -51,7 +51,7 @@ impl ArgumentType for Long {
 pub fn long() -> impl ArgumentType {
     Long::default()
 }
-pub fn get_long<S>(context: &CommandContext<S>, name: &str) -> Option<i64> {
+pub fn get_long<S, R>(context: &CommandContext<S, R>, name: &str) -> Option<i64> {
     context
         .argument(name)
         .unwrap()

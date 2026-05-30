@@ -1,10 +1,10 @@
 //! Disconnect a client from the server.
 
 use azalea_chat::FormattedText;
+use azalea_core::entity_id::MinecraftEntityId;
 use azalea_entity::{
     EntityBundle, HasClientLoaded, InLoadedChunk, LocalEntity, metadata::PlayerMetadataBundle,
 };
-use azalea_world::MinecraftEntityId;
 use bevy_app::{App, Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use derive_more::Deref;
@@ -14,7 +14,7 @@ use super::login::IsAuthenticated;
 #[cfg(feature = "online-mode")]
 use crate::chat_signing;
 use crate::{
-    client::JoinedClientBundle, connection::RawConnection, local_player::InstanceHolder,
+    client::JoinedClientBundle, connection::RawConnection, local_player::WorldHolder, mining,
     tick_counter::TicksConnected,
 };
 
@@ -46,7 +46,6 @@ impl Plugin for DisconnectPlugin {
 /// failed, for that see [`ConnectionFailedEvent`].
 ///
 /// [`ConnectionFailedEvent`]: crate::join::ConnectionFailedEvent
-
 #[derive(Message)]
 pub struct DisconnectEvent {
     pub entity: Entity,
@@ -63,7 +62,7 @@ pub struct RemoveOnDisconnectBundle {
 
     pub entity: EntityBundle,
     pub minecraft_entity_id: MinecraftEntityId,
-    pub instance_holder: InstanceHolder,
+    pub world_holder: WorldHolder,
     pub player_metadata: PlayerMetadataBundle,
     pub in_loaded_chunk: InLoadedChunk,
     //// This makes it close the TCP connection.
@@ -79,6 +78,10 @@ pub struct RemoveOnDisconnectBundle {
     pub has_client_loaded: HasClientLoaded,
     // TickCounter is reset on reconnect
     pub ticks_alive: TicksConnected,
+
+    // the rest of the mining components are already removed, as JoinedClientBundle includes
+    // MineBundle
+    pub mining: mining::Mining,
 }
 
 /// A system that removes the several components from our clients when they get
@@ -94,7 +97,7 @@ pub fn remove_components_from_disconnected_players(
             if let Some(reason) = reason {
                 format!(": {reason}")
             } else {
-                "".to_string()
+                "".to_owned()
             }
         );
         commands
@@ -112,7 +115,7 @@ pub fn remove_components_from_disconnected_players(
     }
 }
 
-#[derive(Component, Clone, Copy, Debug, Deref)]
+#[derive(Clone, Component, Copy, Debug, Deref)]
 pub struct IsConnectionAlive(bool);
 
 fn update_read_packets_task_running_component(

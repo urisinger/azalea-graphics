@@ -3,14 +3,16 @@ pub mod debug;
 pub mod movement;
 
 use azalea::{
-    Client, brigadier::prelude::*, chat::ChatPacket, ecs::prelude::*, entity::metadata::Player,
+    Client, brigadier::prelude::*, client_chat::ChatPacket, entity::metadata::Player,
     player::GameProfileComponent,
 };
+use bevy_ecs::query::With;
 use parking_lot::Mutex;
 
 use crate::State;
 
-pub type Ctx = CommandContext<Mutex<CommandSource>>;
+pub type Ctx = CommandContext<Mutex<CommandSource>, eyre::Result<i32>>;
+pub type Dispatcher = CommandDispatcher<Mutex<CommandSource>, eyre::Result<i32>>;
 
 pub struct CommandSource {
     pub bot: Client,
@@ -22,23 +24,26 @@ impl CommandSource {
     pub fn reply(&self, message: impl Into<String>) {
         let message = message.into();
         if self.chat.is_whisper() {
+            // /msg instead of /w for compat with custom servers
             self.bot
-                .chat(format!("/w {} {message}", self.chat.sender().unwrap()));
+                .chat(format!("/msg {} {message}", self.chat.sender().unwrap()));
         } else {
             self.bot.chat(message);
         }
     }
 
-    pub fn entity(&mut self) -> Option<Entity> {
+    pub fn entity(&self) -> Option<azalea::EntityRef> {
         let username = self.chat.sender()?;
         self.bot
             .any_entity_by::<&GameProfileComponent, With<Player>>(
                 |profile: &GameProfileComponent| profile.name == username,
             )
+            .ok()
+            .flatten()
     }
 }
 
-pub fn register_commands(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
+pub fn register_commands(commands: &mut Dispatcher) {
     combat::register(commands);
     debug::register(commands);
     movement::register(commands);

@@ -1,5 +1,5 @@
 use spirv_std::{
-    glam::{UVec2, UVec3, Vec4},
+    glam::{UVec2, UVec3},
     image::Image,
     spirv,
 };
@@ -19,7 +19,7 @@ pub fn copy(
 
     let d = src.fetch(id.truncate());
 
-    unsafe { dst.write(id.truncate(), d) };
+    unsafe { dst.write(id.truncate(), d.x) };
 }
 
 #[spirv(compute(threads(8, 8, 1)))]
@@ -48,5 +48,5 @@ pub fn reduce(
     let d3 = src.read(p11);
 
     let d = d0.min(d1).min(d2.min(d3));
-    unsafe { dst.write(o, Vec4::new(d, 0.0, 0.0, 0.0)) };
+    unsafe { dst.write(o, d) };
 }

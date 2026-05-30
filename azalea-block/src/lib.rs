@@ -7,14 +7,18 @@ mod generated;
 mod range;
 
 use core::fmt::Debug;
-use std::{any::Any, collections::HashMap};
+use std::{any::Any, collections::HashMap, str::FromStr};
 
+use azalea_registry::builtin::BlockKind;
 pub use behavior::BlockBehavior;
 // re-exported for convenience
 pub use block_state::BlockState;
 pub use generated::{blocks, properties};
 pub use range::BlockStates;
 
+/// A trait that's implemented on block structs.
+///
+/// See the [azalea_block documentation](crate) for details.
 pub trait BlockTrait: Debug + Any + Send + Sync {
     fn boxed(&self) -> Box<dyn BlockTrait>;
 
@@ -23,16 +27,21 @@ pub trait BlockTrait: Debug + Any + Send + Sync {
     ///
     /// For example, `stone` or `grass_block`.
     fn id(&self) -> &'static str;
-    /// Convert the block to a block state.
+    /// Convert the block struct to a [`BlockState`].
     ///
     /// This is a lossless conversion, as [`BlockState`] also contains state
     /// data.
     fn as_block_state(&self) -> BlockState;
-    /// Convert the block to an [`azalea_registry::Block`].
+    /// Convert the block struct to a [`BlockKind`].
     ///
-    /// This is a lossy conversion, as [`azalea_registry::Block`] doesn't
-    /// contain any state data.
-    fn as_registry_block(&self) -> azalea_registry::Block;
+    /// This is a lossy conversion, as [`BlockKind`] doesn't contain any state
+    /// data.
+    fn as_block_kind(&self) -> BlockKind;
+    #[deprecated = "renamed to as_block_kind"]
+    #[doc(hidden)]
+    fn as_registry_block(&self) -> BlockKind {
+        self.as_block_kind()
+    }
 
     /// Returns a map of property names on this block to their values as
     /// strings.
@@ -44,8 +53,20 @@ pub trait BlockTrait: Debug + Any + Send + Sync {
     /// has no property with that name.
     ///
     /// To get all properties, you may use [`Self::property_map`].
+    ///
+    /// To set a property, use [`Self::set_property`].
     fn get_property(&self, name: &str) -> Option<&'static str>;
+    /// Update a property on this block, with the name and value being strings.
+    ///
+    /// Returns `Ok(())`, if the property name and value are valid, otherwise it
+    /// returns `Err(InvalidPropertyError)`.
+    ///
+    /// To get a property, use [`Self::get_property`].
+    fn set_property(&mut self, name: &str, new_value: &str) -> Result<(), InvalidPropertyError>;
 }
+
+#[derive(Debug)]
+pub struct InvalidPropertyError;
 
 impl dyn BlockTrait {
     pub fn downcast_ref<T: BlockTrait>(&self) -> Option<&T> {
@@ -53,7 +74,7 @@ impl dyn BlockTrait {
     }
 }
 
-pub trait Property {
+pub trait Property: FromStr {
     type Value;
 
     fn try_from_block_state(state: BlockState) -> Option<Self::Value>;
@@ -108,11 +129,11 @@ mod tests {
     pub fn test_integer_properties() {
         // Test with oak sapling that has an integer-like stage property
         let sapling_stage_0 = crate::blocks::OakSapling {
-            stage: crate::properties::OakSaplingStage::_0,
+            stage: crate::properties::Stage::_0,
         };
 
         let sapling_stage_1 = crate::blocks::OakSapling {
-            stage: crate::properties::OakSaplingStage::_1,
+            stage: crate::properties::Stage::_1,
         };
 
         // Test stage 0

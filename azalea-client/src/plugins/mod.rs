@@ -1,17 +1,16 @@
 use bevy_app::{PluginGroup, PluginGroupBuilder};
 
 pub mod attack;
-pub mod auto_reconnect;
 pub mod block_update;
 pub mod brand;
-pub mod chat;
 #[cfg(feature = "online-mode")]
 pub mod chat_signing;
 pub mod chunks;
+pub mod client_chat;
 pub mod client_information;
 pub mod connection;
+pub mod cookies;
 pub mod disconnect;
-pub mod events;
 pub mod interact;
 pub mod inventory;
 pub mod join;
@@ -23,7 +22,6 @@ pub mod packet;
 pub mod pong;
 pub mod respawn;
 pub mod task_pool;
-pub mod tick_broadcast;
 pub mod tick_counter;
 pub mod tick_end;
 
@@ -41,10 +39,9 @@ impl PluginGroup for DefaultPlugins {
             .add(crate::client::AzaleaPlugin)
             .add(azalea_entity::EntityPlugin)
             .add(azalea_physics::PhysicsPlugin)
-            .add(events::EventsPlugin)
             .add(task_pool::TaskPoolPlugin::default())
             .add(inventory::InventoryPlugin)
-            .add(chat::ChatPlugin)
+            .add(client_chat::ChatPlugin)
             .add(disconnect::DisconnectPlugin)
             .add(movement::MovementPlugin)
             .add(interact::InteractPlugin)
@@ -57,13 +54,12 @@ impl PluginGroup for DefaultPlugins {
             .add(loading::PlayerLoadedPlugin)
             .add(brand::BrandPlugin)
             .add(client_information::ClientInformationPlugin)
-            .add(tick_broadcast::TickBroadcastPlugin)
             .add(tick_counter::TickCounterPlugin)
             .add(pong::PongPlugin)
             .add(connection::ConnectionPlugin)
             .add(login::LoginPlugin)
             .add(join::JoinPlugin)
-            .add(auto_reconnect::AutoReconnectPlugin);
+            .add(cookies::CookiesPlugin);
         #[cfg(feature = "online-mode")]
         {
             group = group.add(chat_signing::ChatSigningPlugin);

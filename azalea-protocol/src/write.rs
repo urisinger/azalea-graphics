@@ -5,7 +5,7 @@ use std::{
     io::{self, Read},
 };
 
-use azalea_buf::AzaleaWriteVar;
+use azalea_buf::AzBufVar;
 use azalea_crypto::Aes128CfbEnc;
 use flate2::{Compression, bufread::ZlibEncoder};
 use thiserror::Error;
@@ -112,7 +112,7 @@ fn frame_prepender(mut data: Vec<u8>) -> Result<Vec<u8>, io::Error> {
     Ok(buf)
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum PacketEncodeError {
     #[error("{0}")]
     Io(#[from] io::Error),
@@ -124,7 +124,7 @@ pub enum PacketEncodeError {
     },
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum PacketCompressError {
     #[error("{0}")]
     Io(#[from] io::Error),

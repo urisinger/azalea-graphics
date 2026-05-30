@@ -4,10 +4,18 @@ use std::{
     sync::LazyLock,
 };
 
+use crate::position::BlockPos;
+
 pub const EPSILON: f64 = 1.0e-7;
 
-pub static SIN: LazyLock<[f32; 65536]> =
-    LazyLock::new(|| std::array::from_fn(|i| f64::sin((i as f64) * PI * 2. / 65536.) as f32));
+// has to be boxed to avoid a stack overflow on windows when run in debug mode
+pub static SIN: LazyLock<Box<[f32; 65536]>> = LazyLock::new(|| {
+    (0..65536)
+        .map(|i| f64::sin((i as f64) * PI * 2. / 65536.) as f32)
+        .collect::<Box<[f32]>>()
+        .try_into()
+        .unwrap()
+});
 
 /// A sine function that uses a lookup table.
 pub fn sin(x: f32) -> f32 {
@@ -99,6 +107,18 @@ pub fn ceil_long(x: f64) -> i64 {
 
 pub fn equal(a: f64, b: f64) -> bool {
     (b - a).abs() < 1.0e-5
+}
+
+/// Hashes the given block position.
+pub fn get_seed(pos: BlockPos) -> i64 {
+    let seed = ((pos.x.wrapping_mul(3129871)) as i64)
+        ^ ((pos.z as i64).wrapping_mul(116129781))
+        ^ (pos.y as i64);
+    let seed = seed
+        .wrapping_mul(seed)
+        .wrapping_mul(42317861)
+        .wrapping_add(seed.wrapping_mul(11));
+    seed >> 16
 }
 
 #[cfg(test)]

@@ -1,77 +1,85 @@
 //! Commands for debugging and getting the current state of the bot.
 
-use std::{env, fs::File, io::Write, thread, time::Duration};
+use std::{any::Any, env, fs::File, io::Write, thread, time::Duration};
 
 use azalea::{
     BlockPos,
     brigadier::prelude::*,
     chunks::ReceiveChunkEvent,
-    entity::{LookDirection, Position},
-    interact::pick::HitResultComponent,
+    inventory,
     packet::game,
-    pathfinder::{ExecutingPath, Pathfinder},
-    prelude::ContainerClientExt,
-    world::MinecraftEntityId,
+    pathfinder::{
+        ExecutingPath, Pathfinder, custom_state::CustomPathfinderStateRef, mining::MiningCache,
+        moves::MovesCtx, positions::RelBlockPos, world::CachedWorld,
+    },
 };
 use azalea_core::hit_result::HitResult;
-use azalea_entity::{EntityKindComponent, EntityUuid, metadata};
-use azalea_inventory::components::MaxStackSize;
-use azalea_world::InstanceContainer;
+use azalea_entity::metadata;
+use azalea_inventory::{Menu, components::MaxStackSize};
+use azalea_world::{Worlds, chunk::storage::WeakChunkStorage};
 use bevy_app::AppExit;
 use bevy_ecs::{message::Messages, query::With, world::EntityRef};
-use parking_lot::Mutex;
 
-use super::{CommandSource, Ctx};
+use super::Ctx;
+use crate::commands::Dispatcher;
 
-pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
+pub fn register(commands: &mut Dispatcher) {
     commands.register(literal("ping").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
         source.reply("pong!");
-        1
+        Ok(1)
     }));
+    commands.register(
+        literal("say").then(argument("message", greedy_string()).executes(|ctx: &Ctx| {
+            let source = ctx.source.lock();
+            let message = get_string(ctx, "message").unwrap();
+            source.bot.chat(message);
+            Ok(1)
+        })),
+    );
 
     commands.register(literal("disconnect").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
         source.bot.disconnect();
-        1
+        Ok(1)
     }));
 
     commands.register(literal("whereami").executes(|ctx: &Ctx| {
-        let mut source = ctx.source.lock();
+        let source = ctx.source.lock();
         let Some(entity) = source.entity() else {
             source.reply("You aren't in render distance!");
-            return 0;
+            return Ok(0);
         };
-        let position = source.bot.entity_component::<Position>(entity);
+        let position = entity.position()?;
         source.reply(format!(
             "You are at {}, {}, {}",
             position.x, position.y, position.z
         ));
-        1
+        Ok(1)
     }));
 
     commands.register(literal("entityid").executes(|ctx: &Ctx| {
-        let mut source = ctx.source.lock();
+        let source = ctx.source.lock();
         let Some(entity) = source.entity() else {
             source.reply("You aren't in render distance!");
-            return 0;
+            return Ok(0);
         };
-        let entity_id = source.bot.entity_component::<MinecraftEntityId>(entity);
+        let entity_id = entity.minecraft_id()?;
         source.reply(format!(
             "Your Minecraft ID is {} and your ECS ID is {entity:?}",
             *entity_id
         ));
-        1
+        Ok(1)
     }));
 
     let whereareyou = |ctx: &Ctx| {
         let source = ctx.source.lock();
-        let position = source.bot.position();
+        let position = source.bot.position()?;
         source.reply(format!(
             "I'm at {}, {}, {}",
             position.x, position.y, position.z
         ));
-        1
+        Ok(1)
     };
     commands.register(literal("whereareyou").executes(whereareyou));
     commands.register(literal("pos").executes(whereareyou));
@@ -84,45 +92,45 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
             source.bot.uuid(),
             source.bot.entity
         ));
-        1
+        Ok(1)
     }));
 
     commands.register(literal("getdirection").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
-        let direction = source.bot.component::<LookDirection>();
+        let direction = source.bot.direction()?;
         source.reply(format!(
             "I'm looking at {}, {}",
             direction.y_rot(),
             direction.x_rot()
         ));
-        1
+        Ok(1)
     }));
 
     commands.register(literal("health").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
 
-        let health = source.bot.health();
+        let health = source.bot.health()?;
         source.reply(format!("I have {health} health"));
-        1
+        Ok(1)
     }));
 
     commands.register(literal("lookingat").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
 
-        let hit_result = source.bot.component::<HitResultComponent>();
+        let hit_result = source.bot.hit_result()?;
 
-        match &*hit_result {
+        match &hit_result {
             HitResult::Block(r) => {
                 if r.miss {
                     source.reply("I'm not looking at anything");
-                    return 0;
+                    return Ok(0);
                 }
                 let block_pos = r.block_pos;
-                let block = source.bot.world().read().get_block_state(block_pos);
+                let block = source.bot.world()?.read().get_block_state(block_pos);
                 source.reply(format!("I'm looking at {block:?} at {block_pos:?}"));
             }
             HitResult::Entity(r) => {
-                let entity_kind = *source.bot.entity_component::<EntityKindComponent>(r.entity);
+                let entity_kind = source.bot.entity_ref_for(r.entity).kind()?;
                 source.reply(format!(
                     "I'm looking at {entity_kind} ({:?}) at {}",
                     r.entity, r.location
@@ -130,7 +138,7 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
             }
         }
 
-        1
+        Ok(1)
     }));
 
     commands.register(literal("getblock").then(argument("x", integer()).then(
@@ -141,9 +149,9 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
             let z = get_integer(ctx, "z").unwrap();
             println!("getblock xyz {x} {y} {z}");
             let block_pos = BlockPos::new(x, y, z);
-            let block = source.bot.world().read().get_block_state(block_pos);
-            source.reply(format!("Block at {block_pos} is {block:?}"));
-            1
+            let block = source.bot.world()?.read().get_block_state(block_pos);
+            source.reply(format!("BlockKind at {block_pos} is {block:?}"));
+            Ok(1)
         })),
     )));
     commands.register(literal("getfluid").then(argument("x", integer()).then(
@@ -154,82 +162,150 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
             let z = get_integer(ctx, "z").unwrap();
             println!("getfluid xyz {x} {y} {z}");
             let block_pos = BlockPos::new(x, y, z);
-            let block = source.bot.world().read().get_fluid_state(block_pos);
+            let block = source.bot.world()?.read().get_fluid_state(block_pos);
             source.reply(format!("Fluid at {block_pos} is {block:?}"));
-            1
+            Ok(1)
         })),
     )));
 
+    commands.register(literal("inventory").executes(|ctx: &Ctx| {
+        let source = ctx.source.lock();
+        for item in source.bot.menu()?.slots() {
+            if item.is_empty() {
+                continue;
+            }
+            println!("{item:?}");
+            for (kind, data) in item.component_patch().iter() {
+                if let Some(data) = data {
+                    println!("- {kind} {data:?}");
+                }
+            }
+        }
+        Ok(1)
+    }));
+
     commands.register(literal("pathfinderstate").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
-        let pathfinder = source.bot.get_component::<Pathfinder>();
-        let Some(pathfinder) = pathfinder else {
-            source.reply("I don't have the Pathfinder ocmponent");
-            return 1;
+        let pathfinder = source.bot.component::<Pathfinder>();
+        let Ok(pathfinder) = pathfinder else {
+            source.reply("I don't have the Pathfinder component");
+            return Ok(1);
         };
         source.reply(format!(
             "pathfinder.is_calculating: {}",
             pathfinder.is_calculating
         ));
 
-        let executing_path = source.bot.get_component::<ExecutingPath>();
-        let Some(executing_path) = executing_path else {
+        let executing_path = source.bot.component::<ExecutingPath>();
+        let Ok(executing_path) = executing_path else {
             source.reply("I'm not executing a path");
-            return 1;
+            return Ok(1);
         };
         source.reply(format!(
             "is_path_partial: {}, path.len: {}, queued_path.len: {}",
             executing_path.is_path_partial,
             executing_path.path.len(),
-            if let Some(queued) = executing_path.queued_path {
+            if let Some(queued) = &executing_path.queued_path {
                 queued.len().to_string()
             } else {
-                "n/a".to_string()
+                "n/a".to_owned()
             },
         ));
-        1
+        Ok(1)
+    }));
+    commands.register(literal("pathfindermoves").executes(|ctx: &Ctx| {
+        let source = ctx.source.lock();
+
+        let Some(entity) = source.entity() else {
+            source.reply("You aren't in render distance!");
+            return Ok(0);
+        };
+        let position = entity.position()?;
+        let position = BlockPos::from(position);
+
+        let mut edges = Vec::new();
+        let cached_world = CachedWorld::new(source.bot.world()?, position);
+        let mining_cache = MiningCache::new(Some(Menu::Player(inventory::Player::default())));
+        let custom_state = CustomPathfinderStateRef::default();
+
+        azalea::pathfinder::moves::default_move(
+            &mut MovesCtx {
+                edges: &mut edges,
+                world: &cached_world,
+                mining_cache: &mining_cache,
+                custom_state: &custom_state,
+            },
+            RelBlockPos::from_origin(position, position),
+        );
+
+        if edges.is_empty() {
+            source.reply("No possible moves.");
+        } else {
+            source.reply("Moves:");
+            for (i, edge) in edges.iter().enumerate() {
+                source.reply(format!("{}) {edge:?}", i + 1));
+            }
+        }
+
+        Ok(1)
     }));
 
     commands.register(literal("startuseitem").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
         source.bot.start_use_item();
         source.reply("Ok!");
-        1
+        Ok(1)
     }));
     commands.register(literal("maxstacksize").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
         let max_stack_size = source
             .bot
-            .get_held_item()
+            .get_held_item()?
             .get_component::<MaxStackSize>()
             .map_or(-1, |s| s.count);
         source.reply(format!("{max_stack_size}"));
-        1
+        Ok(1)
     }));
 
     commands.register(literal("dimensions").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
         let bot_dimensions = source.bot.dimensions();
         source.reply(format!("{bot_dimensions:?}"));
-        1
+        Ok(1)
     }));
 
     commands.register(literal("players").executes(|ctx: &Ctx| {
         let source = ctx.source.lock();
         let player_entities = source
             .bot
-            .nearest_entities_by::<(), With<metadata::Player>>(|_: ()| true);
-        let tab_list = source.bot.tab_list();
+            .nearest_entities_by::<(), With<metadata::Player>>(|_: ()| true)?;
+        let tab_list = source.bot.tab_list()?;
         for player_entity in player_entities {
-            let uuid = source.bot.entity_component::<EntityUuid>(player_entity);
+            let uuid = player_entity.uuid()?;
             source.reply(format!(
                 "{} - {} ({:?})",
-                player_entity,
+                player_entity.id(),
                 tab_list.get(&uuid).map_or("?", |p| p.profile.name.as_str()),
                 uuid
             ));
         }
-        1
+        Ok(1)
+    }));
+
+    commands.register(literal("enchants").executes(|ctx: &Ctx| {
+        let source = ctx.source.lock();
+        source.bot.with_registry_holder(|r| {
+            let enchants = &r.enchantment;
+            println!("enchants: {enchants:?}");
+        })?;
+        Ok(1)
+    }));
+
+    commands.register(literal("attributes").executes(|ctx: &Ctx| {
+        let source = ctx.source.lock();
+        let attributes = source.bot.attributes();
+        println!("attributes: {attributes:?}");
+        Ok(1)
     }));
 
     commands.register(literal("debugecsleak").executes(|ctx: &Ctx| {
@@ -246,9 +322,7 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
             thread::sleep(Duration::from_secs(1));
             // dump the ecs
 
-            let mut ecs = ecs.lock();
-
-
+            let mut ecs = ecs.write();
 
             let report_path = env::temp_dir().join("azalea-ecs-leak-report.txt");
             let mut report = File::create(&report_path).unwrap();
@@ -282,32 +356,35 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
                 // info.layout().size()).unwrap();
 
                 match name.as_ref() {
-                    "azalea_world::container::InstanceContainer" => {
-                        let instance_container = ecs.resource::<InstanceContainer>();
+                    "azalea_world::container::Worlds" => {
+                        let worlds = ecs.resource::<Worlds>();
 
-                        for (instance_name, instance) in &instance_container.instances {
-                            writeln!(report, "- Name: {instance_name}").unwrap();
-                            writeln!(report, "- Reference count: {}", instance.strong_count())
+                        for (world_name, world) in &worlds.map {
+                            writeln!(report, "- Name: {world_name}").unwrap();
+                            writeln!(report, "- Reference count: {}", world.strong_count())
                                 .unwrap();
-                            if let Some(instance) = instance.upgrade() {
-                                let instance = instance.read();
-                                let strong_chunks = instance
-                                    .chunks
-                                    .map
-                                    .iter()
-                                    .filter(|(_, v)| v.strong_count() > 0)
-                                    .count();
-                                writeln!(
-                                    report,
-                                    "- Chunks: {} strongly referenced, {} in map",
-                                    strong_chunks,
-                                    instance.chunks.map.len()
-                                )
-                                .unwrap();
+                            if let Some(world) = world.upgrade() {
+                                let world = world.read();
+                                let chunks = &world.chunks;
+                                let chunks = (chunks as &dyn Any).downcast_ref::<WeakChunkStorage>();
+                                if let Some(chunks) = chunks {
+                                    let strong_chunks = chunks
+                                        .map
+                                        .iter()
+                                        .filter(|(_, v)| v.strong_count() > 0)
+                                        .count();
+                                    writeln!(
+                                        report,
+                                        "- Chunks: {} strongly referenced, {} in map",
+                                        strong_chunks,
+                                        chunks.map.len()
+                                    )
+                                    .unwrap();
+                                }
                                 writeln!(
                                     report,
                                     "- Entities: {}",
-                                    instance.entities_by_chunk.len()
+                                    world.entities_by_chunk.len()
                                 )
                                 .unwrap();
                             }
@@ -329,7 +406,7 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
             println!("\x1b[1mWrote report to {}\x1b[m", report_path.display());
         });
 
-        1
+        Ok(1)
     }));
 
     commands.register(literal("exit").executes(|ctx: &Ctx| {
@@ -342,9 +419,14 @@ pub fn register(commands: &mut CommandDispatcher<Mutex<CommandSource>>) {
         thread::spawn(move || {
             thread::sleep(Duration::from_secs(1));
 
-            source.lock().bot.ecs.lock().write_message(AppExit::Success);
+            source
+                .lock()
+                .bot
+                .ecs
+                .write()
+                .write_message(AppExit::Success);
         });
 
-        1
+        Ok(1)
     }));
 }

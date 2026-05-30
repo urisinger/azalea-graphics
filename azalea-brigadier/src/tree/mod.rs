@@ -20,27 +20,27 @@ use crate::{
     suggestion::{Suggestions, SuggestionsBuilder},
 };
 
-pub type Command<S> =
-    Option<Arc<dyn Fn(&CommandContext<S>) -> Result<i32, CommandSyntaxError> + Send + Sync>>;
+pub type Command<S, R> =
+    Option<Arc<dyn Fn(&CommandContext<S, R>) -> Result<R, CommandSyntaxError> + Send + Sync>>;
 
 /// An ArgumentBuilder that has been built.
 #[non_exhaustive]
-pub struct CommandNode<S> {
-    pub value: ArgumentBuilderType<S>,
+pub struct CommandNode<S, R = i32> {
+    pub value: ArgumentBuilderType<S, R>,
 
     // this is a BTreeMap because children need to be ordered when getting command suggestions
-    pub children: BTreeMap<String, Arc<RwLock<CommandNode<S>>>>,
-    pub literals: HashMap<String, Arc<RwLock<CommandNode<S>>>>,
-    pub arguments: HashMap<String, Arc<RwLock<CommandNode<S>>>>,
+    pub children: BTreeMap<String, Arc<RwLock<CommandNode<S, R>>>>,
+    pub literals: HashMap<String, Arc<RwLock<CommandNode<S, R>>>>,
+    pub arguments: HashMap<String, Arc<RwLock<CommandNode<S, R>>>>,
 
-    pub command: Command<S>,
+    pub command: Command<S, R>,
     pub requirement: Arc<dyn Fn(&S) -> bool + Send + Sync>,
-    pub redirect: Option<Arc<RwLock<CommandNode<S>>>>,
+    pub redirect: Option<Arc<RwLock<CommandNode<S, R>>>>,
     pub forks: bool,
-    pub modifier: Option<Arc<RedirectModifier<S>>>,
+    pub modifier: Option<Arc<RedirectModifier<S, R>>>,
 }
 
-impl<S> Clone for CommandNode<S> {
+impl<S, R> Clone for CommandNode<S, R> {
     fn clone(&self) -> Self {
         Self {
             value: self.value.clone(),
@@ -56,7 +56,7 @@ impl<S> Clone for CommandNode<S> {
     }
 }
 
-impl<S> CommandNode<S> {
+impl<S, R> CommandNode<S, R> {
     /// Returns the value as a literal from this command node, assuming it's
     /// already been checked.
     ///
@@ -77,14 +77,17 @@ impl<S> CommandNode<S> {
     ///
     /// Will panic if this node is not an argument. Consider using a match
     /// statement instead.
-    pub fn argument(&self) -> &Argument<S> {
+    pub fn argument(&self) -> &Argument<S, R> {
         match self.value {
             ArgumentBuilderType::Argument(ref argument) => argument,
             _ => panic!("CommandNode::argument() called on non-argument node"),
         }
     }
 
-    pub fn get_relevant_nodes(&self, input: &mut StringReader) -> Vec<Arc<RwLock<CommandNode<S>>>> {
+    pub fn get_relevant_nodes(
+        &self,
+        input: &mut StringReader,
+    ) -> Vec<Arc<RwLock<CommandNode<S, R>>>> {
         let literals = &self.literals;
 
         if literals.is_empty() {
@@ -114,7 +117,7 @@ impl<S> CommandNode<S> {
         (self.requirement)(source)
     }
 
-    pub fn add_child(&mut self, node: &Arc<RwLock<CommandNode<S>>>) {
+    pub fn add_child(&mut self, node: &Arc<RwLock<CommandNode<S, R>>>) {
         let child = self.children.get(node.read().name());
         if let Some(child) = child {
             // We've found something to merge onto
@@ -126,7 +129,7 @@ impl<S> CommandNode<S> {
             }
         } else {
             self.children
-                .insert(node.read().name().to_string(), node.clone());
+                .insert(node.read().name().to_owned(), node.clone());
             match &node.read().value {
                 ArgumentBuilderType::Literal(literal) => {
                     self.literals.insert(literal.value.clone(), node.clone());
@@ -152,14 +155,14 @@ impl<S> CommandNode<S> {
         }
     }
 
-    pub fn child(&self, name: &str) -> Option<Arc<RwLock<CommandNode<S>>>> {
+    pub fn child(&self, name: &str) -> Option<Arc<RwLock<CommandNode<S, R>>>> {
         self.children.get(name).cloned()
     }
 
     pub fn parse_with_context(
         &self,
         reader: &mut StringReader,
-        context_builder: &mut CommandContextBuilder<S>,
+        context_builder: &mut CommandContextBuilder<S, R>,
     ) -> Result<(), CommandSyntaxError> {
         match self.value {
             ArgumentBuilderType::Argument(ref argument) => {
@@ -225,7 +228,7 @@ impl<S> CommandNode<S> {
 
     pub fn list_suggestions(
         &self,
-        context: CommandContext<S>,
+        context: CommandContext<S, R>,
         builder: SuggestionsBuilder,
     ) -> Suggestions {
         match &self.value {
@@ -245,7 +248,7 @@ impl<S> CommandNode<S> {
     }
 }
 
-impl<S> Debug for CommandNode<S> {
+impl<S, R> Debug for CommandNode<S, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CommandNode")
             // .field("value", &self.value)
@@ -259,7 +262,7 @@ impl<S> Debug for CommandNode<S> {
     }
 }
 
-impl<S> Default for CommandNode<S> {
+impl<S, R> Default for CommandNode<S, R> {
     fn default() -> Self {
         Self {
             value: ArgumentBuilderType::Literal(Literal::default()),
@@ -277,7 +280,7 @@ impl<S> Default for CommandNode<S> {
     }
 }
 
-impl<S> Hash for CommandNode<S> {
+impl<S, R> Hash for CommandNode<S, R> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // hash the children
         for (k, v) in &self.children {
@@ -289,7 +292,7 @@ impl<S> Hash for CommandNode<S> {
     }
 }
 
-impl<S> PartialEq for CommandNode<S> {
+impl<S, R> PartialEq for CommandNode<S, R> {
     fn eq(&self, other: &Self) -> bool {
         if self.children.len() != other.children.len() {
             return false;
@@ -324,4 +327,4 @@ impl<S> PartialEq for CommandNode<S> {
         true
     }
 }
-impl<S> Eq for CommandNode<S> {}
+impl<S, R> Eq for CommandNode<S, R> {}

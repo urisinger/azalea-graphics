@@ -1,8 +1,7 @@
 #![doc = include_str!("../README.md")]
-#![feature(error_generic_member_access)]
 
 mod bit_storage;
-pub mod chunk_storage;
+pub mod chunk;
 mod container;
 pub mod find_blocks;
 pub mod heightmap;
@@ -11,6 +10,13 @@ pub mod palette;
 mod world;
 
 pub use bit_storage::BitStorage;
-pub use chunk_storage::{Chunk, ChunkStorage, PartialChunkStorage, Section};
-pub use container::*;
+pub use chunk::{Chunk, Section, partial::PartialChunkStorage, storage::ChunkStorage};
+pub use container::{WorldName, Worlds};
 pub use world::*;
+
+#[deprecated = "renamed to `WorldName`."]
+pub type InstanceName = WorldName;
+#[deprecated = "renamed to `WorldContainer`."]
+pub type InstanceContainer = Worlds;
+#[deprecated = "renamed to `PartialWorld`."]
+pub type PartialInstance = PartialWorld;

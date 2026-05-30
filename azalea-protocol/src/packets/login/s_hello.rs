@@ -2,7 +2,7 @@ use azalea_buf::AzBuf;
 use azalea_protocol_macros::ServerboundLoginPacket;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Eq, AzBuf, PartialEq, ServerboundLoginPacket)]
+#[derive(AzBuf, Clone, Debug, Eq, PartialEq, ServerboundLoginPacket)]
 pub struct ServerboundHello {
     #[limit(16)]
     pub name: String,
@@ -13,14 +13,14 @@ pub struct ServerboundHello {
 mod tests {
     use std::io::Cursor;
 
-    use azalea_buf::{AzaleaRead, AzaleaWrite};
+    use azalea_buf::AzBuf;
 
     use super::*;
 
     #[test]
     fn test_read_write() {
         let packet = ServerboundHello {
-            name: "test".to_string(),
+            name: "test".to_owned(),
             profile_id: Uuid::nil(),
         };
         let mut buf: Vec<u8> = Vec::new();

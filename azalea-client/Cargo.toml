@@ -17,7 +17,7 @@ azalea-crypto.workspace = true
 azalea-entity.workspace = true
 azalea-inventory.workspace = true
 azalea-physics.workspace = true
-azalea-protocol = { workspace = true, features = ["packets", "connecting"] }
+azalea-protocol = { workspace = true, features = ["connecting", "bevy_ecs"] }
 azalea-registry.workspace = true
 azalea-world.workspace = true
 bevy_app.workspace = true
@@ -30,17 +30,19 @@ derive_more = { workspace = true, features = ["deref", "deref_mut"] }
 indexmap.workspace = true
 minecraft_folder_path.workspace = true
 parking_lot.workspace = true
-pastey.workspace = true
 regex.workspace = true
-reqwest = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true, features = ["socks"] }
 simdnbt.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 tracing.workspace = true
 uuid.workspace = true
+# TODO: this is here to make bevy show system names in conflict warnings.
+# in bevy 0.18, we should be able to just enable the debug feature on bevy_ecs instead.
+bevy_utils = { workspace = true, features = ["debug"] }
 
 [dev-dependencies]
-anyhow.workspace = true
+eyre.workspace = true
 
 [features]
 default = ["log", "packet-event", "online-mode"]

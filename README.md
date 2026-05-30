@@ -11,14 +11,14 @@ A collection of Rust crates for making Minecraft bots, clients, and tools.
 
 <!-- The line below is automatically read and updated by the migrate script, so don't change it manually. -->
 
-_Currently supported Minecraft version: `1.21.10`._
+_Currently supported Minecraft version: `26.1.2`._
 
 > [!WARNING]
 > Many parts of Azalea are still unfinished and will receive breaking changes in the future. Most breaking changes will be listed in the [changelog](CHANGELOG.md).
 
 ## Features
 
-- [Accurate physics](https://github.com/azalea-rs/azalea/blob/main/azalea-physics/src/lib.rs) (but some features like entity pushing and elytras aren't implemented yet)
+- [Accurate physics](https://azalea.matdoes.dev/azalea_physics/) (but some features like entity pushing and elytras aren't implemented yet)
 - [Pathfinder](https://azalea.matdoes.dev/azalea/pathfinder/index.html)
 - [Swarms](https://azalea.matdoes.dev/azalea/swarm/index.html)
 - [Breaking blocks](https://azalea.matdoes.dev/azalea/struct.Client.html#method.mine)
@@ -27,6 +27,7 @@ _Currently supported Minecraft version: `1.21.10`._
 - [Attacking entities](https://azalea.matdoes.dev/azalea/struct.Client.html#method.attack)
 - [Plugins](#plugins)
 
+<<<<<<< HEAD
 ## Graphics
 
 Azalea includes an experimental graphics client (`azalea-graphics`) that provides Vulkan-based rendering for visual debugging and development.
@@ -94,20 +95,36 @@ The "stable" documentation is available at [docs.rs/azalea](https://docs.rs/azal
 
 If you'd like to chat about Azalea, you can join the Matrix space at [#azalea:matdoes.dev](https://matrix.to/#/#azalea:matdoes.dev) (recommended) or the Discord server at [discord.gg/FaRey6ytmC](https://discord.gg/FaRey6ytmC) (they're bridged so you don't need to join both).
 
+=======
+>>>>>>> upstream/main
 ## Goals
 
-- Do everything a vanilla client can do.
-- Be intuitive and easy to use.
+- Support everything that a vanilla Minecraft client can do.
+- Have an intuitive and easy to use API.
 - Make it easy to have many bots working at the same time.
-- Don't trigger anticheats.
+- Don't trigger anti-cheats.
 - Support the latest Minecraft version.
-- Be fast and memory efficient.
+- Be fast and efficient.
 
 ## Non-goals
 
+<<<<<<< HEAD
 -   Supporting several versions of Minecraft on the same branch[\*](https://github.com/azalea-rs/azalea-viaversion).
 -   Bedrock edition.
 
+=======
+- Supporting multiple versions of Minecraft at the same time[\*](https://github.com/azalea-rs/azalea-viaversion).
+- Graphics[\*](https://github.com/urisinger/azalea-graphics).
+- Bedrock edition.
+
+## Documentation
+
+The stable documentation for the main `azalea` crate is available at [docs.rs/azalea](https://docs.rs/azalea), and the unstable documentation is at [azalea.matdoes.dev](https://azalea.matdoes.dev).
+
+## Matrix/Discord
+
+If you'd like to chat about Azalea, you can join the Matrix space at [#azalea:matdoes.dev](https://matrix.to/#/#azalea:matdoes.dev) or the Discord server at [discord.gg/FaRey6ytmC](https://discord.gg/FaRey6ytmC). The channels are bridged so you don't need to join both.
+>>>>>>> upstream/main
 
 ## Real-world bots using Azalea
 
@@ -123,7 +140,8 @@ You can see more projects built with Azalea in the [GitHub dependency graph](htt
 
 ## Plugins
 
-Azalea has support for Bevy plugins, which can significantly alter its functionality. Here are some plugins that you may find useful:
+Azalea has support for Bevy plugins which can significantly alter its functionality.
+Here are some plugins that you may find useful:
 
 - [azalea-rs/azalea-viaversion](https://github.com/azalea-rs/azalea-viaversion) - Multi-version compatibility for your Azalea bots using ViaProxy.
 - [azalea-rs/azalea-hax](https://github.com/azalea-rs/azalea-hax) - Anti-knockback.
@@ -132,12 +150,4 @@ If you've created your own plugin for Azalea, please create a PR to add it to th
 
 ## Funding
 
-Azalea is currently maintained primarily by one person (mat) as a hobby project. If you appreciate Azalea, consider [donating on Ko-fi](https://ko-fi.com/matdoesdev).
-
-## FAQ
-
-- There's too many console messages, how do I disable them?
-
-  You can disable all console messages by setting the `RUST_LOG` environment variable to `off`, or you can filter log messages by setting specific log levels. For example, to disable only pathfinding logs, you can set `RUST_LOG=azalea::pathfinder=off`.
-
-  See the [`env_logger`](https://docs.rs/env_logger/latest/env_logger/) crate documentation for more information.
+Azalea is currently maintained primarily by one person as a hobby project. If you appreciate Azalea, please consider sponsoring it with [GitHub Sponsors](https://github.com/sponsors/mat-1) or on [Ko-fi](https://ko-fi.com/matdoesdev).

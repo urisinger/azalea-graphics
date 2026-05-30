@@ -43,7 +43,7 @@ fn create_and_merge_commands() {
 
 #[test]
 fn execute_unknown_command() {
-    let mut subject = CommandDispatcher::new();
+    let mut subject = CommandDispatcher::<_, i32>::new();
     subject.register(literal("bar"));
     subject.register(literal("baz"));
 
@@ -56,7 +56,7 @@ fn execute_unknown_command() {
 
 #[test]
 fn execute_impermissible_command() {
-    let mut subject = CommandDispatcher::new();
+    let mut subject = CommandDispatcher::<_, i32>::new();
     subject.register(literal("foo").requires(|_| false));
 
     let execute_result = subject.execute("foo", &CommandSource {});
@@ -68,7 +68,7 @@ fn execute_impermissible_command() {
 
 #[test]
 fn execute_empty_command() {
-    let mut subject = CommandDispatcher::new();
+    let mut subject = CommandDispatcher::<_, i32>::new();
     subject.register(literal(""));
 
     let execute_result = subject.execute("", &CommandSource {});
@@ -337,7 +337,7 @@ fn get_path() {
 
     assert_eq!(
         subject.get_path(bar),
-        vec!["foo".to_string(), "bar".to_string()]
+        vec!["foo".to_owned(), "bar".to_owned()]
     );
 }
 

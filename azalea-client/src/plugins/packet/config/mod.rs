@@ -15,8 +15,9 @@ use super::{as_system, declare_packet_handlers};
 use crate::{
     client::InConfigState,
     connection::RawConnection,
+    cookies::{RequestCookieEvent, StoreCookieEvent},
     disconnect::DisconnectEvent,
-    local_player::InstanceHolder,
+    local_player::WorldHolder,
     packet::game::{KeepAliveEvent, ResourcePackEvent},
 };
 
@@ -68,12 +69,12 @@ pub struct ConfigPacketHandler<'a> {
 }
 impl ConfigPacketHandler<'_> {
     pub fn registry_data(&mut self, p: &ClientboundRegistryData) {
-        as_system::<Query<&InstanceHolder>>(self.ecs, |mut query| {
-            let instance_holder = query.get_mut(self.player).unwrap();
-            let mut instance = instance_holder.instance.write();
+        as_system::<Query<&WorldHolder>>(self.ecs, |mut query| {
+            let world_holder = query.get_mut(self.player).unwrap();
+            let mut world = world_holder.shared.write();
 
             // add the new registry data
-            instance
+            world
                 .registries
                 .append(p.registry_id.clone(), p.entries.clone());
         });
@@ -127,8 +128,8 @@ impl ConfigPacketHandler<'_> {
             self.player
         );
 
-        as_system::<(Commands, MessageWriter<_>)>(self.ecs, |(mut commands, mut events)| {
-            events.write(KeepAliveEvent {
+        as_system::<Commands>(self.ecs, |mut commands| {
+            commands.trigger(KeepAliveEvent {
                 entity: self.player,
                 id: p.id,
             });
@@ -179,25 +180,26 @@ impl ConfigPacketHandler<'_> {
 
     pub fn cookie_request(&mut self, p: &ClientboundCookieRequest) {
         debug!("Got cookie request packet {p:?}");
-
         as_system::<Commands>(self.ecs, |mut commands| {
-            commands.trigger(SendConfigPacketEvent::new(
-                self.player,
-                ServerboundCookieResponse {
-                    key: p.key.clone(),
-                    // cookies aren't implemented
-                    payload: None,
-                },
-            ));
+            commands.trigger(RequestCookieEvent {
+                entity: self.player,
+                key: p.key.clone(),
+            });
+        });
+    }
+    pub fn store_cookie(&mut self, p: &ClientboundStoreCookie) {
+        debug!("Got store cookie packet {p:?}");
+        as_system::<Commands>(self.ecs, |mut commands| {
+            commands.trigger(StoreCookieEvent {
+                entity: self.player,
+                key: p.key.clone(),
+                payload: p.payload.clone(),
+            });
         });
     }
 
     pub fn reset_chat(&mut self, p: &ClientboundResetChat) {
         debug!("Got reset chat packet {p:?}");
-    }
-
-    pub fn store_cookie(&mut self, p: &ClientboundStoreCookie) {
-        debug!("Got store cookie packet {p:?}");
     }
 
     pub fn transfer(&mut self, p: &ClientboundTransfer) {

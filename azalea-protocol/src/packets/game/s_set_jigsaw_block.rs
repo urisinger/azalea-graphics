@@ -3,13 +3,12 @@ use std::{
     io::{Cursor, Write},
 };
 
-use azalea_buf::{AzBuf, AzaleaRead};
-use azalea_core::{identifier::Identifier, position::BlockPos};
+use azalea_buf::{AzBuf, BufReadError};
+use azalea_core::position::BlockPos;
 use azalea_protocol_macros::ServerboundGamePacket;
+use azalea_registry::identifier::Identifier;
 
-use crate::packets::{AzaleaWrite, BufReadError};
-
-#[derive(Clone, Debug, AzBuf, PartialEq, ServerboundGamePacket)]
+#[derive(AzBuf, Clone, Debug, PartialEq, ServerboundGamePacket)]
 pub struct ServerboundSetJigsawBlock {
     pub pos: BlockPos,
     pub name: Identifier,
@@ -28,7 +27,7 @@ pub enum JointType {
     Aligned,
 }
 
-impl AzaleaRead for JointType {
+impl AzBuf for JointType {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let name = String::azalea_read(buf)?;
         match name.as_str() {
@@ -37,13 +36,10 @@ impl AzaleaRead for JointType {
             _ => Err(BufReadError::UnexpectedStringEnumVariant { id: name }),
         }
     }
-}
-
-impl AzaleaWrite for JointType {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         match self {
-            JointType::Rollable => "rollable".to_string().azalea_write(buf)?,
-            JointType::Aligned => "aligned".to_string().azalea_write(buf)?,
+            JointType::Rollable => "rollable".to_owned().azalea_write(buf)?,
+            JointType::Aligned => "aligned".to_owned().azalea_write(buf)?,
         };
         Ok(())
     }

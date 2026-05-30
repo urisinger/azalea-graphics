@@ -3,17 +3,17 @@ use std::f32::consts::PI;
 use azalea_assets::processed::entity_model::{Model, Transform};
 
 use crate::renderer::entity_renderer::{
-    models::biped::BipedModel, state::zombie::ZombieRenderState, transform::ModelTransforms,
+    models::biped::HumanoidModel, state::zombie::ZombieRenderState, transform::ModelTransforms,
 };
 
 pub struct ZombieModel<'a> {
-    biped: BipedModel<'a>,
+    biped: HumanoidModel<'a>,
 }
 
 impl<'a> ZombieModel<'a> {
     pub fn new(model: &'a Model) -> Self {
         Self {
-            biped: BipedModel::new(model),
+            biped: HumanoidModel::new(model),
         }
     }
 

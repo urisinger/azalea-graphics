@@ -1,19 +1,20 @@
 #[cfg(feature = "online-mode")]
 use azalea_auth::sessionserver::ClientSessionServerError;
-use azalea_protocol::packets::login::{
-    ClientboundHello, ServerboundCustomQueryAnswer, ServerboundKey,
+use azalea_protocol::{
+    connect::Proxy,
+    packets::login::{ClientboundHello, ServerboundCustomQueryAnswer, ServerboundKey},
 };
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_tasks::{IoTaskPool, Task, futures_lite::future};
 use thiserror::Error;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, trace, warn};
 
 use super::{
     connection::RawConnection,
     packet::login::{ReceiveCustomQueryEvent, ReceiveHelloEvent, SendLoginPacketEvent},
 };
-use crate::Account;
+use crate::{account::Account, join::ConnectOpts};
 
 /// Some systems that run during the `login` state.
 pub struct LoginPlugin;
@@ -24,15 +25,29 @@ impl Plugin for LoginPlugin {
     }
 }
 
-fn handle_receive_hello_event(receive_hello: On<ReceiveHelloEvent>, mut commands: Commands) {
+fn handle_receive_hello_event(
+    receive_hello: On<ReceiveHelloEvent>,
+    mut commands: Commands,
+    query: Query<&ConnectOpts>,
+) {
     let task_pool = IoTaskPool::get();
 
     let account = receive_hello.account.clone();
     let packet = receive_hello.packet.clone();
-    let player = receive_hello.entity;
+    let client = receive_hello.entity;
 
-    let task = task_pool.spawn(auth_with_account(account, packet));
-    commands.entity(player).insert(AuthTask(task));
+    // we store the auth proxy in the ConnectOpts component to make it easily
+    // configurable. that component should've definitely been inserted by now, but
+    // if it somehow wasn't then we should let the user know.
+    let connect_opts = if let Ok(opts) = query.get(client) {
+        opts.sessionserver_proxy.clone()
+    } else {
+        warn!("ConnectOpts component missing on a client ({client}) that got ReceiveHelloEvent");
+        None
+    };
+
+    let task = task_pool.spawn(async { auth_with_account(account, packet, connect_opts).await });
+    commands.entity(client).insert(AuthTask(task));
 }
 
 /// A marker component on our clients that indicates that the server is
@@ -92,6 +107,7 @@ pub enum AuthWithAccountError {
 pub async fn auth_with_account(
     account: Account,
     packet: ClientboundHello,
+    proxy: Option<Proxy>,
 ) -> Result<(ServerboundKey, PrivateKey), AuthWithAccountError> {
     let Ok(encrypt_res) = azalea_crypto::encrypt(&packet.public_key, &packet.challenge) else {
         return Err(AuthWithAccountError::Encryption(packet));
@@ -103,11 +119,11 @@ pub async fn auth_with_account(
     let private_key = encrypt_res.secret_key;
 
     #[cfg(not(feature = "online-mode"))]
-    let _ = account;
+    let _ = (account, proxy);
 
     #[cfg(feature = "online-mode")]
     if packet.should_authenticate {
-        let Some(access_token) = &account.access_token else {
+        if account.access_token().is_none() {
             // offline mode account, no need to do auth
             return Ok((key_packet, private_key));
         };
@@ -116,22 +132,18 @@ pub async fn auth_with_account(
         // after too many
         let mut attempts: usize = 1;
 
-        while let Err(err) = {
-            let access_token = access_token.lock().clone();
+        let proxy = proxy.map(Proxy::into);
 
-            let uuid = &account
-                .uuid
-                .expect("Uuid must be present if access token is present.");
+        while let Err(err) = {
+            let proxy = proxy.clone();
 
             // this is necessary since reqwest usually depends on tokio and we're using
             // `futures` here
-            async_compat::Compat::new(azalea_auth::sessionserver::join(
-                &access_token,
-                &packet.public_key,
-                &private_key,
-                uuid,
-                &packet.server_id,
-            ))
+            async_compat::Compat::new(async {
+                account
+                    .join(&packet.public_key, &private_key, &packet.server_id, proxy)
+                    .await
+            })
             .await
         } {
             if attempts >= 2 {
@@ -146,6 +158,7 @@ pub async fn auth_with_account(
             ) {
                 // uh oh, we got an invalid session and have
                 // to reauthenticate now
+
                 async_compat::Compat::new(account.refresh()).await?;
             } else {
                 return Err(err.into());

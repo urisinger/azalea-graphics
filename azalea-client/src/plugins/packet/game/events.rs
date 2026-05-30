@@ -1,12 +1,11 @@
 use std::sync::{Arc, Weak};
 
 use azalea_chat::FormattedText;
-use azalea_core::identifier::Identifier;
 use azalea_protocol::packets::{
     Packet,
     game::{ClientboundGamePacket, ClientboundPlayerCombatKill, ServerboundGamePacket},
 };
-use azalea_world::Instance;
+use azalea_world::{World, WorldName};
 use bevy_ecs::prelude::*;
 use parking_lot::RwLock;
 use tracing::{error, trace};
@@ -31,7 +30,7 @@ use crate::{client::InGameState, connection::RawConnection, player::PlayerInfo};
 ///     }
 /// }
 /// ```
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, Message)]
 pub struct ReceiveGamePacketEvent {
     /// The client entity that received the packet.
     pub entity: Entity,
@@ -40,7 +39,7 @@ pub struct ReceiveGamePacketEvent {
 }
 
 /// An event for sending a packet to the server while we're in the `game` state.
-#[derive(EntityEvent, Clone, Debug)]
+#[derive(Clone, Debug, EntityEvent)]
 pub struct SendGamePacketEvent {
     #[event_target]
     pub sent_by: Entity,
@@ -79,7 +78,7 @@ pub fn handle_outgoing_packets_observer(
 
 /// A player joined the game (or more specifically, was added to the tab
 /// list of a local player).
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, Message)]
 pub struct AddPlayerEvent {
     /// The local player entity that received this event.
     pub entity: Entity,
@@ -87,7 +86,7 @@ pub struct AddPlayerEvent {
 }
 /// A player left the game (or maybe is still in the game and was just
 /// removed from the tab list of a local player).
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, Message)]
 pub struct RemovePlayerEvent {
     /// The local player entity that received this event.
     pub entity: Entity,
@@ -95,7 +94,7 @@ pub struct RemovePlayerEvent {
 }
 /// A player was updated in the tab list of a local player (gamemode, display
 /// name, or latency changed).
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, Message)]
 pub struct UpdatePlayerEvent {
     /// The local player entity that received this event.
     pub entity: Entity,
@@ -106,7 +105,7 @@ pub struct UpdatePlayerEvent {
 ///
 /// If it's a local player and there's a reason in the death screen, the
 /// [`ClientboundPlayerCombatKill`] will be included.
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, Message)]
 pub struct DeathEvent {
     pub entity: Entity,
     pub packet: Option<ClientboundPlayerCombatKill>,
@@ -114,7 +113,7 @@ pub struct DeathEvent {
 
 /// A KeepAlive packet is sent from the server to verify that the client is
 /// still connected.
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, EntityEvent)]
 pub struct KeepAliveEvent {
     pub entity: Entity,
     /// The ID of the keepalive.
@@ -124,7 +123,7 @@ pub struct KeepAliveEvent {
     pub id: u64,
 }
 
-#[derive(Message, Debug, Clone)]
+#[derive(Clone, Debug, Message)]
 pub struct ResourcePackEvent {
     pub entity: Entity,
     /// The random ID for this request to download the resource pack.
@@ -138,16 +137,18 @@ pub struct ResourcePackEvent {
     pub prompt: Option<FormattedText>,
 }
 
-/// An instance (aka world, dimension) was loaded by a client.
+/// A world instance (aka dimension) was loaded by a client.
 ///
-/// Since the instance is given to you as a weak reference, it won't be able to
-/// be `upgrade`d if all local players leave it.
-#[derive(Message, Debug, Clone)]
-pub struct InstanceLoadedEvent {
+/// Since the world is given to you as a weak reference, it won't be able to be
+/// `upgrade`d if all local players unload it.
+#[derive(Clone, Debug, Message)]
+pub struct WorldLoadedEvent {
     pub entity: Entity,
-    pub name: Identifier,
-    pub instance: Weak<RwLock<Instance>>,
+    pub name: WorldName,
+    pub world: Weak<RwLock<World>>,
 }
+#[deprecated = "renamed to `WorldLoadedEvent`."]
+pub type InstanceLoadedEvent = WorldLoadedEvent;
 
 /// A Bevy trigger that's sent when our client receives a [`ClientboundPing`]
 /// packet in the game state.
@@ -156,7 +157,7 @@ pub struct InstanceLoadedEvent {
 ///
 /// [`ClientboundPing`]: azalea_protocol::packets::game::ClientboundPing
 /// [`ConfigPingEvent`]: crate::packet::config::ConfigPingEvent
-#[derive(EntityEvent, Debug, Clone)]
+#[derive(Clone, Debug, EntityEvent)]
 pub struct GamePingEvent {
     pub entity: Entity,
     pub packet: azalea_protocol::packets::game::ClientboundPing,

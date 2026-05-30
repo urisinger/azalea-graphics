@@ -43,7 +43,7 @@ impl ArgumentType for Integer {
     fn examples(&self) -> Vec<String> {
         vec!["0", "123", "-123"]
             .into_iter()
-            .map(|s| s.to_string())
+            .map(|s| s.to_owned())
             .collect()
     }
 }
@@ -51,7 +51,7 @@ impl ArgumentType for Integer {
 pub fn integer() -> impl ArgumentType {
     Integer::default()
 }
-pub fn get_integer<S>(context: &CommandContext<S>, name: &str) -> Option<i32> {
+pub fn get_integer<S, R>(context: &CommandContext<S, R>, name: &str) -> Option<i32> {
     context
         .argument(name)
         .unwrap()

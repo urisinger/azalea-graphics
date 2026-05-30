@@ -99,7 +99,7 @@ pub struct WriteConnection<W: ProtocolPacket> {
 ///
 ///     // login
 ///     conn.write(ServerboundHello {
-///         name: "bot".to_string(),
+///         name: "bot".to_owned(),
 ///         profile_id: uuid::Uuid::nil(),
 ///     })
 ///     .await?;
@@ -223,6 +223,15 @@ where
         self.raw.write(&serialize_packet(&packet).unwrap()).await
     }
 
+    /// Write a batch of packets to the server
+    pub async fn write_batch(&mut self, packets: &[W]) -> io::Result<()> {
+        let serialized_packets: Vec<u8> = packets
+            .into_iter()
+            .flat_map(|packet| serialize_packet(packet).unwrap())
+            .collect();
+        self.raw.write(&serialized_packets).await
+    }
+
     /// End the connection.
     pub async fn shutdown(&mut self) -> io::Result<()> {
         self.raw.shutdown().await
@@ -251,6 +260,11 @@ where
         self.writer.write(packet).await
     }
 
+    /// Write a batch of packets to the other side of the connection.
+    pub async fn write_batch(&mut self, packets: &[W]) -> io::Result<()> {
+        self.writer.write_batch(packets).await
+    }
+
     /// Split the reader and writer into two objects.
     ///
     /// This doesn't allocate.
@@ -269,7 +283,7 @@ where
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum ConnectionError {
     #[error("{0}")]
     Io(#[from] io::Error),
@@ -277,8 +291,8 @@ pub enum ConnectionError {
 
 use socks5_impl::protocol::UserKey;
 
-/// An address and authentication method for connecting to a Socks5 proxy.
-#[derive(Debug, Clone)]
+/// An address and authentication method for connecting to a SOCKS5 proxy.
+#[derive(Clone, Debug)]
 pub struct Proxy {
     pub addr: SocketAddr,
     pub auth: Option<UserKey>,
@@ -299,6 +313,14 @@ impl Display for Proxy {
     }
 }
 
+#[cfg(feature = "online-mode")]
+impl From<Proxy> for reqwest::Proxy {
+    fn from(proxy: Proxy) -> Self {
+        reqwest::Proxy::all(proxy.to_string())
+            .expect("azalea proxies should not fail to parse as reqwest proxies")
+    }
+}
+
 impl Connection<ClientboundHandshakePacket, ServerboundHandshakePacket> {
     /// Create a new connection to the given address.
     pub async fn new(address: &SocketAddr) -> Result<Self, ConnectionError> {
@@ -310,7 +332,7 @@ impl Connection<ClientboundHandshakePacket, ServerboundHandshakePacket> {
         Self::new_from_stream(stream).await
     }
 
-    /// Create a new connection to the given address and Socks5 proxy.
+    /// Create a new connection to the given address and SOCKS5 proxy.
     ///
     /// If you're not using a proxy, use [`Self::new`] instead.
     pub async fn new_with_proxy(
@@ -443,7 +465,7 @@ impl Connection<ClientboundLoginPacket, ServerboundLoginPacket> {
     ///     ClientboundLoginPacket::Hello(p) => {
     ///         // tell Mojang we're joining the server & enable encryption
     ///         let e = azalea_crypto::encrypt(&p.public_key, &p.challenge).unwrap();
-    ///         conn.authenticate(&access_token, &profile.id, e.secret_key, &p)
+    ///         conn.authenticate(&access_token, &profile.id, e.secret_key, &p, None)
     ///             .await?;
     ///         conn.write(ServerboundKey {
     ///             key_bytes: e.encrypted_public_key,
@@ -464,14 +486,18 @@ impl Connection<ClientboundLoginPacket, ServerboundLoginPacket> {
         uuid: &Uuid,
         private_key: [u8; 16],
         packet: &ClientboundHello,
+        sessionserver_proxy: Option<Proxy>,
     ) -> Result<(), ClientSessionServerError> {
-        azalea_auth::sessionserver::join(
+        use azalea_auth::sessionserver::{self, SessionServerJoinOpts};
+
+        sessionserver::join(SessionServerJoinOpts {
             access_token,
-            &packet.public_key,
-            &private_key,
+            public_key: &packet.public_key,
+            private_key: &private_key,
             uuid,
-            &packet.server_id,
-        )
+            server_id: &packet.server_id,
+            proxy: sessionserver_proxy.map(Proxy::into),
+        })
         .await
     }
 }

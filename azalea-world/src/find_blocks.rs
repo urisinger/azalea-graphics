@@ -1,20 +1,20 @@
 use azalea_block::{BlockState, BlockStates};
 use azalea_core::position::{BlockPos, ChunkPos};
 
-use crate::{Chunk, ChunkStorage, Instance, iterators::ChunkIterator, palette::Palette};
+use crate::{
+    Chunk, World, chunk::storage::ChunkStorage, iterators::ChunkIterator, palette::Palette,
+};
 
-impl Instance {
+impl World {
     /// Find the coordinates of a block in the world.
     ///
     /// Note that this is sorted by `x+y+z` and not `x^2+y^2+z^2` for
     /// performance purposes.
     ///
     /// ```
-    /// # fn example(client: &azalea_client::Client) {
-    /// client
-    ///     .world()
-    ///     .read()
-    ///     .find_block(client.position(), &azalea_registry::Block::Chest.into());
+    /// # use azalea_registry::builtin::BlockKind;
+    /// # fn example(position: azalea_core::position::Vec3, world: &azalea_world::World) {
+    /// let pos = world.find_block(position, &BlockKind::Chest.into());
     /// # }
     /// ```
     pub fn find_block(
@@ -47,7 +47,7 @@ impl Instance {
                 block_states,
                 chunk_pos,
                 &chunk.read(),
-                self.chunks.min_y,
+                self.chunks.min_y(),
                 |this_block_pos| {
                     let this_block_distance = (nearest_to - this_block_pos).length_manhattan();
                     // only update if it's closer
@@ -159,7 +159,7 @@ impl Iterator for FindBlocks<'_> {
                 self.block_states,
                 chunk_pos,
                 &chunk.read(),
-                self.chunks.min_y,
+                self.chunks.min_y(),
                 |this_block_pos| {
                     let this_block_distance = (self.nearest_to - this_block_pos).length_manhattan();
 
@@ -205,8 +205,8 @@ impl Iterator for FindBlocks<'_> {
 /// An optimized function for finding the block positions in a chunk that match
 /// the given block states.
 ///
-/// This is used internally by [`Instance::find_block`] and
-/// [`Instance::find_blocks`].
+/// This is used internally by [`World::find_block`] and
+/// [`World::find_blocks`].
 pub fn find_blocks_in_chunk(
     block_states: &BlockStates,
     chunk_pos: ChunkPos,
@@ -249,16 +249,16 @@ fn palette_maybe_has_block(palette: &Palette<BlockState>, block_states: &BlockSt
 
 #[cfg(test)]
 mod tests {
-    use azalea_registry::Block;
+    use azalea_registry::builtin::BlockKind;
 
     use super::*;
-    use crate::{Chunk, PartialChunkStorage};
+    use crate::{Chunk, chunk::partial::PartialChunkStorage};
 
     #[test]
     fn find_block() {
-        let mut instance = Instance::default();
+        let mut world = World::default();
 
-        let chunk_storage = &mut instance.chunks;
+        let chunk_storage = &mut world.chunks;
         let mut partial_chunk_storage = PartialChunkStorage::default();
 
         // block at (17, 0, 0) and (0, 18, 0)
@@ -274,18 +274,18 @@ mod tests {
             chunk_storage,
         );
 
-        chunk_storage.set_block_state(BlockPos { x: 17, y: 0, z: 0 }, Block::Stone.into());
-        chunk_storage.set_block_state(BlockPos { x: 0, y: 18, z: 0 }, Block::Stone.into());
+        chunk_storage.set_block_state(BlockPos { x: 17, y: 0, z: 0 }, BlockKind::Stone.into());
+        chunk_storage.set_block_state(BlockPos { x: 0, y: 18, z: 0 }, BlockKind::Stone.into());
 
-        let pos = instance.find_block(BlockPos { x: 0, y: 0, z: 0 }, &Block::Stone.into());
+        let pos = world.find_block(BlockPos { x: 0, y: 0, z: 0 }, &BlockKind::Stone.into());
         assert_eq!(pos, Some(BlockPos { x: 17, y: 0, z: 0 }));
     }
 
     #[test]
     fn find_block_next_to_chunk_border() {
-        let mut instance = Instance::default();
+        let mut world = World::default();
 
-        let chunk_storage = &mut instance.chunks;
+        let chunk_storage = &mut world.chunks;
         let mut partial_chunk_storage = PartialChunkStorage::default();
 
         // block at (-1, 0, 0) and (15, 0, 0)
@@ -301,10 +301,10 @@ mod tests {
             chunk_storage,
         );
 
-        chunk_storage.set_block_state(BlockPos { x: -1, y: 0, z: 0 }, Block::Stone.into());
-        chunk_storage.set_block_state(BlockPos { x: 15, y: 0, z: 0 }, Block::Stone.into());
+        chunk_storage.set_block_state(BlockPos { x: -1, y: 0, z: 0 }, BlockKind::Stone.into());
+        chunk_storage.set_block_state(BlockPos { x: 15, y: 0, z: 0 }, BlockKind::Stone.into());
 
-        let pos = instance.find_block(BlockPos { x: 0, y: 0, z: 0 }, &Block::Stone.into());
+        let pos = world.find_block(BlockPos { x: 0, y: 0, z: 0 }, &BlockKind::Stone.into());
         assert_eq!(pos, Some(BlockPos { x: -1, y: 0, z: 0 }));
     }
 }

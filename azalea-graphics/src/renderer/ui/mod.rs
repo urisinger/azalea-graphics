@@ -79,7 +79,7 @@ impl EguiVulkan {
         } = self.egui_ctx.run(raw_input, run_ui);
 
         if viewport_output.len() > 1 {
-            log::warn!("Multiple viewports not yet supported by EguiVulkan");
+            tracing::warn!("Multiple viewports not yet supported by EguiVulkan");
         }
         for (_, ViewportOutput { commands, .. }) in viewport_output {
             let mut actions_requested = Default::default();
@@ -91,7 +91,7 @@ impl EguiVulkan {
                 &mut actions_requested,
             );
             for action in actions_requested {
-                log::warn!("{:?} not yet supported by EguiVulkan", action);
+                tracing::warn!("{:?} not yet supported by EguiVulkan", action);
             }
         }
 

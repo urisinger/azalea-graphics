@@ -1,8 +1,9 @@
 use std::hint::black_box;
 
-use azalea_core::position::ChunkBlockPos;
-use azalea_world::{BitStorage, Chunk};
-use criterion::{Criterion, criterion_group, criterion_main};
+use azalea_core::position::{BlockPos, ChunkBlockPos, ChunkPos};
+use azalea_registry::builtin::BlockKind;
+use azalea_world::{BitStorage, Chunk, ChunkStorage};
+use criterion::{BatchSize, Bencher, Criterion, criterion_group, criterion_main};
 
 fn bench_chunks(c: &mut Criterion) {
     c.bench_function("Chunk::set", |b| {
@@ -13,7 +14,7 @@ fn bench_chunks(c: &mut Criterion) {
                 for z in 0..16 {
                     chunk.set_block_state(
                         &ChunkBlockPos::new(x, 1, z),
-                        azalea_registry::Block::Bedrock.into(),
+                        BlockKind::Bedrock.into(),
                         0,
                     );
                 }
@@ -22,15 +23,56 @@ fn bench_chunks(c: &mut Criterion) {
             black_box(chunk);
         });
     });
+
+    c.bench_function("ChunkStorage::get_block_state", |b| {
+        b.iter(|| {
+            let mut storage = ChunkStorage::default();
+
+            let chunk = storage.upsert(ChunkPos::new(0, 0), Chunk::default());
+
+            for x in 0..16 {
+                for z in 0..16 {
+                    for y in 0..16 {
+                        black_box(storage.get_block_state(BlockPos::new(x, y, z)));
+                    }
+                }
+            }
+
+            black_box(chunk);
+        });
+    });
+}
+
+fn bench_bitstorage_with(b: &mut Bencher, bits: usize, size: usize) {
+    let mut storage = BitStorage::new(bits, size, None).unwrap();
+    b.iter_batched(
+        || {
+            // let index = rand
+            let mut vec = Vec::with_capacity(size);
+            for _ in 0..size {
+                vec.push(rand::random_range(0..size));
+            }
+            vec
+        },
+        |indices| {
+            for index in indices {
+                storage.set(index, 1);
+            }
+        },
+        BatchSize::SmallInput,
+    );
+    black_box(storage);
 }
 
 fn bench_bitstorage(c: &mut Criterion) {
-    c.bench_function("BitStorage::set", |b| {
-        let mut storage = BitStorage::new(1, 4096, None).unwrap();
-        b.iter(|| {
-            storage.set(136, 1);
-        });
-        black_box(storage);
+    c.bench_function("BitStorage::set (1 bit per entry)", |b| {
+        bench_bitstorage_with(b, 1, 4096)
+    });
+    c.bench_function("BitStorage::set (2 bits per entry)", |b| {
+        bench_bitstorage_with(b, 2, 4096)
+    });
+    c.bench_function("BitStorage::set (3 bits per entry)", |b| {
+        bench_bitstorage_with(b, 3, 4096)
     });
 }
 

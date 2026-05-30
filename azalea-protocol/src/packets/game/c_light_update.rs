@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use azalea_buf::AzBuf;
 use azalea_core::bitset::BitSet;
 use azalea_protocol_macros::ClientboundGamePacket;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundLightUpdate {
     #[var]
     pub x: i32,
@@ -11,12 +13,12 @@ pub struct ClientboundLightUpdate {
     pub light_data: ClientboundLightUpdatePacketData,
 }
 
-#[derive(Clone, Debug, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct ClientboundLightUpdatePacketData {
     pub sky_y_mask: BitSet,
     pub block_y_mask: BitSet,
     pub empty_sky_y_mask: BitSet,
     pub empty_block_y_mask: BitSet,
-    pub sky_updates: Vec<Vec<u8>>,
-    pub block_updates: Vec<Vec<u8>>,
+    pub sky_updates: Arc<Box<[Box<[u8]>]>>,
+    pub block_updates: Arc<Box<[Box<[u8]>]>>,
 }

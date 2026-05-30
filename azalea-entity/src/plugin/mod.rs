@@ -1,30 +1,33 @@
+mod components;
+pub mod effect_events;
 pub mod indexing;
-mod relative_updates;
 
 use std::collections::HashSet;
 
-use azalea_block::{BlockState, fluid_state::FluidKind};
+use azalea_block::{BlockState, BlockTrait, fluid_state::FluidKind, properties};
 use azalea_core::{
-    position::{BlockPos, ChunkPos, Vec3},
+    entity_id::MinecraftEntityId,
+    position::{BlockPos, ChunkPos},
     tick::GameTick,
 };
-use azalea_world::{InstanceContainer, InstanceName, MinecraftEntityId};
+use azalea_registry::{builtin::BlockKind, tags};
+use azalea_world::{ChunkStorage, WorldName, Worlds};
 use bevy_app::{App, Plugin, PostUpdate, Update};
 use bevy_ecs::prelude::*;
+pub use components::*;
 use derive_more::{Deref, DerefMut};
 use indexing::EntityUuidIndex;
-pub use relative_updates::RelativeEntityUpdate;
 use tracing::debug;
 
 use crate::{
-    Crouching, Dead, EntityKindComponent, FluidOnEyes, LocalEntity, LookDirection, OnClimbable,
-    Physics, Pose, Position,
+    FluidOnEyes, LookDirection, Physics, Pose, Position,
     dimensions::{EntityDimensions, calculate_dimensions},
-    metadata::Health,
+    metadata::{self, Health, Player},
+    plugin::effect_events::{handle_add_effect, handle_remove_effects},
 };
 
 /// A Bevy [`SystemSet`] for various types of entity updates.
-#[derive(SystemSet, Debug, Hash, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, SystemSet)]
 pub enum EntityUpdateSystems {
     /// Create search indexes for entities.
     Index,
@@ -54,17 +57,18 @@ impl Plugin for EntityPlugin {
                     .chain()
                     .in_set(EntityUpdateSystems::Index),
                 (
-                    relative_updates::debug_detect_updates_received_on_local_entities,
                     debug_new_entity,
                     add_dead,
                     clamp_look_direction,
                     update_on_climbable,
-                    (update_dimensions, update_bounding_box, update_fluid_on_eyes).chain(),
+                    (update_dimensions, update_bounding_box).chain(),
                     update_crouching,
                 ),
             ),
         )
-        .add_systems(GameTick, update_in_loaded_chunk)
+        .add_systems(GameTick, (update_in_loaded_chunk, update_fluid_on_eyes))
+        .add_observer(handle_add_effect)
+        .add_observer(handle_remove_effects)
         .init_resource::<EntityUuidIndex>();
     }
 }
@@ -94,39 +98,39 @@ pub fn add_dead(mut commands: Commands, query: Query<(Entity, &Health), Changed<
 }
 
 pub fn update_fluid_on_eyes(
-    mut query: Query<(
-        &mut FluidOnEyes,
-        &Position,
-        &EntityDimensions,
-        &InstanceName,
-    )>,
-    instance_container: Res<InstanceContainer>,
+    mut query: Query<
+        (&mut FluidOnEyes, &Position, &EntityDimensions, &WorldName),
+        With<metadata::AbstractLiving>,
+    >,
+    worlds: Res<Worlds>,
 ) {
-    for (mut fluid_on_eyes, position, dimensions, instance_name) in query.iter_mut() {
-        let Some(instance) = instance_container.get(instance_name) else {
-            continue;
-        };
+    query
+        .par_iter_mut()
+        .for_each(|(mut fluid_on_eyes, position, dimensions, world_name)| {
+            let Some(world) = worlds.get(world_name) else {
+                return;
+            };
 
-        let adjusted_eye_y = position.y + (dimensions.eye_height as f64) - 0.1111111119389534;
-        let eye_block_pos = BlockPos::from(Vec3::new(position.x, adjusted_eye_y, position.z));
-        let fluid_at_eye = instance
-            .read()
-            .get_fluid_state(eye_block_pos)
-            .unwrap_or_default();
-        let fluid_cutoff_y = (eye_block_pos.y as f32 + fluid_at_eye.height()) as f64;
-        if fluid_cutoff_y > adjusted_eye_y {
-            **fluid_on_eyes = fluid_at_eye.kind;
-        } else {
-            **fluid_on_eyes = FluidKind::Empty;
-        }
-    }
+            let adjusted_eye_y = position.y + (dimensions.eye_height as f64) - 0.1111111119389534;
+            let eye_block_pos = BlockPos::from(position.with_y(adjusted_eye_y));
+            let fluid_at_eye = world
+                .read()
+                .get_fluid_state(eye_block_pos)
+                .unwrap_or_default();
+            let fluid_cutoff_y = (eye_block_pos.y as f32 + fluid_at_eye.height()) as f64;
+            if fluid_cutoff_y > adjusted_eye_y {
+                **fluid_on_eyes = fluid_at_eye.kind;
+            } else {
+                **fluid_on_eyes = FluidKind::Empty;
+            }
+        });
 }
 
 pub fn update_on_climbable(
-    mut query: Query<(&mut OnClimbable, &Position, &InstanceName), With<LocalEntity>>,
-    instance_container: Res<InstanceContainer>,
+    mut query: Query<(&mut OnClimbable, &Position, &WorldName), With<LocalEntity>>,
+    worlds: Res<Worlds>,
 ) {
-    for (mut on_climbable, position, instance_name) in query.iter_mut() {
+    for (mut on_climbable, position, world_name) in query.iter_mut() {
         // TODO: there's currently no gamemode component that can be accessed from here,
         // maybe LocalGameMode should be replaced with two components, maybe called
         // EntityGameMode and PreviousGameMode?
@@ -135,51 +139,49 @@ pub fn update_on_climbable(
         //     continue;
         // }
 
-        let Some(instance) = instance_container.get(instance_name) else {
+        let Some(world) = worlds.get(world_name) else {
             continue;
         };
 
-        let instance = instance.read();
+        let world = world.read();
 
         let block_pos = BlockPos::from(position);
-        let block_state_at_feet = instance.get_block_state(block_pos).unwrap_or_default();
-        let block_at_feet = block_state_at_feet.to_trait();
-        let registry_block_at_feet = block_at_feet.as_registry_block();
+        let block_state_at_feet = world.get_block_state(block_pos).unwrap_or_default();
+        let registry_block_at_feet = block_state_at_feet.as_block_kind();
 
-        **on_climbable = azalea_registry::tags::blocks::CLIMBABLE.contains(&registry_block_at_feet)
-            || (azalea_registry::tags::blocks::TRAPDOORS.contains(&registry_block_at_feet)
-                && is_trapdoor_useable_as_ladder(block_state_at_feet, block_pos, &instance));
+        **on_climbable = tags::blocks::CLIMBABLE.contains(&registry_block_at_feet)
+            || (tags::blocks::TRAPDOORS.contains(&registry_block_at_feet)
+                && is_trapdoor_usable_as_ladder(block_state_at_feet, block_pos, &world));
     }
 }
 
-fn is_trapdoor_useable_as_ladder(
+fn is_trapdoor_usable_as_ladder(
     block_state: BlockState,
     block_pos: BlockPos,
-    instance: &azalea_world::Instance,
+    world: &azalea_world::World,
 ) -> bool {
     // trapdoor must be open
     if !block_state
-        .property::<azalea_block::properties::Open>()
+        .property::<properties::Open>()
         .unwrap_or_default()
     {
         return false;
     }
 
     // block below must be a ladder
-    let block_below = instance
+    let block_below = world
         .get_block_state(block_pos.down(1))
         .unwrap_or_default();
-    let registry_block_below =
-        block_below.to_trait().as_registry_block();
-    if registry_block_below != azalea_registry::Block::Ladder {
+    let registry_block_below = block_below.as_block_kind();
+    if registry_block_below != BlockKind::Ladder {
         return false;
     }
     // and the ladder must be facing the same direction as the trapdoor
     let ladder_facing = block_below
-        .property::<azalea_block::properties::FacingCardinal>()
+        .property::<properties::FacingCardinal>()
         .expect("ladder block must have facing property");
     let trapdoor_facing = block_state
-        .property::<azalea_block::properties::FacingCardinal>()
+        .property::<properties::FacingCardinal>()
         .expect("trapdoor block must have facing property");
     if ladder_facing != trapdoor_facing {
         return false;
@@ -192,18 +194,13 @@ fn is_trapdoor_useable_as_ladder(
 /// loaded.
 ///
 /// If this is empty, the entity will be removed from the ECS.
-#[derive(Component, Clone, Deref, DerefMut)]
+#[derive(Clone, Component, Deref, DerefMut)]
 pub struct LoadedBy(pub HashSet<Entity>);
 
 pub fn clamp_look_direction(mut query: Query<&mut LookDirection>) {
     for mut look_direction in &mut query {
-        *look_direction = apply_clamp_look_direction(*look_direction);
+        *look_direction = look_direction.clamped();
     }
-}
-pub fn apply_clamp_look_direction(mut look_direction: LookDirection) -> LookDirection {
-    look_direction.x_rot = look_direction.x_rot.clamp(-90., 90.);
-
-    look_direction
 }
 
 /// Sets the position of the entity.
@@ -239,7 +236,10 @@ pub fn update_dimensions(
     }
 }
 
-pub fn update_crouching(query: Query<(&mut Crouching, &Pose), Without<LocalEntity>>) {
+#[allow(clippy::type_complexity)]
+pub fn update_crouching(
+    query: Query<(&mut Crouching, &Pose), (Without<LocalEntity>, With<Player>)>,
+) {
     for (mut crouching, pose) in query {
         let new_crouching = *pose == Pose::Crouching;
         // avoid triggering change detection
@@ -254,36 +254,76 @@ pub fn update_crouching(query: Query<(&mut Crouching, &Pose), Without<LocalEntit
 ///
 /// Internally, this is only used for player physics. Not to be confused with
 /// the somewhat similarly named [`LoadedBy`].
-#[derive(Component, Clone, Debug, Copy)]
+#[derive(Clone, Component, Copy, Debug)]
 pub struct InLoadedChunk;
 
 /// Update the [`InLoadedChunk`] component for all entities in the world.
 pub fn update_in_loaded_chunk(
     mut commands: bevy_ecs::system::Commands,
-    query: Query<(Entity, &InstanceName, &Position)>,
-    instance_container: Res<InstanceContainer>,
+    query: Query<(Entity, &WorldName, &Position, Option<&InLoadedChunk>)>,
+    worlds: Res<Worlds>,
 ) {
-    for (entity, instance_name, position) in &query {
+    for (entity, world_name, position, last_in_loaded_chunk) in &query {
         let player_chunk_pos = ChunkPos::from(position);
-        let Some(instance_lock) = instance_container.get(instance_name) else {
+        let Some(world_lock) = worlds.get(world_name) else {
             commands.entity(entity).remove::<InLoadedChunk>();
             continue;
         };
 
-        let in_loaded_chunk = instance_lock.read().chunks.get(&player_chunk_pos).is_some();
+        let in_loaded_chunk = world_lock.read().chunks.get(&player_chunk_pos).is_some();
         if in_loaded_chunk {
-            commands.entity(entity).insert(InLoadedChunk);
+            if last_in_loaded_chunk.is_none() {
+                commands.entity(entity).insert(InLoadedChunk);
+            }
         } else {
-            commands.entity(entity).remove::<InLoadedChunk>();
+            if last_in_loaded_chunk.is_some() {
+                commands.entity(entity).remove::<InLoadedChunk>();
+            }
         }
     }
 }
 
-/// A component that indicates whether the client has loaded.
-///
-/// This is updated by a system in `azalea-client`.
-#[derive(Component)]
-pub struct HasClientLoaded;
+/// Get the position of the block below the entity, but a little lower.
+pub fn on_pos_legacy(chunk_storage: &ChunkStorage, position: Position) -> BlockPos {
+    on_pos(0.2, chunk_storage, position)
+}
+
+// int x = Mth.floor(this.position.x);
+// int y = Mth.floor(this.position.y - (double)var1);
+// int z = Mth.floor(this.position.z);
+// BlockPos var5 = new BlockPos(x, y, z);
+// if (this.level.getBlockState(var5).isAir()) {
+//    BlockPos var6 = var5.below();
+//    BlockState var7 = this.level.getBlockState(var6);
+//    if (var7.is(BlockTags.FENCES) || var7.is(BlockTags.WALLS) ||
+// var7.getBlock() instanceof FenceGateBlock) {       return var6;
+//    }
+// }
+// return var5;
+pub fn on_pos(offset: f32, chunk_storage: &ChunkStorage, pos: Position) -> BlockPos {
+    let x = pos.x.floor() as i32;
+    let y = (pos.y - offset as f64).floor() as i32;
+    let z = pos.z.floor() as i32;
+    let pos = BlockPos { x, y, z };
+
+    // TODO: check if block below is a fence, wall, or fence gate
+    let block_pos = pos.down(1);
+    let block_state = chunk_storage.get_block_state(block_pos);
+    if block_state == Some(BlockState::AIR) {
+        let block_pos_below = block_pos.down(1);
+        let block_state_below = chunk_storage.get_block_state(block_pos_below);
+        if let Some(_block_state_below) = block_state_below {
+            // if block_state_below.is_fence()
+            //     || block_state_below.is_wall()
+            //     || block_state_below.is_fence_gate()
+            // {
+            //     return block_pos_below;
+            // }
+        }
+    }
+
+    pos
+}
 
 #[cfg(test)]
 mod tests {
@@ -292,22 +332,23 @@ mod tests {
         properties::{FacingCardinal, TopBottom},
     };
     use azalea_core::position::{BlockPos, ChunkPos};
-    use azalea_world::{Chunk, ChunkStorage, Instance, PartialInstance};
+    use azalea_registry::builtin::BlockKind;
+    use azalea_world::{Chunk, ChunkStorage, PartialWorld, World};
 
-    use super::is_trapdoor_useable_as_ladder;
+    use super::is_trapdoor_usable_as_ladder;
 
     #[test]
     fn test_is_trapdoor_useable_as_ladder() {
-        let mut partial_instance = PartialInstance::default();
+        let mut partial_world = PartialWorld::default();
         let mut chunks = ChunkStorage::default();
-        partial_instance.chunks.set(
+        partial_world.chunks.set(
             &ChunkPos { x: 0, z: 0 },
             Some(Chunk::default()),
             &mut chunks,
         );
-        partial_instance.chunks.set_block_state(
+        partial_world.chunks.set_block_state(
             BlockPos::new(0, 0, 0),
-            azalea_registry::Block::Stone.into(),
+            BlockKind::Stone.into(),
             &chunks,
         );
 
@@ -315,7 +356,7 @@ mod tests {
             facing: FacingCardinal::East,
             waterlogged: false,
         };
-        partial_instance
+        partial_world
             .chunks
             .set_block_state(BlockPos::new(0, 0, 0), ladder.into(), &chunks);
 
@@ -326,17 +367,17 @@ mod tests {
             powered: false,
             waterlogged: false,
         };
-        partial_instance
+        partial_world
             .chunks
             .set_block_state(BlockPos::new(0, 1, 0), trapdoor.into(), &chunks);
 
-        let instance = Instance::from(chunks);
-        let trapdoor_matches_ladder = is_trapdoor_useable_as_ladder(
-            instance
+        let world = World::from(chunks);
+        let trapdoor_matches_ladder = is_trapdoor_usable_as_ladder(
+            world
                 .get_block_state(BlockPos::new(0, 1, 0))
                 .unwrap_or_default(),
             BlockPos::new(0, 1, 0),
-            &instance,
+            &world,
         );
 
         assert!(trapdoor_matches_ladder);

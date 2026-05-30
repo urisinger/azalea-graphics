@@ -1,6 +1,5 @@
 use azalea::{
-    blocks::{BlockState, properties::WaterLevel},
-    registry::Block,
+    block::{BlockState, properties::WaterLevel}, registry::builtin::BlockKind,
 };
 use azalea_assets::processed::atlas::PlacedSprite;
 use glam::{IVec3, Vec3};
@@ -37,18 +36,18 @@ pub fn mesh_water(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
 
     if builder
         .block_state_at(local + IVec3::Y)
-        .map(Block::from)
-        .unwrap_or(Block::Water)
-        != Block::Water
+        .map(BlockKind::from)
+        .unwrap_or(BlockKind::Water)
+        != BlockKind::Water
     {
         mesh_water_top(local, h_ne, h_nw, h_sw, h_se, still, flow, tint, builder);
     }
 
     if builder
         .block_state_at(local - IVec3::Y)
-        .map(Block::from)
-        .unwrap_or(Block::Water)
-        != Block::Water
+        .map(BlockKind::from)
+        .unwrap_or(BlockKind::Water)
+        != BlockKind::Water
     {
         mesh_water_bottom(local, still, tint, builder);
     }
@@ -59,7 +58,7 @@ pub fn mesh_water(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {
 fn fluid_height(local: IVec3, _block: BlockState, builder: &MeshBuilder) -> f32 {
     let state = builder.section.blocks[local.x as usize][local.y as usize][local.z as usize]
         .unwrap_or(BlockState::AIR);
-    if Block::from(state) == Block::Water {
+    if BlockKind::from(state) == BlockKind::Water {
         let level = state.property::<WaterLevel>().unwrap() as u32;
         if level == 0 {
             1.0
@@ -206,7 +205,7 @@ fn mesh_water_sides(
             builder.section.blocks[neighbor.x as usize][neighbor.y as usize][neighbor.z as usize];
 
         if let Some(state) = maybe_state {
-            if Block::from(state) != Block::Water {
+            if BlockKind::from(state) != BlockKind::Water {
                 let positions = [
                     base + low_a,
                     base + low_a + Vec3::new(0.0, height, 0.0),

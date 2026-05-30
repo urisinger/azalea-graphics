@@ -1,9 +1,11 @@
-from lib.utils import get_dir_location
+from .utils import get_dir_location
 import xml.etree.ElementTree as ET
-from .mappings import Mappings
 import requests
 import json
 import os
+
+PUMPKIN_EXTRACTOR_COMMIT = "f3019d598c06f0d6fd4f3568fbf2d5bebae71173q"
+BURGER_COMMIT = "bb84700e43bf7090877d9a4eb5d87c3125a8d22e"
 
 # make sure the cache directory exists
 print("Making __cache__")
@@ -13,26 +15,26 @@ if not os.path.exists(get_dir_location("__cache__")):
 
 
 def get_burger():
-    if not os.path.exists(get_dir_location("__cache__/Burger")):
-        print("\033[92mDownloading Burger...\033[m")
+    if not os.path.exists(get_dir_location("__cache__/azalea-burger")):
+        print("\033[92mDownloading azalea-burger...\033[m")
         os.system(
-            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/Burger-occlude.git Burger && cd Burger && git pull"
+            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/Burger-occlude.git azalea-burger && cd azalea-burger && git pull"
         )
 
         print("\033[92mInstalling dependencies...\033[m")
         os.system(
-            f"cd {get_dir_location('__cache__')}/Burger && python -m venv venv && venv/bin/pip install six jawa"
+            f"cd {get_dir_location('__cache__')}/azalea-burger && python -m venv venv && venv/bin/pip install six jawa"
         )
 
 
 def get_pumpkin_extractor():
-    if not os.path.exists(get_dir_location("__cache__/pumpkin-extractor")):
-        print("\033[92mDownloading Pumpkin-MC/Extractor...\033[m")
+    if not os.path.exists(get_dir_location("__cache__/azalea-pumpkin-extractor")):
+        print("\033[92mDownloading mat-1/azalea-pumpkin-extractor...\033[m")
         os.system(
-            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/Extractor --branch models pumpkin-extractor && cd pumpkin-extractor && git pull"
+            f"cd {get_dir_location('__cache__')} && git clone https://github.com/urisinger/azalea-pumpkin-extractor && cd azalea-pumpkin-extractor && git pull && git reset --hard {PUMPKIN_EXTRACTOR_COMMIT}"
         )
 
-    return get_dir_location("__cache__/pumpkin-extractor")
+    return get_dir_location("__cache__/azalea-pumpkin-extractor")
 
 
 def get_version_manifest():
@@ -91,29 +93,13 @@ def get_server_jar(version_id: str):
             f.write(requests.get(server_jar_url).content)
 
 
-def get_mappings_for_version(version_id: str):
-    if not os.path.exists(get_dir_location(f"__cache__/mappings-{version_id}.txt")):
-        package_data = get_version_data(version_id)
-
-        client_mappings_url = package_data["downloads"]["client_mappings"]["url"]
-
-        mappings_text = requests.get(client_mappings_url).text
-
-        with open(get_dir_location(f"__cache__/mappings-{version_id}.txt"), "w") as f:
-            f.write(mappings_text)
-    else:
-        with open(get_dir_location(f"__cache__/mappings-{version_id}.txt"), "r") as f:
-            mappings_text = f.read()
-    return Mappings.parse(mappings_text)
-
-
 def get_fabric_data(version_id: str):
     # https://meta.fabricmc.net/v2/versions/yarn
     path = get_dir_location(f"__cache__/fabric-{version_id}.json")
 
     if not os.path.exists(path):
         print(f"\033[92mDownloading Fabric metadata for {version_id}...\033[m")
-        url = f"https://meta.fabricmc.net/v1/versions/loader/{version_id}"
+        url = f"https://meta.fabricmc.net/v2/versions/loader/{version_id}"
         yarn_versions_data = requests.get(url).json()
         with open(path, "w") as f:
             json.dump(yarn_versions_data, f)
@@ -123,7 +109,7 @@ def get_fabric_data(version_id: str):
     return yarn_versions_data
 
 
-def get_latest_fabric_api_version():
+def get_fabric_api_version(version_id: str):
     path = get_dir_location("__cache__/fabric-api-maven-metadata.xml")
 
     if not os.path.exists(path):
@@ -137,7 +123,12 @@ def get_latest_fabric_api_version():
             maven_metadata_xml = json.load(f)
 
     tree = ET.ElementTree(ET.fromstring(maven_metadata_xml))
-    return tree.find(".//latest").text
+    expected_suffix = "+" + version_id.split("-")[0]
+    versions = tree.findall(".//version")
+    for candidate in reversed(versions):
+        candidate = candidate.text
+        if candidate.endswith(expected_suffix):
+            return candidate
 
 
 def get_latest_fabric_kotlin_version():
@@ -239,11 +230,11 @@ def clear_version_cache():
         if os.path.exists(get_dir_location(f"__cache__/{file}")):
             os.remove(get_dir_location(f"__cache__/{file}"))
 
-    burger_path = get_dir_location("__cache__/Burger")
+    burger_path = get_dir_location("__cache__/azalea-burger")
     if os.path.exists(burger_path):
-        os.system(f"cd {burger_path} && git pull")
-    pumpkin_path = get_dir_location("__cache__/pumpkin-extractor")
+        os.system(f"cd {burger_path} && git pull && git reset --hard {BURGER_COMMIT}")
+    pumpkin_path = get_dir_location("__cache__/azalea-pumpkin-extractor")
     if os.path.exists(pumpkin_path):
         os.system(
-            f"cd {pumpkin_path} && git add . && git stash && git pull && git stash pop && git checkout HEAD -- src/main/resources/fabric.mod.json"
+            f"cd {pumpkin_path} && git add . && git stash && git checkout master && git pull && git stash pop && git reset --hard {PUMPKIN_EXTRACTOR_COMMIT}"
         )

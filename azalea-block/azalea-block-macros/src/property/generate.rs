@@ -36,6 +36,7 @@ fn generate_property_code(
     let property_struct_name = get_property_type_name(&property.data);
 
     let mut to_static_str_inner = quote! {};
+    let mut from_str_match_inner = quote! {};
 
     match &property.data {
         PropertyData::Enum { variants, .. } => {
@@ -56,10 +57,13 @@ fn generate_property_code(
                 to_static_str_inner.extend(quote! {
                     Self::#variant_ident => #variant_str,
                 });
+                from_str_match_inner.extend(quote! {
+                    #variant_str => Self::#variant_ident,
+                });
             }
 
             properties_code.extend(quote! {
-                #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+                #[derive(Clone, Copy, Debug, Eq, PartialEq)]
                 pub enum #property_struct_name {
                     #property_enum_variants
                 }
@@ -79,9 +83,13 @@ fn generate_property_code(
                 Self(true) => "true",
                 Self(false) => "false",
             });
+            from_str_match_inner.extend(quote! {
+                "true" => Self(true),
+                "false" => Self(false),
+            });
 
             properties_code.extend(quote! {
-                #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+                #[derive(Clone, Copy, Debug, Eq, PartialEq)]
                 pub struct #property_struct_name(pub bool);
 
                 impl From<BlockStateIntegerRepr> for #property_struct_name {
@@ -120,6 +128,16 @@ fn generate_property_code(
                 match self {
                     #to_static_str_inner
                 }
+            }
+        }
+        impl FromStr for #property_struct_name {
+            type Err = InvalidPropertyError;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                Ok(match s {
+                    #from_str_match_inner
+                    _ => return Err(InvalidPropertyError)
+                })
             }
         }
 

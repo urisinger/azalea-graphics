@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
@@ -11,7 +13,7 @@ use parking_lot::RwLock;
 use crate::{
     builder::argument_builder::ArgumentBuilder,
     context::{CommandContextBuilder, ContextChain},
-    errors::{BuiltInError, CommandSyntaxError},
+    errors::{BuiltInError, CommandResultTrait, CommandSyntaxError},
     parse_results::ParseResults,
     result_consumer::{DefaultResultConsumer, ResultConsumer},
     string_reader::StringReader,
@@ -26,15 +28,15 @@ use crate::{
 /// # struct CommandSource;
 /// let mut subject = CommandDispatcher::<CommandSource>::new();
 /// ```
-pub struct CommandDispatcher<S>
+pub struct CommandDispatcher<S, R = i32>
 where
     Self: Sync + Send,
 {
-    pub root: Arc<RwLock<CommandNode<S>>>,
-    consumer: Box<dyn ResultConsumer<S> + Send + Sync>,
+    pub root: Arc<RwLock<CommandNode<S, R>>>,
+    consumer: Box<dyn ResultConsumer<S, R> + Send + Sync>,
 }
 
-impl<S> CommandDispatcher<S> {
+impl<S, R: CommandResultTrait> CommandDispatcher<S, R> {
     pub fn new() -> Self {
         Self {
             root: Arc::new(RwLock::new(CommandNode::default())),
@@ -49,13 +51,13 @@ impl<S> CommandDispatcher<S> {
     /// # let mut subject = CommandDispatcher::<()>::new();
     /// subject.register(literal("foo").executes(|_| 42));
     /// ```
-    pub fn register(&mut self, node: ArgumentBuilder<S>) -> Arc<RwLock<CommandNode<S>>> {
+    pub fn register(&mut self, node: ArgumentBuilder<S, R>) -> Arc<RwLock<CommandNode<S, R>>> {
         let build = Arc::new(RwLock::new(node.build()));
         self.root.write().add_child(&build);
         build
     }
 
-    pub fn parse(&self, command: StringReader, source: S) -> ParseResults<'_, S> {
+    pub fn parse(&self, command: StringReader, source: S) -> ParseResults<'_, S, R> {
         let source = Arc::new(source);
 
         let context = CommandContextBuilder::new(self, source, self.root.clone(), command.cursor());
@@ -64,14 +66,14 @@ impl<S> CommandDispatcher<S> {
 
     fn parse_nodes<'a>(
         &'a self,
-        node: &Arc<RwLock<CommandNode<S>>>,
+        node: &Arc<RwLock<CommandNode<S, R>>>,
         original_reader: &StringReader,
-        context_so_far: CommandContextBuilder<'a, S>,
-    ) -> Result<ParseResults<'a, S>, CommandSyntaxError> {
+        context_so_far: CommandContextBuilder<'a, S, R>,
+    ) -> Result<ParseResults<'a, S, R>, CommandSyntaxError> {
         let source = context_so_far.source.clone();
         #[allow(clippy::mutable_key_type)] // this is fine because we don't mutate the key
-        let mut errors = HashMap::<Rc<CommandNode<S>>, CommandSyntaxError>::new();
-        let mut potentials: Vec<ParseResults<S>> = vec![];
+        let mut errors = HashMap::<Rc<CommandNode<S, R>>, CommandSyntaxError>::new();
+        let mut potentials: Vec<ParseResults<S, R>> = vec![];
         let cursor = original_reader.cursor();
 
         for child in node.read().get_relevant_nodes(&mut original_reader.clone()) {
@@ -183,7 +185,7 @@ impl<S> CommandDispatcher<S> {
         &self,
         input: impl Into<StringReader>,
         source: S,
-    ) -> Result<i32, CommandSyntaxError> {
+    ) -> Result<R, CommandSyntaxError> {
         let input = input.into();
 
         let parse = self.parse(input, source);
@@ -191,9 +193,9 @@ impl<S> CommandDispatcher<S> {
     }
 
     pub fn add_paths(
-        node: Arc<RwLock<CommandNode<S>>>,
-        result: &mut Vec<Vec<Arc<RwLock<CommandNode<S>>>>>,
-        parents: Vec<Arc<RwLock<CommandNode<S>>>>,
+        node: Arc<RwLock<CommandNode<S, R>>>,
+        result: &mut Vec<Vec<Arc<RwLock<CommandNode<S, R>>>>>,
+        parents: Vec<Arc<RwLock<CommandNode<S, R>>>>,
     ) {
         let mut current = parents;
         current.push(node.clone());
@@ -204,9 +206,9 @@ impl<S> CommandDispatcher<S> {
         }
     }
 
-    pub fn get_path(&self, target: CommandNode<S>) -> Vec<String> {
+    pub fn get_path(&self, target: CommandNode<S, R>) -> Vec<String> {
         let rc_target = Arc::new(RwLock::new(target));
-        let mut nodes: Vec<Vec<Arc<RwLock<CommandNode<S>>>>> = Vec::new();
+        let mut nodes: Vec<Vec<Arc<RwLock<CommandNode<S, R>>>>> = Vec::new();
         Self::add_paths(self.root.clone(), &mut nodes, vec![]);
 
         for list in nodes {
@@ -214,7 +216,7 @@ impl<S> CommandDispatcher<S> {
                 let mut result: Vec<String> = Vec::with_capacity(list.len());
                 for node in list {
                     if !Arc::ptr_eq(&node, &self.root) {
-                        result.push(node.read().name().to_string());
+                        result.push(node.read().name().to_owned());
                     }
                 }
                 return result;
@@ -223,7 +225,7 @@ impl<S> CommandDispatcher<S> {
         vec![]
     }
 
-    pub fn find_node(&self, path: &[&str]) -> Option<Arc<RwLock<CommandNode<S>>>> {
+    pub fn find_node(&self, path: &[&str]) -> Option<Arc<RwLock<CommandNode<S, R>>>> {
         let mut node = self.root.clone();
         for name in path {
             match node.clone().read().child(name) {
@@ -239,7 +241,7 @@ impl<S> CommandDispatcher<S> {
     }
 
     /// Executes a given pre-parsed command.
-    pub fn execute_parsed(&self, parse: ParseResults<S>) -> Result<i32, CommandSyntaxError> {
+    pub fn execute_parsed(&self, parse: ParseResults<S, R>) -> Result<R, CommandSyntaxError> {
         if parse.reader.can_read() {
             return Err(if parse.exceptions.len() == 1 {
                 parse.exceptions.values().next().unwrap().clone()
@@ -263,7 +265,7 @@ impl<S> CommandDispatcher<S> {
 
     pub fn get_all_usage(
         &self,
-        node: &CommandNode<S>,
+        node: &CommandNode<S, R>,
         source: &S,
         restricted: bool,
     ) -> Vec<String> {
@@ -274,7 +276,7 @@ impl<S> CommandDispatcher<S> {
 
     fn get_all_usage_recursive(
         &self,
-        node: &CommandNode<S>,
+        node: &CommandNode<S, R>,
         source: &S,
         result: &mut Vec<String>,
         prefix: &str,
@@ -289,7 +291,7 @@ impl<S> CommandDispatcher<S> {
         match &node.redirect {
             Some(redirect) => {
                 let redirect = if ptr::eq(redirect.data_ptr(), self.root.data_ptr()) {
-                    "...".to_string()
+                    "...".to_owned()
                 } else {
                     format!("-> {}", redirect.read().usage_text())
                 };
@@ -325,9 +327,9 @@ impl<S> CommandDispatcher<S> {
     /// command tree.
     pub fn get_smart_usage(
         &self,
-        node: &CommandNode<S>,
+        node: &CommandNode<S, R>,
         source: &S,
-    ) -> Vec<(Arc<RwLock<CommandNode<S>>>, String)> {
+    ) -> Vec<(Arc<RwLock<CommandNode<S, R>>>, String)> {
         let mut result = Vec::new();
 
         let optional = node.command.is_some();
@@ -343,7 +345,7 @@ impl<S> CommandDispatcher<S> {
 
     fn get_smart_usage_recursive(
         &self,
-        node: &CommandNode<S>,
+        node: &CommandNode<S, R>,
         source: &S,
         optional: bool,
         deep: bool,
@@ -367,7 +369,7 @@ impl<S> CommandDispatcher<S> {
 
         if let Some(redirect) = &node.redirect {
             let redirect = if ptr::eq(redirect.data_ptr(), self.root.data_ptr()) {
-                "...".to_string()
+                "...".to_owned()
             } else {
                 format!("-> {}", redirect.read().usage_text())
             };
@@ -435,13 +437,13 @@ impl<S> CommandDispatcher<S> {
         Some(this)
     }
 
-    pub fn get_completion_suggestions(parse: ParseResults<S>) -> Suggestions {
+    pub fn get_completion_suggestions(parse: ParseResults<S, R>) -> Suggestions {
         let cursor = parse.reader.total_length();
         Self::get_completion_suggestions_with_cursor(parse, cursor)
     }
 
     pub fn get_completion_suggestions_with_cursor(
-        parse: ParseResults<S>,
+        parse: ParseResults<S, R>,
         cursor: usize,
     ) -> Suggestions {
         let context = parse.context;
@@ -471,7 +473,7 @@ impl<S> CommandDispatcher<S> {
     }
 }
 
-impl<S> Default for CommandDispatcher<S> {
+impl<S, R: CommandResultTrait> Default for CommandDispatcher<S, R> {
     fn default() -> Self {
         Self::new()
     }

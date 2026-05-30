@@ -1,12 +1,12 @@
-use std::{collections::VecDeque, fmt::Debug, sync::Arc};
+use std::{any, collections::VecDeque, fmt::Debug, sync::Arc};
 
 use azalea_auth::game_profile::GameProfile;
 use azalea_block::BlockState;
-use azalea_buf::AzaleaWrite;
+use azalea_buf::AzBuf;
 use azalea_core::{
     delta::LpVec3,
+    entity_id::MinecraftEntityId,
     game_type::{GameMode, OptionalGameType},
-    identifier::Identifier,
     position::{BlockPos, ChunkPos, Vec3},
     tick::GameTick,
 };
@@ -25,17 +25,27 @@ use azalea_protocol::{
         },
     },
 };
-use azalea_registry::{Biome, DataRegistry, DimensionType, EntityKind};
-use azalea_world::{Chunk, Instance, MinecraftEntityId, Section, palette::PalettedContainer};
+use azalea_registry::{
+    DataRegistry,
+    builtin::EntityKind,
+    data::{Biome, DimensionKind},
+    identifier::Identifier,
+};
+use azalea_world::{Chunk, Section, World, palette::PalettedContainer};
 use bevy_app::App;
-use bevy_ecs::{component::Mutable, prelude::*, schedule::ExecutorKind};
+use bevy_ecs::{
+    component::Mutable,
+    prelude::*,
+    query::{QueryData, QueryItem},
+    schedule::ExecutorKind,
+};
 use parking_lot::{Mutex, RwLock};
 use simdnbt::owned::{NbtCompound, NbtTag};
 use uuid::Uuid;
 
 use crate::{
     InConfigState, LocalPlayerBundle, connection::RawConnection, disconnect::DisconnectEvent,
-    local_player::InstanceHolder, packet::game::SendGamePacketEvent, player::GameProfileComponent,
+    local_player::WorldHolder, packet::game::SendGamePacketEvent, player::GameProfileComponent,
 };
 
 /// A way to simulate a client in a server, used for some internal tests.
@@ -48,8 +58,9 @@ pub struct Simulation {
 }
 
 impl Simulation {
-    pub fn new(initial_connection_protocol: ConnectionProtocol) -> Self {
+    pub fn new(conn_protocol: ConnectionProtocol) -> Self {
         let mut app = create_simulation_app();
+
         let mut entity = app.world_mut().spawn_empty();
         let (player, rt) =
             create_local_player_bundle(entity.id(), ConnectionProtocol::Configuration);
@@ -62,17 +73,14 @@ impl Simulation {
         // start in the config state
         app.world_mut().entity_mut(entity).insert((
             InConfigState,
-            GameProfileComponent(GameProfile::new(
-                Uuid::from_u128(1234),
-                "azalea".to_string(),
-            )),
+            GameProfileComponent(GameProfile::new(Uuid::from_u128(1234), "azalea".to_owned())),
         ));
         tick_app(&mut app);
 
         let mut simulation = Self { app, entity, rt };
 
         #[allow(clippy::single_match)]
-        match initial_connection_protocol {
+        match conn_protocol {
             ConnectionProtocol::Configuration => {}
             ConnectionProtocol::Game => {
                 simulation.receive_packet(ClientboundRegistryData {
@@ -91,7 +99,7 @@ impl Simulation {
                 simulation.receive_packet(ClientboundFinishConfiguration);
                 simulation.tick();
             }
-            _ => unimplemented!("unsupported ConnectionProtocol {initial_connection_protocol:?}"),
+            _ => unimplemented!("unsupported ConnectionProtocol {conn_protocol:?}"),
         }
 
         simulation
@@ -133,6 +141,18 @@ impl Simulation {
     pub fn with_component<T: Component>(&self, f: impl FnOnce(&T)) {
         f(self.app.world().entity(self.entity).get::<T>().unwrap());
     }
+    pub fn query_self<D: QueryData, R>(&mut self, f: impl FnOnce(QueryItem<D>) -> R) -> R {
+        let ecs = self.app.world_mut();
+        let mut qs = ecs.query::<D>();
+        let res = qs.get_mut(ecs, self.entity).unwrap_or_else(|_| {
+            panic!(
+                "Our client is missing a required component {:?}",
+                any::type_name::<D>()
+            )
+        });
+        f(res)
+    }
+
     pub fn with_component_mut<T: Component<Mutability = Mutable>>(
         &mut self,
         f: impl FnOnce(&mut T),
@@ -155,15 +175,15 @@ impl Simulation {
     }
 
     pub fn chunk(&self, chunk_pos: ChunkPos) -> Option<Arc<RwLock<Chunk>>> {
-        self.component::<InstanceHolder>()
-            .instance
+        self.component::<WorldHolder>()
+            .shared
             .read()
             .chunks
             .get(&chunk_pos)
     }
     pub fn get_block_state(&self, pos: BlockPos) -> Option<BlockState> {
-        self.component::<InstanceHolder>()
-            .instance
+        self.component::<WorldHolder>()
+            .shared
             .read()
             .get_block_state(pos)
     }
@@ -267,12 +287,12 @@ fn create_local_player_bundle(
 
     let raw_connection = RawConnection::new_networkless(connection_protocol);
 
-    let instance = Instance::default();
-    let instance_holder = InstanceHolder::new(entity, Arc::new(RwLock::new(instance)));
+    let world = World::default();
+    let world_holder = WorldHolder::new(entity, Arc::new(RwLock::new(world)));
 
     let local_player_bundle = LocalPlayerBundle {
         raw_connection,
-        instance_holder,
+        world_holder,
         metadata: PlayerMetadataBundle::default(),
     };
 
@@ -282,10 +302,13 @@ fn create_local_player_bundle(
 fn create_simulation_app() -> App {
     let mut app = App::new();
 
+    let mut plugins = bevy_app::PluginGroup::build(crate::DefaultPlugins);
     #[cfg(feature = "log")]
-    app.add_plugins(
-        bevy_app::PluginGroup::build(crate::DefaultPlugins).disable::<bevy_log::LogPlugin>(),
-    );
+    {
+        plugins = plugins.disable::<bevy_log::LogPlugin>();
+    }
+
+    app.add_plugins(plugins);
 
     app.edit_schedule(bevy_app::Main, |schedule| {
         // makes test results more reproducible
@@ -301,13 +324,13 @@ fn tick_app(app: &mut App) {
 
 pub fn default_login_packet() -> ClientboundLogin {
     make_basic_login_packet(
-        DimensionType::new_raw(0), // overworld
+        DimensionKind::new_raw(0), // overworld
         Identifier::new("minecraft:overworld"),
     )
 }
 
 pub fn make_basic_login_packet(
-    dimension_type: DimensionType,
+    dimension_type: DimensionKind,
     dimension: Identifier,
 ) -> ClientboundLogin {
     ClientboundLogin {
@@ -337,7 +360,7 @@ pub fn make_basic_login_packet(
 }
 
 pub fn make_basic_respawn_packet(
-    dimension_type: DimensionType,
+    dimension_type: DimensionKind,
     dimension: Identifier,
 ) -> ClientboundRespawn {
     ClientboundRespawn {
@@ -366,6 +389,7 @@ pub fn make_basic_empty_chunk(
     for _ in 0..section_count {
         sections.push(Section {
             block_count: 0,
+            fluid_count: 0,
             states: PalettedContainer::<BlockState>::new(),
             biomes: PalettedContainer::<Biome>::new(),
         });

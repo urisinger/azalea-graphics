@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
 use azalea_block::{
     BlockState,
@@ -11,11 +11,12 @@ use azalea_core::{
     math::{self, EPSILON, lerp},
     position::{BlockPos, Vec3},
 };
+use azalea_registry::{builtin::BlockKind, tags};
 use azalea_world::ChunkStorage;
 
 use crate::collision::{BlockWithShape, EMPTY_SHAPE, VoxelShape};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ClipContext {
     pub from: Vec3,
     pub to: Vec3,
@@ -26,20 +27,18 @@ pub struct ClipContext {
 impl ClipContext {
     /// Get the shape of given block, using the type of shape set in
     /// [`Self::block_shape_type`].
-    pub fn block_shape(&self, block_state: BlockState) -> &VoxelShape {
+    pub fn block_shape(&self, block_state: BlockState, pos: BlockPos) -> Cow<'static, VoxelShape> {
         // minecraft passes in the world and blockpos to this function but it's not
         // actually necessary. it is for fluid_shape though
         match self.block_shape_type {
-            BlockShapeType::Collider => block_state.collision_shape(),
-            BlockShapeType::Outline => block_state.outline_shape(),
-            BlockShapeType::Visual => block_state.collision_shape(),
+            BlockShapeType::Collider => block_state.collision_shape(pos),
+            BlockShapeType::Outline => block_state.outline_shape(pos),
+            BlockShapeType::Visual => block_state.collision_shape(pos),
             BlockShapeType::FallDamageResetting => {
-                if azalea_registry::tags::blocks::FALL_DAMAGE_RESETTING
-                    .contains(&azalea_registry::Block::from(block_state))
-                {
-                    block_state.collision_shape()
+                if tags::blocks::FALL_DAMAGE_RESETTING.contains(&BlockKind::from(block_state)) {
+                    block_state.collision_shape(pos)
                 } else {
-                    &EMPTY_SHAPE
+                    Cow::Borrowed(&EMPTY_SHAPE)
                 }
             }
         }
@@ -59,7 +58,7 @@ impl ClipContext {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum BlockShapeType {
     /// The shape that's used for collision.
     Collider,
@@ -72,7 +71,7 @@ pub enum BlockShapeType {
     Visual,
     FallDamageResetting,
 }
-#[derive(Debug, Copy, Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum FluidPickType {
     None,
     SourceOnly,
@@ -99,12 +98,12 @@ pub fn clip(chunk_storage: &ChunkStorage, context: ClipContext) -> BlockHitResul
             let block_state = chunk_storage.get_block_state(block_pos).unwrap_or_default();
             let fluid_state = FluidState::from(block_state);
 
-            let block_shape = ctx.block_shape(block_state);
+            let block_shape = ctx.block_shape(block_state, block_pos);
             let interaction_clip = clip_with_interaction_override(
                 ctx.from,
                 ctx.to,
                 block_pos,
-                block_shape,
+                &block_shape,
                 block_state,
             );
             let fluid_shape = ctx.fluid_shape(fluid_state, chunk_storage, block_pos);
@@ -127,11 +126,7 @@ pub fn clip(chunk_storage: &ChunkStorage, context: ClipContext) -> BlockHitResul
         },
         |context| {
             let vec = context.from - context.to;
-            BlockHitResult::miss(
-                context.to,
-                Direction::nearest(vec),
-                BlockPos::from(context.to),
-            )
+            BlockHitResult::miss(context.to, Direction::nearest(vec))
         },
     )
 }

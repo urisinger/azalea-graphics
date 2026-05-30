@@ -8,11 +8,11 @@ use std::{
     io::{self, Cursor, Write},
 };
 
-use azalea_buf::{AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
+use azalea_buf::{AzBufVar, BufReadError};
 pub use container::*;
 
 /// A representation of the different types of chunk palettes Minecraft uses.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Palette<S: PalletedContainerKind> {
     /// ID of the corresponding entry in its global palette
     SingleValue(S),
@@ -24,6 +24,7 @@ pub enum Palette<S: PalletedContainerKind> {
 }
 
 impl<S: PalletedContainerKind> Palette<S> {
+    #[inline]
     pub fn value_for(&self, id: usize) -> S {
         match self {
             Palette::SingleValue(v) => *v,
@@ -34,8 +35,8 @@ impl<S: PalletedContainerKind> Palette<S> {
     }
 }
 
-impl<S: PalletedContainerKind> AzaleaWrite for Palette<S> {
-    fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
+impl<S: PalletedContainerKind> Palette<S> {
+    pub fn write(&self, buf: &mut impl Write) -> io::Result<()> {
         match self {
             Palette::SingleValue(value) => {
                 (*value).into().azalea_write_var(buf)?;
@@ -106,7 +107,7 @@ impl<S: PalletedContainerKind> From<&Palette<S>> for PaletteKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PaletteKind {
     SingleValue,
     Linear,

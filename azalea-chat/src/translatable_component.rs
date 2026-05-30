@@ -9,7 +9,7 @@ use simdnbt::{
 
 use crate::{FormattedText, base_component::BaseComponent, text_component::TextComponent};
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(untagged)]
 pub enum PrimitiveOrComponent {
     Boolean(bool),
@@ -106,7 +106,6 @@ impl TranslatableComponent {
         });
         // decode the % things
 
-        let mut i = 0;
         let mut matched = 0;
 
         // every time we get a char we add it to built_text, and we push it to
@@ -114,62 +113,59 @@ impl TranslatableComponent {
         let mut built_text = String::new();
         let mut components = Vec::new();
 
-        while i < template.chars().count() {
-            if template.chars().nth(i).unwrap() == '%' {
-                let Some(char_after) = template.chars().nth(i + 1) else {
-                    built_text.push('%');
-                    break;
-                };
-                i += 1;
-                match char_after {
-                    '%' => {
-                        built_text.push('%');
-                    }
-                    's' => {
-                        let arg_component = self
-                            .args
-                            .get(matched)
-                            .cloned()
-                            .unwrap_or_else(|| PrimitiveOrComponent::String("".to_string()));
-
-                        components.push(TextComponent::new(built_text.clone()));
-                        built_text.clear();
-                        components.push(TextComponent::from(arg_component));
-                        matched += 1;
-                    }
-                    _ => {
-                        // check if the char is a number
-                        if let Some(d) = char_after.to_digit(10) {
-                            // make sure the next two chars are $s
-                            if let Some('$') = template.chars().nth(i + 1) {
-                                if let Some('s') = template.chars().nth(i + 2) {
-                                    i += 2;
-                                    built_text.push_str(
-                                        &self
-                                            .args
-                                            .get((d - 1) as usize)
-                                            .unwrap_or(&PrimitiveOrComponent::String(
-                                                "".to_string(),
-                                            ))
-                                            .to_string(),
-                                    );
-                                } else {
-                                    return Err(fmt::Error);
-                                }
-                            } else {
-                                return Err(fmt::Error);
-                            }
-                        } else {
-                            i -= 1;
-                            built_text.push('%');
-                        }
-                    }
-                }
-            } else {
-                built_text.push(template.chars().nth(i).unwrap());
+        let mut chars = template.chars();
+        while let Some(char) = chars.next() {
+            if char != '%' {
+                built_text.push(char);
+                continue;
             }
 
-            i += 1;
+            let mut chars_preview = chars.clone();
+            let Some(char_after) = chars_preview.next() else {
+                built_text.push('%');
+                break;
+            };
+            match char_after {
+                '%' => {
+                    chars.next();
+
+                    built_text.push('%');
+                }
+                's' => {
+                    chars.next();
+
+                    let arg_component = self
+                        .args
+                        .get(matched)
+                        .cloned()
+                        .unwrap_or_else(|| PrimitiveOrComponent::String("".to_owned()));
+
+                    components.push(TextComponent::new(built_text.clone()));
+                    built_text.clear();
+                    components.push(TextComponent::from(arg_component));
+                    matched += 1;
+                }
+                '0'..='9' if let Some(d) = char_after.to_digit(10) => {
+                    chars.next();
+                    // make sure the next two chars are $s
+                    let Some('$') = chars.next() else {
+                        return Err(fmt::Error);
+                    };
+                    let Some('s') = chars.next() else {
+                        return Err(fmt::Error);
+                    };
+                    built_text.push_str(
+                        &self
+                            .args
+                            .get((d - 1) as usize)
+                            .unwrap_or(&PrimitiveOrComponent::String("".to_owned()))
+                            .to_string(),
+                    );
+                }
+                _ => {
+                    built_text.push('%');
+                }
+            }
         }
 
         if components.is_empty() {
@@ -183,7 +179,7 @@ impl TranslatableComponent {
                 siblings: components.into_iter().map(FormattedText::Text).collect(),
                 style: Default::default(),
             },
-            text: "".to_string(),
+            text: "".to_owned(),
         })
     }
 }
@@ -238,7 +234,12 @@ impl From<PrimitiveOrComponent> for TextComponent {
 }
 impl From<&str> for TranslatableComponent {
     fn from(s: &str) -> Self {
-        TranslatableComponent::new(s.to_string(), vec![])
+        TranslatableComponent::new(s.to_owned(), vec![])
+    }
+}
+impl From<TranslatableComponent> for FormattedText {
+    fn from(c: TranslatableComponent) -> Self {
+        FormattedText::Translatable(c)
     }
 }
 
@@ -248,88 +249,88 @@ mod tests {
 
     #[test]
     fn test_none() {
-        let c = TranslatableComponent::new("translation.test.none".to_string(), vec![]);
-        assert_eq!(c.read().unwrap().to_string(), "Hello, world!".to_string());
+        let c = TranslatableComponent::new("translation.test.none".to_owned(), vec![]);
+        assert_eq!(c.read().unwrap().to_string(), "Hello, world!".to_owned());
     }
     #[test]
     fn test_complex() {
         let c = TranslatableComponent::new(
-            "translation.test.complex".to_string(),
+            "translation.test.complex".to_owned(),
             vec![
-                PrimitiveOrComponent::String("a".to_string()),
-                PrimitiveOrComponent::String("b".to_string()),
-                PrimitiveOrComponent::String("c".to_string()),
-                PrimitiveOrComponent::String("d".to_string()),
+                PrimitiveOrComponent::String("a".to_owned()),
+                PrimitiveOrComponent::String("b".to_owned()),
+                PrimitiveOrComponent::String("c".to_owned()),
+                PrimitiveOrComponent::String("d".to_owned()),
             ],
         );
         // so true mojang
         assert_eq!(
             c.read().unwrap().to_string(),
-            "Prefix, ab again b and a lastly c and also a again!".to_string()
+            "Prefix, ab again b and a lastly c and also a again!".to_owned()
         );
     }
     #[test]
     fn test_escape() {
         let c = TranslatableComponent::new(
-            "translation.test.escape".to_string(),
+            "translation.test.escape".to_owned(),
             vec![
-                PrimitiveOrComponent::String("a".to_string()),
-                PrimitiveOrComponent::String("b".to_string()),
-                PrimitiveOrComponent::String("c".to_string()),
-                PrimitiveOrComponent::String("d".to_string()),
+                PrimitiveOrComponent::String("a".to_owned()),
+                PrimitiveOrComponent::String("b".to_owned()),
+                PrimitiveOrComponent::String("c".to_owned()),
+                PrimitiveOrComponent::String("d".to_owned()),
             ],
         );
-        assert_eq!(c.read().unwrap().to_string(), "%s %a %%s %%b".to_string());
+        assert_eq!(c.read().unwrap().to_string(), "%s %a %%s %%b".to_owned());
     }
     #[test]
     fn test_invalid() {
         let c = TranslatableComponent::new(
-            "translation.test.invalid".to_string(),
+            "translation.test.invalid".to_owned(),
             vec![
-                PrimitiveOrComponent::String("a".to_string()),
-                PrimitiveOrComponent::String("b".to_string()),
-                PrimitiveOrComponent::String("c".to_string()),
-                PrimitiveOrComponent::String("d".to_string()),
+                PrimitiveOrComponent::String("a".to_owned()),
+                PrimitiveOrComponent::String("b".to_owned()),
+                PrimitiveOrComponent::String("c".to_owned()),
+                PrimitiveOrComponent::String("d".to_owned()),
             ],
         );
-        assert_eq!(c.read().unwrap().to_string(), "hi %".to_string());
+        assert_eq!(c.read().unwrap().to_string(), "hi %".to_owned());
     }
     #[test]
     fn test_invalid2() {
         let c = TranslatableComponent::new(
-            "translation.test.invalid2".to_string(),
+            "translation.test.invalid2".to_owned(),
             vec![
-                PrimitiveOrComponent::String("a".to_string()),
-                PrimitiveOrComponent::String("b".to_string()),
-                PrimitiveOrComponent::String("c".to_string()),
-                PrimitiveOrComponent::String("d".to_string()),
+                PrimitiveOrComponent::String("a".to_owned()),
+                PrimitiveOrComponent::String("b".to_owned()),
+                PrimitiveOrComponent::String("c".to_owned()),
+                PrimitiveOrComponent::String("d".to_owned()),
             ],
         );
-        assert_eq!(c.read().unwrap().to_string(), "hi %  s".to_string());
+        assert_eq!(c.read().unwrap().to_string(), "hi %  s".to_owned());
     }
 
     #[test]
     fn test_undefined() {
         let c = TranslatableComponent::new(
-            "translation.test.undefined".to_string(),
-            vec![PrimitiveOrComponent::String("a".to_string())],
+            "translation.test.undefined".to_owned(),
+            vec![PrimitiveOrComponent::String("a".to_owned())],
         );
         assert_eq!(
             c.read().unwrap().to_string(),
-            "translation.test.undefined".to_string()
+            "translation.test.undefined".to_owned()
         );
     }
 
     #[test]
     fn test_undefined_with_fallback() {
         let c = TranslatableComponent::with_fallback(
-            "translation.test.undefined".to_string(),
-            Some("translation fallback: %s".to_string()),
-            vec![PrimitiveOrComponent::String("a".to_string())],
+            "translation.test.undefined".to_owned(),
+            Some("translation fallback: %s".to_owned()),
+            vec![PrimitiveOrComponent::String("a".to_owned())],
         );
         assert_eq!(
             c.read().unwrap().to_string(),
-            "translation fallback: a".to_string()
+            "translation fallback: a".to_owned()
         );
     }
 }

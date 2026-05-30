@@ -43,7 +43,7 @@ impl ArgumentType for Double {
     fn examples(&self) -> Vec<String> {
         vec!["0", "1.2", ".5", "-1", "-.5", "-1234.56"]
             .into_iter()
-            .map(|s| s.to_string())
+            .map(|s| s.to_owned())
             .collect()
     }
 }
@@ -51,7 +51,7 @@ impl ArgumentType for Double {
 pub fn double() -> impl ArgumentType {
     Double::default()
 }
-pub fn get_double<S>(context: &CommandContext<S>, name: &str) -> Option<f64> {
+pub fn get_double<S, R>(context: &CommandContext<S, R>, name: &str) -> Option<f64> {
     context
         .argument(name)
         .unwrap()

@@ -15,20 +15,20 @@ use crate::{
 };
 
 /// A built `CommandContextBuilder`.
-pub struct CommandContext<S> {
+pub struct CommandContext<S, R = i32> {
     pub source: Arc<S>,
     pub(super) input: String,
     pub(super) arguments: HashMap<String, ParsedArgument>,
-    pub(super) command: Command<S>,
-    pub(super) root_node: Arc<RwLock<CommandNode<S>>>,
-    pub(super) nodes: Vec<ParsedCommandNode<S>>,
+    pub(super) command: Command<S, R>,
+    pub(super) root_node: Arc<RwLock<CommandNode<S, R>>>,
+    pub(super) nodes: Vec<ParsedCommandNode<S, R>>,
     pub(super) range: StringRange,
-    pub(super) child: Option<Rc<CommandContext<S>>>,
-    pub(super) modifier: Option<Arc<RedirectModifier<S>>>,
+    pub(super) child: Option<Rc<CommandContext<S, R>>>,
+    pub(super) modifier: Option<Arc<RedirectModifier<S, R>>>,
     pub(super) forks: bool,
 }
 
-impl<S> Clone for CommandContext<S> {
+impl<S, R> Clone for CommandContext<S, R> {
     fn clone(&self) -> Self {
         Self {
             source: self.source.clone(),
@@ -45,7 +45,7 @@ impl<S> Clone for CommandContext<S> {
     }
 }
 
-impl<S> Debug for CommandContext<S> {
+impl<S, R> Debug for CommandContext<S, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CommandContext")
             // .field("source", &self.source)
@@ -62,7 +62,7 @@ impl<S> Debug for CommandContext<S> {
     }
 }
 
-impl<S> CommandContext<S> {
+impl<S, R> CommandContext<S, R> {
     pub fn copy_for(&self, source: Arc<S>) -> Self {
         if Arc::ptr_eq(&source, &self.source) {
             // fast path
@@ -83,11 +83,11 @@ impl<S> CommandContext<S> {
         }
     }
 
-    pub fn child(&self) -> Option<&CommandContext<S>> {
+    pub fn child(&self) -> Option<&CommandContext<S, R>> {
         self.child.as_ref().map(|c| c.as_ref())
     }
 
-    pub fn last_child(&self) -> &CommandContext<S> {
+    pub fn last_child(&self) -> &CommandContext<S, R> {
         let mut result = self;
         while let Some(child) = result.child() {
             result = child;
@@ -95,7 +95,7 @@ impl<S> CommandContext<S> {
         result
     }
 
-    pub fn command(&self) -> &Command<S> {
+    pub fn command(&self) -> &Command<S, R> {
         &self.command
     }
 
@@ -104,7 +104,7 @@ impl<S> CommandContext<S> {
         argument.map(|a| a.result.as_ref())
     }
 
-    pub fn redirect_modifier(&self) -> Option<&RedirectModifier<S>> {
+    pub fn redirect_modifier(&self) -> Option<&RedirectModifier<S, R>> {
         self.modifier.as_ref().map(|m| m.as_ref())
     }
 
@@ -116,11 +116,11 @@ impl<S> CommandContext<S> {
         &self.input
     }
 
-    pub fn root_node(&self) -> &Arc<RwLock<CommandNode<S>>> {
+    pub fn root_node(&self) -> &Arc<RwLock<CommandNode<S, R>>> {
         &self.root_node
     }
 
-    pub fn nodes(&self) -> &[ParsedCommandNode<S>] {
+    pub fn nodes(&self) -> &[ParsedCommandNode<S, R>] {
         &self.nodes
     }
 

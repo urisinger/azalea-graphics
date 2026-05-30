@@ -1,10 +1,10 @@
 use azalea_buf::AzBuf;
 use azalea_chat::FormattedText;
 use azalea_protocol_macros::ClientboundGamePacket;
-use azalea_world::MinecraftEntityId;
+use azalea_core::entity_id::MinecraftEntityId;
 
 /// Used to send a respawn screen.
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundPlayerCombatKill {
     #[var]
     pub player_id: MinecraftEntityId,

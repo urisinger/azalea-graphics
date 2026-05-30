@@ -1,16 +1,17 @@
 use std::io::{self, Cursor};
 
-use azalea_buf::{AzBuf, AzaleaRead, AzaleaWrite};
+use azalea_buf::AzBuf;
 use azalea_core::bitset::FixedBitSet;
-use bevy_ecs::component::Component;
+use azalea_entity::HumanoidArm;
 
-/// A component that contains some of the "settings" for this client that are
-/// sent to the server, such as render distance.
+/// Some of the "settings" for this client that are sent to the server,
+/// including render distance.
 ///
-/// This is only present on local players.
-#[derive(Clone, Debug, AzBuf, PartialEq, Eq, Component)]
+/// This should only be present on local players.
+#[cfg_attr(feature = "bevy_ecs", derive(bevy_ecs::component::Component))]
+#[derive(AzBuf, Clone, Debug, Eq, PartialEq)]
 pub struct ClientInformation {
-    /// The locale of the client.
+    /// The locale of the client, formatted like "en_us".
     pub language: String,
     /// The view distance of the client in chunks, same as the render distance
     /// in-game.
@@ -35,7 +36,7 @@ pub struct ClientInformation {
 impl Default for ClientInformation {
     fn default() -> Self {
         Self {
-            language: "en_us".to_string(),
+            language: "en_us".to_owned(),
             view_distance: 8,
             chat_visibility: ChatVisibility::default(),
             chat_colors: true,
@@ -48,7 +49,7 @@ impl Default for ClientInformation {
     }
 }
 
-#[derive(AzBuf, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(AzBuf, Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ChatVisibility {
     /// All chat messages should be sent to the client.
     #[default]
@@ -60,14 +61,7 @@ pub enum ChatVisibility {
     Hidden = 2,
 }
 
-#[derive(AzBuf, Clone, Copy, Debug, PartialEq, Eq, Default)]
-pub enum HumanoidArm {
-    Left = 0,
-    #[default]
-    Right = 1,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ModelCustomization {
     pub cape: bool,
     pub jacket: bool,
@@ -78,7 +72,7 @@ pub struct ModelCustomization {
     pub hat: bool,
 }
 
-#[derive(AzBuf, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(AzBuf, Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ParticleStatus {
     #[default]
     All,
@@ -100,7 +94,7 @@ impl Default for ModelCustomization {
     }
 }
 
-impl AzaleaRead for ModelCustomization {
+impl AzBuf for ModelCustomization {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, azalea_buf::BufReadError> {
         let set = FixedBitSet::<7>::azalea_read(buf)?;
         Ok(Self {
@@ -113,9 +107,6 @@ impl AzaleaRead for ModelCustomization {
             hat: set.index(6),
         })
     }
-}
-
-impl AzaleaWrite for ModelCustomization {
     fn azalea_write(&self, buf: &mut impl io::Write) -> io::Result<()> {
         let mut set = FixedBitSet::<7>::new();
         if self.cape {
@@ -147,7 +138,7 @@ impl AzaleaWrite for ModelCustomization {
 mod tests {
     use std::io::Cursor;
 
-    use azalea_buf::{AzaleaRead, AzaleaWrite};
+    use azalea_buf::AzBuf;
 
     use super::*;
 
@@ -164,7 +155,7 @@ mod tests {
         }
 
         let data = ClientInformation {
-            language: "en_gb".to_string(),
+            language: "en_gb".to_owned(),
             view_distance: 24,
             chat_visibility: ChatVisibility::Hidden,
             chat_colors: false,

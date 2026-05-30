@@ -5,14 +5,15 @@ use azalea_block::{
     properties::WaterLevel,
 };
 use azalea_core::{
-    identifier::Identifier,
+    entity_id::MinecraftEntityId,
     position::{BlockPos, ChunkPos, Vec3},
     registry_holder::RegistryHolder,
     tick::GameTick,
 };
 use azalea_entity::{EntityBundle, EntityPlugin, HasClientLoaded, LocalEntity, Physics, Position};
 use azalea_physics::PhysicsPlugin;
-use azalea_world::{Chunk, Instance, InstanceContainer, MinecraftEntityId, PartialInstance};
+use azalea_registry::builtin::{BlockKind, EntityKind};
+use azalea_world::{Chunk, PartialWorld, World, WorldName, Worlds};
 use bevy_app::App;
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -21,26 +22,24 @@ use uuid::Uuid;
 fn make_test_app() -> App {
     let mut app = App::new();
     app.add_plugins((PhysicsPlugin, EntityPlugin))
-        .init_resource::<InstanceContainer>();
+        .init_resource::<Worlds>();
     app
 }
 
-pub fn insert_overworld(app: &mut App) -> Arc<RwLock<Instance>> {
-    app.world_mut()
-        .resource_mut::<InstanceContainer>()
-        .get_or_insert(
-            Identifier::new("minecraft:overworld"),
-            384,
-            -64,
-            &RegistryHolder::default(),
-        )
+pub fn insert_overworld(app: &mut App) -> Arc<RwLock<World>> {
+    app.world_mut().resource_mut::<Worlds>().get_or_insert(
+        WorldName::new("minecraft:overworld"),
+        384,
+        -64,
+        &RegistryHolder::default(),
+    )
 }
 
 #[test]
 fn test_gravity() {
     let mut app = make_test_app();
     let world_lock = insert_overworld(&mut app);
-    let mut partial_world = PartialInstance::default();
+    let mut partial_world = PartialWorld::default();
     // the entity has to be in a loaded chunk for physics to work
     partial_world.chunks.set(
         &ChunkPos { x: 0, z: 0 },
@@ -58,8 +57,8 @@ fn test_gravity() {
                     y: 70.,
                     z: 0.,
                 },
-                azalea_registry::EntityKind::Zombie,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Zombie,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -97,7 +96,7 @@ fn test_gravity() {
 fn test_collision() {
     let mut app = make_test_app();
     let world_lock = insert_overworld(&mut app);
-    let mut partial_world = PartialInstance::default();
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: 0, z: 0 },
@@ -114,8 +113,8 @@ fn test_collision() {
                     y: 70.,
                     z: 0.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -124,12 +123,12 @@ fn test_collision() {
         .id();
     let block_state = partial_world.chunks.set_block_state(
         BlockPos { x: 0, y: 69, z: 0 },
-        azalea_registry::Block::Stone.into(),
+        BlockKind::Stone.into(),
         &world_lock.write().chunks,
     );
     assert!(
         block_state.is_some(),
-        "Block state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
+        "BlockKind state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
     );
     app.update();
     app.world_mut().run_schedule(GameTick);
@@ -154,7 +153,7 @@ fn test_collision() {
 fn test_slab_collision() {
     let mut app = make_test_app();
     let world_lock = insert_overworld(&mut app);
-    let mut partial_world = PartialInstance::default();
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: 0, z: 0 },
@@ -171,8 +170,8 @@ fn test_slab_collision() {
                     y: 71.,
                     z: 0.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -182,7 +181,7 @@ fn test_slab_collision() {
     let block_state = partial_world.chunks.set_block_state(
         BlockPos { x: 0, y: 69, z: 0 },
         azalea_block::blocks::StoneSlab {
-            kind: azalea_block::properties::Type::Bottom,
+            kind: azalea_block::properties::SlabKind::Bottom,
             waterlogged: false,
         }
         .into(),
@@ -190,7 +189,7 @@ fn test_slab_collision() {
     );
     assert!(
         block_state.is_some(),
-        "Block state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
+        "BlockKind state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
     );
     // do a few steps so we fall on the slab
     for _ in 0..20 {
@@ -205,7 +204,7 @@ fn test_slab_collision() {
 fn test_top_slab_collision() {
     let mut app = make_test_app();
     let world_lock = insert_overworld(&mut app);
-    let mut partial_world = PartialInstance::default();
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: 0, z: 0 },
@@ -222,8 +221,8 @@ fn test_top_slab_collision() {
                     y: 71.,
                     z: 0.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -233,14 +232,14 @@ fn test_top_slab_collision() {
     let block_state = world_lock.write().chunks.set_block_state(
         BlockPos { x: 0, y: 69, z: 0 },
         azalea_block::blocks::StoneSlab {
-            kind: azalea_block::properties::Type::Top,
+            kind: azalea_block::properties::SlabKind::Top,
             waterlogged: false,
         }
         .into(),
     );
     assert!(
         block_state.is_some(),
-        "Block state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
+        "BlockKind state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
     );
     // do a few steps so we fall on the slab
     for _ in 0..20 {
@@ -254,16 +253,13 @@ fn test_top_slab_collision() {
 #[test]
 fn test_weird_wall_collision() {
     let mut app = make_test_app();
-    let world_lock = app
-        .world_mut()
-        .resource_mut::<InstanceContainer>()
-        .get_or_insert(
-            Identifier::new("minecraft:overworld"),
-            384,
-            -64,
-            &RegistryHolder::default(),
-        );
-    let mut partial_world = PartialInstance::default();
+    let world_lock = app.world_mut().resource_mut::<Worlds>().get_or_insert(
+        WorldName::new("minecraft:overworld"),
+        384,
+        -64,
+        &RegistryHolder::default(),
+    );
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: 0, z: 0 },
@@ -280,8 +276,8 @@ fn test_weird_wall_collision() {
                     y: 73.,
                     z: 0.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -302,7 +298,7 @@ fn test_weird_wall_collision() {
     );
     assert!(
         block_state.is_some(),
-        "Block state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
+        "BlockKind state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
     );
     // do a few steps so we fall on the wall
     for _ in 0..20 {
@@ -317,16 +313,13 @@ fn test_weird_wall_collision() {
 #[test]
 fn test_negative_coordinates_weird_wall_collision() {
     let mut app = make_test_app();
-    let world_lock = app
-        .world_mut()
-        .resource_mut::<InstanceContainer>()
-        .get_or_insert(
-            Identifier::new("minecraft:overworld"),
-            384,
-            -64,
-            &RegistryHolder::default(),
-        );
-    let mut partial_world = PartialInstance::default();
+    let world_lock = app.world_mut().resource_mut::<Worlds>().get_or_insert(
+        WorldName::new("minecraft:overworld"),
+        384,
+        -64,
+        &RegistryHolder::default(),
+    );
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: -1, z: -1 },
@@ -343,8 +336,8 @@ fn test_negative_coordinates_weird_wall_collision() {
                     y: 73.,
                     z: -7.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -369,7 +362,7 @@ fn test_negative_coordinates_weird_wall_collision() {
     );
     assert!(
         block_state.is_some(),
-        "Block state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
+        "BlockKind state should exist, if this fails that means the chunk wasn't loaded and the block didn't get placed"
     );
     // do a few steps so we fall on the wall
     for _ in 0..20 {
@@ -384,16 +377,13 @@ fn test_negative_coordinates_weird_wall_collision() {
 #[test]
 fn spawn_and_unload_world() {
     let mut app = make_test_app();
-    let world_lock = app
-        .world_mut()
-        .resource_mut::<InstanceContainer>()
-        .get_or_insert(
-            Identifier::new("minecraft:overworld"),
-            384,
-            -64,
-            &RegistryHolder::default(),
-        );
-    let mut partial_world = PartialInstance::default();
+    let world_lock = app.world_mut().resource_mut::<Worlds>().get_or_insert(
+        WorldName::new("minecraft:overworld"),
+        384,
+        -64,
+        &RegistryHolder::default(),
+    );
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: -1, z: -1 },
@@ -410,8 +400,8 @@ fn spawn_and_unload_world() {
                     y: 73.,
                     z: -7.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,
@@ -436,7 +426,7 @@ fn spawn_and_unload_world() {
 fn test_afk_pool() {
     let mut app = make_test_app();
     let world_lock = insert_overworld(&mut app);
-    let mut partial_world = PartialInstance::default();
+    let mut partial_world = PartialWorld::default();
 
     partial_world.chunks.set(
         &ChunkPos { x: 0, z: 0 },
@@ -450,9 +440,9 @@ fn test_afk_pool() {
             .set_block_state(BlockPos { x, y, z }, b);
     };
 
-    let stone = azalea_block::blocks::Stone {}.into();
+    let stone = azalea_block::blocks::Stone.into();
     let sign = azalea_block::blocks::OakSign {
-        rotation: azalea_block::properties::OakSignRotation::_0,
+        rotation: azalea_block::properties::Rotation::_0,
         waterlogged: false,
     }
     .into();
@@ -526,8 +516,8 @@ fn test_afk_pool() {
                     y: 70.,
                     z: 1.5,
                 },
-                azalea_registry::EntityKind::Player,
-                Identifier::new("minecraft:overworld"),
+                EntityKind::Player,
+                WorldName::new("minecraft:overworld"),
             ),
             MinecraftEntityId(0),
             LocalEntity,

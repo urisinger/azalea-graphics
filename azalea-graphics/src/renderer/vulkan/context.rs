@@ -363,13 +363,13 @@ impl VkContext {
             && queue_supports_timestamps;
 
         if fill_mode_non_solid {
-            log::info!("fillModeNonSolid supported, wireframe mode available");
+            tracing::info!("fillModeNonSolid supported, wireframe mode available");
         } else {
-            log::warn!("fillModeNonSolid not supported, wireframe mode disabled");
+            tracing::warn!("fillModeNonSolid not supported, wireframe mode disabled");
         }
 
         if timestamp_queries {
-            log::info!(
+            tracing::info!(
                 "Timestamp queries supported (period: {} ns, queue timestampValidBits: {})",
                 properties.limits.timestamp_period,
                 graphics_family_props.timestamp_valid_bits
@@ -382,7 +382,7 @@ impl VkContext {
                     properties.limits.timestamp_period, graphics_family_props.timestamp_valid_bits
                 );
             } else {
-                log::warn!(
+                tracing::warn!(
                     "Timestamp queries not supported (period: {} ns, queue timestampValidBits: {})",
                     properties.limits.timestamp_period,
                     graphics_family_props.timestamp_valid_bits
@@ -463,10 +463,10 @@ unsafe extern "system" fn vulkan_debug_callback(
 
     let message = unsafe { CStr::from_ptr((*p_callback_data).p_message) };
     match flag {
-        Flag::VERBOSE => log::debug!("{:?} - {:?}", typ, message),
-        Flag::INFO => log::info!("{:?} - {:?}", typ, message),
-        Flag::WARNING => log::warn!("{:?} - {:?}", typ, message),
-        _ => log::error!("{:?} - {:?}", typ, message),
+        Flag::VERBOSE => tracing::debug!("{:?} - {:?}", typ, message),
+        Flag::INFO => tracing::info!("{:?} - {:?}", typ, message),
+        Flag::WARNING => tracing::warn!("{:?} - {:?}", typ, message),
+        _ => tracing::error!("{:?} - {:?}", typ, message),
     }
     vk::FALSE
 }

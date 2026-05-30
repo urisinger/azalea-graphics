@@ -10,21 +10,101 @@ is breaking anyways, semantic versioning is not followed.
 
 ### Added
 
-- Add `Client::query_entity` and `try_query_entity` to complement `query_self`.
-- Add `Client::entity_interact` and `EntityInteractEvent` to interact with entities without checking that they're in the crosshair.
-- Implement initial support for mob effects, including jump boost, haste, conduit power, and mining fatigue. (@ShayBox)
-- Allow disabling dependencies related to Microsoft auth with the `online-mode` cargo feature.
+- `azalea-brigadier` now optionally allows commands to return a `Result<i32, _>` instead of just an `i32`.
+- `azalea-chat` is now re-exported in `azalea::chat`.
+- Shape offsets were implemented, so bots no longer get stuck on bamboo and dripstone.
 
 ### Changed
 
-- Update to Minecraft 1.21.10. (help from @eihqnh)
+- Many functions in `Client` and `EntityRef` now return an `AzaleaResult` instead of panicking when getting entity data fails.
+- The previous `azalea::chat` module (from `azalea-client`) was moved to `azalea::client_chat`.
+
+### Fixed
+
+- Incorrect `damage_kind` component protocol implementation.
+- The `AirSupply` metadata component was defaulting to `0` instead of `300`. (@wbbradley)
+
+## [0.16.0+mc26.1] - 2026-03-27
+
+### Added
+
+- Add `SimulationPathfinderExecutionPlugin`, an alternative execution engine for the pathfinder with smoother movement.
+- The pathfinder can now traverse on the surface of water.
+- `Account`s can now have custom refresh and join behavior using `AccountTrait`.
+- Add `Account::microsoft_with_opts` to make it easier to create accounts with custom cache files. (@ElijahBare)
+- Add an `EntityRef` type to simplify interactions with entities.
+- Implement speed/swiftness.
+- Add `BlockTrait::set_property` to allow setting properties on blocks generically.
+- You can now access a client's XP with `Client::experience`. (@nebula161)
+- Re-implement `Client::map_component` and `map_get_component`.
+- Add `Client::exit` and `Swarm::exit` to make it easier to return from `ClientBuilder::start` or `SwarmBuilder::start`.
+- Add `Event::ConnectionFailed` for when the client failed to create its initial connection to the server.
+- `ChunkStorage` can now have custom implementations using `ChunkStorageTrait`. (@sdwhw)
+- Setting blocks now updates `Section::block_count`.
+
+### Changed
+
+- Update to Minecraft 26.1.
+- Rename `Instance` to `World` (and rename other related types).
+- Move the `Client` struct out of `azalea-client` into `azalea`.
+- `Client::ecs` is now an `RwLock` instead of a `Mutex`.
+- `Client::component` and `entity_component` now return a mapped RwLock guard instead of cloning the component.
+- Most functions on `Client` that previously returned `Entity` now return `EntityRef` instead.
+- Deprecate pathfinder `InverseGoal`.
+- Add a `bevy_ecs` feature to `azalea-protocol` and related crates to allow disabling the Bevy dependencies.
+- Replace `azalea-buf`'s `AzaleaRead` and `AzaleaWrite` traits with a single `AzBuf` trait.
+- Lots of optimizations, especially for the pathfinder.
+
+### Fixed
+
+- The pathfinder now avoids magma blocks.
+- Fixed several panics, OOMs, and memory leaks in `azalea-protocol`.
+- Click events in chat messages were missing.
+- `ClientboundSetEquipment` failed to deserialize if a packet used animal armor slots.
+- Incorrect protocol implementations for `ClientboundPlayerInfoUpdate`, recipe data, and when writing chunks.
+- Block break speeds are now influenced by the `Tool` data component.
+- Fall back to Google DNS when the system resolver is unavailable. (@thesalam4ik)
+
+## [0.15.1+mc1.21.11] - 2026-02-03
+
+### Fixed
+
+- Fix compilation errors from unstable dependencies.
+- Serializing `FormattedText` with serde was writing `extra` twice.
+- Attack cooldowns were being applied incorrectly for tools.
+- `Identifier` had an incorrect `Hash` and `PartialEq` implementation.
+- Explosion knockback was being applied incorrectly.
+
+## [0.15.0+mc1.21.11] - 2025-12-18
+
+### Added
+
+- Add `Client::query_entity` and `try_query_entity` to complement `query_self`.
+- Add `Client::entity_interact` and `EntityInteractEvent` to interact with entities without checking that they're in the crosshair.
+- Allow disabling dependencies related to Microsoft auth with the `online-mode` cargo feature.
+- Implement mob effects, including jump boost, haste, conduit power, and mining fatigue. (@ShayBox)
+- Support for the efficiency enchantment.
+- Support for items with attribute modifiers.
+- More documentation, including auto-generated docs for entity metadata types.
+- The documentation now shows scraped examples and tags for Bevy traits like `Component`.
+- Support for cookie packets (required by a certain anticheat).
+
+### Changed
+
+- Update to Minecraft 1.21.11. (with help from @eihqnh)
 - Update to Bevy 0.17.
 - `Client::query`, `map_component`, and `map_get_component` were replaced by `Client::query_self`.
 - Rename `SendPacketEvent` to `SendGamePacketEvent` and `PingEvent` to `GamePingEvent`.
 - Swap the order of the type parameters in entity filtering functions so query is first, then filter.
-- Add optional `timeout_ticks` field to `Client::open_container_at`.
+- Moved `azalea_client::inventory::Inventory` to `azalea_entity::inventory::Inventory`.
+- Add `Client::open_container_at_with_timeout_ticks`, and `Client::open_container_at` now times out after 5 seconds.
 - Rename `ResourceLocation` to `Identifier` to match Minecraft's new internal naming.
-- Rename `azalea_protocol::resolver` to `resolve` and `ResolverError` to `ResolveError`.
+- Refactor `RegistryHolder` to pre-deserialize some registries.
+- The handler function is now automatically single-threaded, making `#[tokio::main(flavor = "current_thread")]` unnecessary.
+- Improve APIs related to resolving server addresses.
+- Mojang's sessionserver is now requested using the SOCKS5 proxy given in `JoinOpts::proxy`.
+- Refactor `azalea-registry`. Notably, `Item` and `Block` are now named `ItemKind` and `BlockKind`.
+- `ClientBuilder::start` and `SwarmBuilder::start` now return just `AppExit` instead of `Result<AppExit>`.
 
 ### Fixed
 
@@ -40,6 +120,10 @@ is breaking anyways, semantic versioning is not followed.
 - The 'with' field in formatted text didn't correctly support mixed types. (@Tert0)
 - The WritableBookContent and ResolvableProfile data components had the wrong protocol implementations.
 - Resolving server addresses shouldn't be recursive.
+- A 5 tick mining delay was always being applied after we mined for the first time.
+- Running Azalea on Windows in debug mode would result in a stack overflow error.
+- Wrong packet order when attacking and sprinting in the same tick.
+- Most entity variant components were using the wrong type.
 
 ## [0.14.0+mc1.21.8] - 2025-09-28
 

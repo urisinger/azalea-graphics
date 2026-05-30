@@ -3,20 +3,21 @@ use std::{hint::black_box, sync::Arc, time::Duration};
 use azalea::{
     BlockPos,
     pathfinder::{
-        astar::{self, PathfinderTimeout, WeightedNode, a_star},
+        astar::{self, PathfinderTimeout, a_star, heap::WeightedNode},
         custom_state::CustomPathfinderStateRef,
         goals::{BlockPosGoal, Goal},
         mining::MiningCache,
-        rel_block_pos::RelBlockPos,
+        positions::RelBlockPos,
         world::CachedWorld,
     },
 };
 use azalea_core::position::{ChunkBlockPos, ChunkPos};
 use azalea_inventory::Menu;
+use azalea_registry::builtin::BlockKind;
 use azalea_world::{Chunk, ChunkStorage, PartialChunkStorage};
 use criterion::{Bencher, Criterion, criterion_group, criterion_main};
 use parking_lot::RwLock;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 #[allow(dead_code)]
 fn generate_bedrock_world(
@@ -44,14 +45,14 @@ fn generate_bedrock_world(
                 for z in 0..16_u8 {
                     chunk.set_block_state(
                         &ChunkBlockPos::new(x, 1, z),
-                        azalea_registry::Block::Bedrock.into(),
-                        chunks.min_y,
+                        BlockKind::Bedrock.into(),
+                        chunks.min_y(),
                     );
                     if rng.random_bool(0.5) {
                         chunk.set_block_state(
                             &ChunkBlockPos::new(x, 2, z),
-                            azalea_registry::Block::Bedrock.into(),
-                            chunks.min_y,
+                            BlockKind::Bedrock.into(),
+                            chunks.min_y(),
                         );
                     }
                 }
@@ -97,13 +98,13 @@ fn generate_mining_world(
             let chunk_pos = ChunkPos::new(chunk_x, chunk_z);
             let chunk = chunks.get(&chunk_pos).unwrap();
             let mut chunk = chunk.write();
-            for y in chunks.min_y..(chunks.min_y + chunks.height as i32) {
+            for y in chunks.min_y()..(chunks.min_y() + chunks.height() as i32) {
                 for x in 0..16_u8 {
                     for z in 0..16_u8 {
                         chunk.set_block_state(
                             &ChunkBlockPos::new(x, y, z),
-                            azalea_registry::Block::Stone.into(),
-                            chunks.min_y,
+                            BlockKind::Stone.into(),
+                            chunks.min_y(),
                         );
                     }
                 }
@@ -147,6 +148,7 @@ fn run_pathfinder_benchmark(
         let astar::Path {
             movements,
             is_partial: partial,
+            ..
         } = a_star(
             RelBlockPos::get_origin(origin),
             |n| goal.heuristic(n.apply(origin)),

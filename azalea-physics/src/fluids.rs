@@ -4,11 +4,11 @@ use azalea_block::{
 };
 use azalea_core::{
     direction::Direction,
-    identifier::Identifier,
     position::{BlockPos, Vec3},
 };
 use azalea_entity::{HasClientLoaded, LocalEntity, Physics, Position};
-use azalea_world::{Instance, InstanceContainer, InstanceName};
+use azalea_registry::builtin::BlockKind;
+use azalea_world::{World, WorldName, Worlds};
 use bevy_ecs::prelude::*;
 
 use crate::collision::legacy_blocks_motion;
@@ -16,13 +16,13 @@ use crate::collision::legacy_blocks_motion;
 #[allow(clippy::type_complexity)]
 pub fn update_in_water_state_and_do_fluid_pushing(
     mut query: Query<
-        (&mut Physics, &Position, &InstanceName),
+        (&mut Physics, &Position, &WorldName),
         (With<LocalEntity>, With<HasClientLoaded>),
     >,
-    instance_container: Res<InstanceContainer>,
+    worlds: Res<Worlds>,
 ) {
-    for (mut physics, position, instance_name) in &mut query {
-        let Some(world_lock) = instance_container.get(instance_name) else {
+    for (mut physics, position, world_name) in &mut query {
+        let Some(world_lock) = worlds.get(world_name) else {
             continue;
         };
         let world = world_lock.read();
@@ -39,12 +39,10 @@ pub fn update_in_water_state_and_do_fluid_pushing(
 
         let is_ultrawarm = world
             .registries
+            .dimension_type
             .map
-            .get(&Identifier::new("minecraft:dimension_type"))
-            .and_then(|d| {
-                d.get(&**instance_name)
-                    .map(|d| d.byte("ultrawarm") != Some(0))
-            })
+            .get(&**world_name)
+            .and_then(|i| i.ultrawarm)
             .unwrap_or_default();
         let lava_push_factor = if is_ultrawarm {
             0.007
@@ -62,7 +60,7 @@ pub fn update_in_water_state_and_do_fluid_pushing(
 }
 fn update_in_water_state_and_do_water_current_pushing(
     physics: &mut Physics,
-    world: &Instance,
+    world: &World,
     _position: Position,
 ) {
     // TODO: implement vehicles and boats
@@ -88,7 +86,7 @@ fn update_in_water_state_and_do_water_current_pushing(
 
 fn update_fluid_height_and_do_fluid_pushing(
     physics: &mut Physics,
-    world: &Instance,
+    world: &World,
     checking_fluid: FluidKind,
     fluid_push_factor: f64,
 ) -> bool {
@@ -182,7 +180,7 @@ pub fn update_swimming() {
 }
 
 // FlowingFluid.getFlow
-pub fn get_fluid_flow(fluid: &FluidState, world: &Instance, pos: BlockPos) -> Vec3 {
+pub fn get_fluid_flow(fluid: &FluidState, world: &World, pos: BlockPos) -> Vec3 {
     let mut z_flow: f64 = 0.;
     let mut x_flow: f64 = 0.;
 
@@ -246,7 +244,7 @@ pub fn get_fluid_flow(fluid: &FluidState, world: &Instance, pos: BlockPos) -> Ve
 // i don't really get what this is for
 fn is_solid_face(
     fluid: &FluidState,
-    world: &Instance,
+    world: &World,
     adjacent_pos: BlockPos,
     direction: Direction,
 ) -> bool {
@@ -258,11 +256,11 @@ fn is_solid_face(
     if direction == Direction::Up {
         return true;
     }
-    let registry_block = azalea_registry::Block::from(block_state);
+    let registry_block = BlockKind::from(block_state);
     if matches!(
         registry_block,
         // frosted ice is from frost walker
-        azalea_registry::Block::Ice | azalea_registry::Block::FrostedIce
+        BlockKind::Ice | BlockKind::FrostedIce
     ) {
         return false;
     }
@@ -271,7 +269,7 @@ fn is_solid_face(
 
 fn is_face_sturdy(
     _block_state: BlockState,
-    _world: &Instance,
+    _world: &World,
     _pos: BlockPos,
     _direction: Direction,
 ) -> bool {

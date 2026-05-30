@@ -3,11 +3,12 @@ mod discrete_voxel_shape;
 pub mod entity_collisions;
 mod mergers;
 mod shape;
+mod shape_offset;
 pub mod world_collisions;
 
 use std::{ops::Add, sync::LazyLock};
 
-use azalea_block::{BlockState, fluid_state::FluidState};
+use azalea_block::{BlockState, BlockTrait, fluid_state::FluidState};
 use azalea_core::{
     aabb::Aabb,
     direction::Axis,
@@ -18,7 +19,8 @@ use azalea_entity::{
     Attributes, Jumping, LookDirection, OnClimbable, Physics, PlayerAbilities, Pose, Position,
     metadata::Sprinting,
 };
-use azalea_world::{ChunkStorage, Instance};
+use azalea_registry::builtin::BlockKind;
+use azalea_world::{ChunkStorage, World};
 use bevy_ecs::{entity::Entity, world::Mut};
 pub use blocks::BlockWithShape;
 pub use discrete_voxel_shape::*;
@@ -28,10 +30,11 @@ use tracing::warn;
 
 use self::world_collisions::get_block_collisions;
 use crate::{
-    collision::entity_collisions::AabbQuery, local_player::PhysicsState, travel::no_collision,
+    client_movement::ClientMovementState, collision::entity_collisions::AabbQuery,
+    travel::no_collision,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MoverType {
     Own,
     Player,
@@ -109,13 +112,13 @@ fn collide(ctx: &MoveCtx, movement: Vec3) -> Vec3 {
 
 pub struct MoveCtx<'world, 'state, 'a, 'b> {
     pub mover_type: MoverType,
-    pub world: &'a Instance,
+    pub world: &'a World,
     pub position: Mut<'a, Position>,
     pub physics: &'a mut Physics,
     pub source_entity: Entity,
     pub aabb_query: &'a AabbQuery<'world, 'state, 'b>,
     pub collidable_entity_query: &'a CollidableEntityQuery<'world, 'state>,
-    pub physics_state: Option<&'a PhysicsState>,
+    pub physics_state: Option<&'a ClientMovementState>,
     pub attributes: &'a Attributes,
     pub abilities: Option<&'a PlayerAbilities>,
 
@@ -337,7 +340,7 @@ fn is_above_ground(ctx: &CanFallAtLeastCtx, max_up_step: f32) -> bool {
 
 pub struct CanFallAtLeastCtx<'world, 'state, 'a, 'b> {
     physics: &'a Physics,
-    world: &'a Instance,
+    world: &'a World,
     source_entity: Entity,
     aabb_query: &'a AabbQuery<'world, 'state, 'b>,
     collidable_entity_query: &'a CollidableEntityQuery<'world, 'state>,
@@ -376,7 +379,7 @@ fn can_fall_at_least(
 fn collide_bounding_box(
     movement: Vec3,
     entity_bounding_box: &Aabb,
-    world: &Instance,
+    world: &World,
     entity_collisions: &[VoxelShape],
 ) -> Vec3 {
     let mut collision_boxes: Vec<VoxelShape> = Vec::with_capacity(entity_collisions.len() + 1);
@@ -436,7 +439,7 @@ fn collide_with_shapes(
 
 /// Get the [`VoxelShape`] for the given fluid state.
 ///
-/// The instance and position are required so it can check if the block above is
+/// The world and position are required so it can check if the block above is
 /// also the same fluid type.
 pub fn fluid_shape(fluid: &FluidState, world: &ChunkStorage, pos: BlockPos) -> &'static VoxelShape {
     if fluid.amount == 9 {
@@ -483,20 +486,21 @@ pub fn legacy_blocks_motion(block: BlockState) -> bool {
         return false;
     }
 
-    let registry_block = azalea_registry::Block::from(block);
+    let registry_block = BlockKind::from(block);
     legacy_calculate_solid(block)
-        && registry_block != azalea_registry::Block::Cobweb
-        && registry_block != azalea_registry::Block::BambooSapling
+        && registry_block != BlockKind::Cobweb
+        && registry_block != BlockKind::BambooSapling
 }
 
 pub fn legacy_calculate_solid(block: BlockState) -> bool {
     // force_solid has to be checked before anything else
     let block_trait = block.to_trait();
+
     if let Some(solid) = block_trait.behavior().force_solid {
         return solid;
     }
 
-    let shape = block.collision_shape();
+    let shape = block.base_collision_shape();
     if shape.is_empty() {
         return false;
     }

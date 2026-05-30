@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use azalea::{
-    blocks::BlockState,
-    registry::{Biome, Block, DataRegistry},
+    block::BlockState, registry::{ DataRegistry, builtin::BlockKind, data::Biome}
 };
 use azalea_assets::Assets;
 use glam::IVec3;
@@ -16,7 +15,7 @@ pub type BlockColorFn = fn(BlockState, &LocalSection, &BiomeCache, IVec3, i32, &
 
 /// Block color registry similar to Minecraft's BlockColors
 pub struct BlockColors {
-    color_providers: HashMap<Block, BlockColorFn>,
+    color_providers: HashMap<BlockKind, BlockColorFn>,
 }
 
 impl BlockColors {
@@ -30,60 +29,60 @@ impl BlockColors {
         block_colors.register(
             grass_color_provider,
             &[
-                Block::GrassBlock,
-                Block::Fern,
-                Block::ShortGrass,
-                Block::SugarCane,
+                BlockKind::GrassBlock,
+                BlockKind::Fern,
+                BlockKind::ShortGrass,
+                BlockKind::SugarCane,
             ],
         );
 
         // Double plants (special biome sampling for upper half)
         block_colors.register(
             double_plant_grass_color_provider,
-            &[Block::TallGrass, Block::LargeFern],
+            &[BlockKind::TallGrass, BlockKind::LargeFern],
         );
 
         // Foliage-colored blocks
         block_colors.register(
             foliage_color_provider,
             &[
-                Block::OakLeaves,
-                Block::JungleLeaves,
-                Block::AcaciaLeaves,
-                Block::DarkOakLeaves,
-                Block::Vine,
-                Block::MangroveLeaves,
+                BlockKind::OakLeaves,
+                BlockKind::JungleLeaves,
+                BlockKind::AcaciaLeaves,
+                BlockKind::DarkOakLeaves,
+                BlockKind::Vine,
+                BlockKind::MangroveLeaves,
             ],
         );
 
         // Special foliage colors
-        block_colors.register(birch_foliage_color_provider, &[Block::BirchLeaves]);
-        block_colors.register(spruce_foliage_color_provider, &[Block::SpruceLeaves]);
+        block_colors.register(birch_foliage_color_provider, &[BlockKind::BirchLeaves]);
+        block_colors.register(spruce_foliage_color_provider, &[BlockKind::SpruceLeaves]);
 
         // Water-colored blocks
-        block_colors.register(water_color_provider, &[Block::Water, Block::BubbleColumn]);
+        block_colors.register(water_color_provider, &[BlockKind::Water, BlockKind::BubbleColumn]);
 
         // Redstone wire (power-based color)
-        block_colors.register(redstone_wire_color_provider, &[Block::RedstoneWire]);
+        block_colors.register(redstone_wire_color_provider, &[BlockKind::RedstoneWire]);
 
         // Crop stems (age-based color)
-        block_colors.register(pumpkin_stem_color_provider, &[Block::PumpkinStem]);
-        block_colors.register(melon_stem_color_provider, &[Block::MelonStem]);
+        block_colors.register(pumpkin_stem_color_provider, &[BlockKind::PumpkinStem]);
+        block_colors.register(melon_stem_color_provider, &[BlockKind::MelonStem]);
 
         // Attached stems (fixed color)
         block_colors.register(
             attached_stem_color_provider,
-            &[Block::AttachedPumpkinStem, Block::AttachedMelonStem],
+            &[BlockKind::AttachedPumpkinStem, BlockKind::AttachedMelonStem],
         );
 
         // Special cases
-        block_colors.register(lily_pad_color_provider, &[Block::LilyPad]);
+        block_colors.register(lily_pad_color_provider, &[BlockKind::LilyPad]);
 
         block_colors
     }
 
     /// Register a color provider for multiple blocks
-    pub fn register(&mut self, color_fn: BlockColorFn, blocks: &[Block]) {
+    pub fn register(&mut self, color_fn: BlockColorFn, blocks: &[BlockKind]) {
         for &block in blocks {
             self.color_providers.insert(block, color_fn);
         }
@@ -100,7 +99,7 @@ impl BlockColors {
         tint_index: i32,
         assets: &Assets,
     ) -> [f32; 3] {
-        let block = Block::from(block_state);
+        let block = BlockKind::from(block_state);
 
         if let Some(&color_fn) = self.color_providers.get(&block) {
             color_fn(
@@ -148,7 +147,7 @@ fn double_plant_grass_color_provider(
         return [1.0; 3];
     }
 
-    use azalea::blocks::properties::Half;
+    use azalea::block::properties::Half;
 
     let mut sample_pos = local_pos;
 
@@ -238,11 +237,11 @@ fn redstone_wire_color_provider(
     _tint_index: i32,
     _assets: &Assets,
 ) -> [f32; 3] {
-    use azalea::blocks::properties::RedstoneWirePower;
+    use azalea::block::properties::Power;
 
     let power = block_state
-        .property::<RedstoneWirePower>()
-        .unwrap_or(RedstoneWirePower::_0);
+        .property::<Power>()
+        .unwrap_or(Power::_0);
     let power_level = power as i32;
 
     RedstoneWire::get_color_for_power(power_level)
@@ -257,7 +256,7 @@ fn pumpkin_stem_color_provider(
     _tint_index: i32,
     _assets: &Assets,
 ) -> [f32; 3] {
-    use azalea::blocks::properties::PumpkinStemAge;
+    use azalea::block::properties::PumpkinStemAge;
 
     let age = block_state
         .property::<PumpkinStemAge>()
@@ -275,7 +274,7 @@ fn melon_stem_color_provider(
     _tint_index: i32,
     _assets: &Assets,
 ) -> [f32; 3] {
-    use azalea::blocks::properties::MelonStemAge;
+    use azalea::block::properties::MelonStemAge;
 
     let age = block_state
         .property::<MelonStemAge>()

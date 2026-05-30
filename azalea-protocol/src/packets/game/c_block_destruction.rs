@@ -1,9 +1,9 @@
 use azalea_buf::AzBuf;
 use azalea_core::position::BlockPos;
 use azalea_protocol_macros::ClientboundGamePacket;
-use azalea_world::MinecraftEntityId;
+use azalea_core::entity_id::MinecraftEntityId;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundBlockDestruction {
     /// The ID of the entity breaking the block.
     #[var]

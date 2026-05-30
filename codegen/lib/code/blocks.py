@@ -11,9 +11,8 @@ BLOCKS_RS_DIR = get_dir_location("../azalea-block/src/generated.rs")
 
 def generate_blocks(
     blocks_report: dict,
-    pumpkin_block_datas: dict,
+    pumpkin_blocks_data: dict,
     ordered_blocks: list[str],
-    burger_data: dict,
 ):
     with open(BLOCKS_RS_DIR, "r") as f:
         existing_code = f.read().splitlines()
@@ -21,10 +20,8 @@ def generate_blocks(
     new_make_block_states_macro_code = []
     new_make_block_states_macro_code.append("make_block_states! {")
 
-    burger_block_datas = burger_data[0]["blocks"]["block"]
-
     pumpkin_block_map = {}
-    for block_data in pumpkin_block_datas["blocks"]:
+    for block_data in pumpkin_blocks_data["blocks"]:
         block_id = block_data["name"]
         pumpkin_block_map[block_id] = block_data
 
@@ -85,11 +82,10 @@ def generate_blocks(
 
     new_make_block_states_macro_code.append("    },")
 
-    # Block codegen
+    # BlockKind codegen
     new_make_block_states_macro_code.append("    Blocks => {")
     for block_id in ordered_blocks:
         block_data_report = blocks_report["minecraft:" + block_id]
-        block_data_burger = burger_block_datas.get(block_id, {})
         block_data_pumpkin = pumpkin_block_map[block_id]
 
         default_property_variants: dict[str, str] = {}
@@ -131,7 +127,7 @@ def generate_blocks(
         # make the block behavior
         behavior_constructor = "BlockBehavior::new()"
         # requires tool
-        if block_data_burger.get("requires_correct_tool_for_drops"):
+        if block_data_pumpkin.get("requires_correct_tool_for_drops"):
             behavior_constructor += ".requires_correct_tool_for_drops()"
         # strength
         destroy_time = block_data_pumpkin.get("hardness")
@@ -143,20 +139,20 @@ def generate_blocks(
         elif explosion_resistance:
             behavior_constructor += f".explosion_resistance({explosion_resistance})"
         # friction
-        friction = block_data_burger.get("friction")
-        if friction is not None:
+        friction = block_data_pumpkin["friction"]
+        if friction != 0.6:
             behavior_constructor += f".friction({friction})"
 
+        if block_data_pumpkin.get("can_occlude") == False:
+            behavior_constructor += ".no_occlude()"
+
         force_solid = None
-        if block_data_burger.get("force_solid_on"):
+        if block_data_pumpkin.get("force_solid_on"):
             force_solid = "true"
-        elif block_data_burger.get("force_solid_off"):
+        elif block_data_pumpkin.get("force_solid_off"):
             force_solid = "false"
         if force_solid is not None:
             behavior_constructor += f".force_solid({force_solid})"
-
-        if block_data_burger.get("can_occlude") == False:
-            behavior_constructor += ".no_occlude()"
 
         # TODO: use burger to generate the blockbehavior
         new_make_block_states_macro_code.append(
@@ -215,13 +211,13 @@ def get_property_struct_name(
     ]:
         return "StairShape"
     if property_variants == ["normal", "sticky"]:
-        return "PistonType"
+        return "PistonKind"
     if property_variants == ["x", "z"]:
         return "AxisXZ"
     if property_variants == ["single", "left", "right"]:
-        return "ChestType"
+        return "ChestKind"
     if property_variants == ["compare", "subtract"]:
-        return "ComparatorType"
+        return "ComparatorKind"
     if property_variants == [
         "inactive",
         "waiting_for_players",
@@ -237,15 +233,16 @@ def get_property_struct_name(
         return "TestMode"
     if property_variants == ["save", "load", "corner", "data"]:
         return "StructureMode"
+    if property_variants == ["top", "bottom", "double"]:
+        return "SlabKind"
     if "harp" in property_variants and "didgeridoo" in property_variants:
         return "Sound"
-    if is_list_of_string_integers(property_variants):
-        # if the values are all integers, then prepend the block name
-        return to_camel_case(block_id) + to_camel_case(property_id)
     if property_variants == ["up", "side", "none"]:
         return "Wire" + to_camel_case(property_id)
     if property_variants == ["none", "low", "tall"]:
         return "Wall" + to_camel_case(property_id)
+    if property_id in {"age", "level", "distance"}:
+        return to_camel_case(block_id) + to_camel_case(property_id)
 
     return to_camel_case(property_id)
 

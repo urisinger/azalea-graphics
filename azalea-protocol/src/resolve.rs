@@ -5,24 +5,39 @@ use std::{
     sync::LazyLock,
 };
 
-pub use hickory_resolver::ResolveError;
-use hickory_resolver::{Name, TokioResolver, name_server::TokioConnectionProvider};
+pub use hickory_resolver::net::NetError as ResolveError;
+use hickory_resolver::{
+    Resolver, TokioResolver,
+    config::{GOOGLE, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+    proto::rr::{Name, RData},
+};
+use tracing::warn;
 
-use crate::ServerAddress;
+use crate::address::ServerAddr;
 
+#[doc(hidden)]
 #[deprecated(note = "Renamed to ResolveError")]
 pub type ResolverError = ResolveError;
 
 static RESOLVER: LazyLock<TokioResolver> = LazyLock::new(|| {
-    TokioResolver::builder(TokioConnectionProvider::default())
-        .unwrap()
+    Resolver::builder_tokio()
+        .unwrap_or_else(|_| {
+            warn!("System DNS resolver unavailable; falling back to Google DNS.");
+
+            Resolver::builder_with_config(
+                ResolverConfig::udp_and_tcp(&GOOGLE),
+                TokioRuntimeProvider::new(),
+            )
+        })
         .build()
+        .unwrap()
 });
 
 /// Resolve a Minecraft server address into an IP address and port.
 ///
 /// If it's already an IP address, it's returned as-is.
-pub async fn resolve_address(mut address: &ServerAddress) -> Result<SocketAddr, ResolveError> {
+pub async fn resolve_address(mut address: &ServerAddr) -> Result<SocketAddr, ResolveError> {
     let redirect = resolve_srv_redirect(address).await;
     if let Ok(redirect_target) = &redirect {
         address = redirect_target;
@@ -31,7 +46,7 @@ pub async fn resolve_address(mut address: &ServerAddress) -> Result<SocketAddr, 
     resolve_ip_without_redirects(address).await
 }
 
-async fn resolve_ip_without_redirects(address: &ServerAddress) -> Result<SocketAddr, ResolveError> {
+async fn resolve_ip_without_redirects(address: &ServerAddr) -> Result<SocketAddr, ResolveError> {
     if let Ok(ip) = address.host.parse::<IpAddr>() {
         // no need to do a lookup
         return Ok(SocketAddr::new(ip, address.port));
@@ -43,14 +58,12 @@ async fn resolve_ip_without_redirects(address: &ServerAddress) -> Result<SocketA
     let ip = lookup_ip
         .iter()
         .next()
-        .ok_or(hickory_resolver::ResolveError::from(
-            "No A/AAAA record found",
-        ))?;
+        .ok_or(ResolveError::from("No A/AAAA record found"))?;
 
     Ok(SocketAddr::new(ip, address.port))
 }
 
-async fn resolve_srv_redirect(address: &ServerAddress) -> Result<ServerAddress, ResolveError> {
+async fn resolve_srv_redirect(address: &ServerAddr) -> Result<ServerAddr, ResolveError> {
     if address.port != 25565 {
         return Err(ResolveError::from("Port must be 25565 to do a SRV lookup"));
     }
@@ -59,11 +72,17 @@ async fn resolve_srv_redirect(address: &ServerAddress) -> Result<ServerAddress, 
     let res = RESOLVER.srv_lookup(query).await?;
 
     let srv = res
-        .iter()
-        .next()
+        .answers()
+        .first()
         .ok_or(ResolveError::from("No SRV record found"))?;
-    Ok(ServerAddress {
-        host: srv.target().to_ascii(),
-        port: srv.port(),
+    let RData::SRV(srv) = &srv.data else {
+        return Err(ResolveError::from(
+            "Record returned from SRV lookup wasn't SRV",
+        ));
+    };
+
+    Ok(ServerAddr {
+        host: srv.target.to_ascii(),
+        port: srv.port,
     })
 }

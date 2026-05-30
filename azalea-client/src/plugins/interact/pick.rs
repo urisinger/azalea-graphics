@@ -17,14 +17,14 @@ use azalea_physics::{
     clip::{BlockShapeType, ClipContext, FluidPickType},
     collision::entity_collisions::{AabbQuery, get_entities},
 };
-use azalea_world::{Instance, InstanceContainer, InstanceName};
+use azalea_world::{World, WorldName, Worlds};
 use bevy_ecs::prelude::*;
 use derive_more::{Deref, DerefMut};
 
 /// A component that contains the block or entity that the player is currently
 /// looking at.
 #[doc(alias("looking at", "looking at block", "crosshair"))]
-#[derive(Component, Clone, Debug, Deref, DerefMut)]
+#[derive(Clone, Component, Debug, Deref, DerefMut)]
 pub struct HitResultComponent(HitResult);
 
 #[allow(clippy::type_complexity)]
@@ -37,13 +37,13 @@ pub fn update_hit_result_component(
             &Position,
             &EntityDimensions,
             &LookDirection,
-            &InstanceName,
+            &WorldName,
             &Physics,
             &Attributes,
         ),
         With<LocalEntity>,
     >,
-    instance_container: Res<InstanceContainer>,
+    worlds: Res<Worlds>,
     aabb_query: AabbQuery,
     pickable_query: MaybePickableEntityQuery,
 ) {
@@ -63,7 +63,7 @@ pub fn update_hit_result_component(
 
         let eye_position = position.up(dimensions.eye_height.into());
 
-        let Some(world_lock) = instance_container.get(world_name) else {
+        let Some(world_lock) = worlds.get(world_name) else {
             continue;
         };
         let world = world_lock.read();
@@ -117,7 +117,7 @@ pub struct PickOpts<'world, 'state, 'a, 'b, 'c> {
     look_direction: LookDirection,
     eye_position: Vec3,
     aabb: &'a Aabb,
-    world: &'a Instance,
+    world: &'a World,
     entity_pick_range: f64,
     block_pick_range: f64,
     aabb_query: &'a AabbQuery<'world, 'state, 'b>,
@@ -246,7 +246,7 @@ struct PickEntityOpts<'world, 'state, 'a, 'b> {
     source_entity: Entity,
     eye_position: Vec3,
     end_position: Vec3,
-    world: &'a azalea_world::Instance,
+    world: &'a azalea_world::World,
     pick_range_squared: f64,
     predicate: &'a dyn Fn(Entity) -> bool,
     aabb: &'a Aabb,

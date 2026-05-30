@@ -14,11 +14,11 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub enum ArgumentBuilderType<S> {
+pub enum ArgumentBuilderType<S, R> {
     Literal(Literal),
-    Argument(Argument<S>),
+    Argument(Argument<S, R>),
 }
-impl<S> Clone for ArgumentBuilderType<S> {
+impl<S, R> Clone for ArgumentBuilderType<S, R> {
     fn clone(&self) -> Self {
         match self {
             ArgumentBuilderType::Literal(literal) => ArgumentBuilderType::Literal(literal.clone()),
@@ -30,20 +30,20 @@ impl<S> Clone for ArgumentBuilderType<S> {
 }
 
 /// A node that hasn't yet been built.
-pub struct ArgumentBuilder<S> {
-    arguments: CommandNode<S>,
+pub struct ArgumentBuilder<S, R = i32> {
+    arguments: CommandNode<S, R>,
 
-    command: Command<S>,
+    command: Command<S, R>,
     requirement: Arc<dyn Fn(&S) -> bool + Send + Sync>,
-    target: Option<Arc<RwLock<CommandNode<S>>>>,
+    target: Option<Arc<RwLock<CommandNode<S, R>>>>,
 
     forks: bool,
-    modifier: Option<Arc<RedirectModifier<S>>>,
+    modifier: Option<Arc<RedirectModifier<S, R>>>,
 }
 
 /// A node that isn't yet built.
-impl<S> ArgumentBuilder<S> {
-    pub fn new(value: ArgumentBuilderType<S>) -> Self {
+impl<S, R> ArgumentBuilder<S, R> {
+    pub fn new(value: ArgumentBuilderType<S, R>) -> Self {
         Self {
             arguments: CommandNode {
                 value,
@@ -65,14 +65,14 @@ impl<S> ArgumentBuilder<S> {
     /// literal("foo").then(literal("bar").executes(|ctx: &CommandContext<()>| 42))
     /// # ;
     /// ```
-    pub fn then(self, argument: ArgumentBuilder<S>) -> Self {
+    pub fn then(self, argument: ArgumentBuilder<S, R>) -> Self {
         self.then_built(argument.build())
     }
 
     /// Add an already built child node to this node.
     ///
     /// You should usually use [`Self::then`] instead.
-    pub fn then_built(mut self, argument: CommandNode<S>) -> Self {
+    pub fn then_built(mut self, argument: CommandNode<S, R>) -> Self {
         self.arguments.add_child(&Arc::new(RwLock::new(argument)));
         self
     }
@@ -90,9 +90,9 @@ impl<S> ArgumentBuilder<S> {
     /// ```
     pub fn executes<F>(mut self, f: F) -> Self
     where
-        F: Fn(&CommandContext<S>) -> i32 + Send + Sync + 'static,
+        F: Fn(&CommandContext<S, R>) -> R + Send + Sync + 'static,
     {
-        self.command = Some(Arc::new(move |ctx: &CommandContext<S>| Ok(f(ctx))));
+        self.command = Some(Arc::new(move |ctx: &CommandContext<S, R>| Ok(f(ctx))));
         self
     }
 
@@ -100,7 +100,7 @@ impl<S> ArgumentBuilder<S> {
     /// CommandSyntaxError>`.
     pub fn executes_result<F>(mut self, f: F) -> Self
     where
-        F: Fn(&CommandContext<S>) -> Result<i32, CommandSyntaxError> + Send + Sync + 'static,
+        F: Fn(&CommandContext<S, R>) -> Result<R, CommandSyntaxError> + Send + Sync + 'static,
     {
         self.command = Some(Arc::new(f));
         self
@@ -131,22 +131,22 @@ impl<S> ArgumentBuilder<S> {
         self
     }
 
-    pub fn redirect(self, target: Arc<RwLock<CommandNode<S>>>) -> Self {
+    pub fn redirect(self, target: Arc<RwLock<CommandNode<S, R>>>) -> Self {
         self.forward(target, None, false)
     }
 
     pub fn fork(
         self,
-        target: Arc<RwLock<CommandNode<S>>>,
-        modifier: Arc<RedirectModifier<S>>,
+        target: Arc<RwLock<CommandNode<S, R>>>,
+        modifier: Arc<RedirectModifier<S, R>>,
     ) -> Self {
         self.forward(target, Some(modifier), true)
     }
 
     pub fn forward(
         mut self,
-        target: Arc<RwLock<CommandNode<S>>>,
-        modifier: Option<Arc<RedirectModifier<S>>>,
+        target: Arc<RwLock<CommandNode<S, R>>>,
+        modifier: Option<Arc<RedirectModifier<S, R>>>,
         fork: bool,
     ) -> Self {
         if !self.arguments.children.is_empty() {
@@ -158,13 +158,13 @@ impl<S> ArgumentBuilder<S> {
         self
     }
 
-    pub fn arguments(&self) -> &CommandNode<S> {
+    pub fn arguments(&self) -> &CommandNode<S, R> {
         &self.arguments
     }
 
     /// Manually build this node into a [`CommandNode`]. You probably don't need
     /// to do this yourself.
-    pub fn build(self) -> CommandNode<S> {
+    pub fn build(self) -> CommandNode<S, R> {
         let mut result = CommandNode {
             value: self.arguments.value,
             command: self.command,
@@ -185,7 +185,7 @@ impl<S> ArgumentBuilder<S> {
     }
 }
 
-impl<S> Debug for ArgumentBuilder<S> {
+impl<S, R> Debug for ArgumentBuilder<S, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ArgumentBuilder")
             .field("arguments", &self.arguments)
@@ -197,7 +197,7 @@ impl<S> Debug for ArgumentBuilder<S> {
             .finish()
     }
 }
-impl<S> Clone for ArgumentBuilder<S> {
+impl<S, R> Clone for ArgumentBuilder<S, R> {
     fn clone(&self) -> Self {
         Self {
             arguments: self.arguments.clone(),

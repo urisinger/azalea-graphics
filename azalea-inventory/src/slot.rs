@@ -1,13 +1,14 @@
 use std::{
     any::Any,
     borrow::Cow,
-    fmt,
+    fmt::{self, Debug},
     io::{self, Cursor, Write},
+    sync::LazyLock,
 };
 
-use azalea_buf::{AzaleaRead, AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
+use azalea_buf::{AzBuf, AzBufVar, BufReadError};
 use azalea_core::codec_utils::is_default;
-use azalea_registry::{DataComponentKind, Item};
+use azalea_registry::builtin::{DataComponentKind, ItemKind};
 use indexmap::IndexMap;
 use serde::{Serialize, ser::SerializeMap};
 
@@ -17,7 +18,7 @@ use crate::{
 };
 
 /// Either an item in an inventory or nothing.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum ItemStack {
     #[default]
     Empty,
@@ -25,11 +26,11 @@ pub enum ItemStack {
 }
 
 impl ItemStack {
-    /// Create a new [`ItemStack`] with the given number of [`Item`]s.
+    /// Create a new [`ItemStack`] with the given number of [`ItemKind`]s.
     ///
     /// If item is air or the count isn't positive, then it'll be set to an
     /// empty `ItemStack`.
-    pub fn new(item: Item, count: i32) -> Self {
+    pub fn new(item: ItemKind, count: i32) -> Self {
         let mut i = ItemStack::Present(ItemStackData::new(item, count));
         // set it to Empty if the item is air or if the count isn't positive
         i.update_empty();
@@ -79,11 +80,10 @@ impl ItemStack {
         }
     }
 
-    /// Get the `kind` of the item in this slot, or
-    /// [`azalea_registry::Item::Air`]
-    pub fn kind(&self) -> azalea_registry::Item {
+    /// Get the `kind` of the item in this slot, or [`ItemKind::Air`]
+    pub fn kind(&self) -> ItemKind {
         match self {
-            ItemStack::Empty => azalea_registry::Item::Air,
+            ItemStack::Empty => ItemKind::Air,
             ItemStack::Present(i) => i.kind,
         }
     }
@@ -110,6 +110,11 @@ impl ItemStack {
             ItemStack::Empty => None,
             ItemStack::Present(i) => Some(i),
         }
+    }
+
+    pub fn component_patch(&self) -> &DataComponentPatch {
+        self.as_present()
+            .map_or_else(|| &*EMPTY_DATA_COMPONENT_PATCH, |i| &i.component_patch)
     }
 
     /// Get the value of a data component for this item.
@@ -148,11 +153,12 @@ impl Serialize for ItemStack {
 
 /// An item in an inventory, with a count and a set of data components.
 ///
-/// Usually you want [`ItemStack`] or [`azalea_registry::Item`] instead.
-#[derive(Debug, Clone, PartialEq, Serialize)]
+/// Usually you want [`ItemStack`] or
+/// [`ItemKind`](azalea_registry::builtin::ItemKind) instead.
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ItemStackData {
     #[serde(rename = "id")]
-    pub kind: azalea_registry::Item,
+    pub kind: ItemKind,
     /// The amount of the item in this slot.
     ///
     /// The count can be zero or negative, but this is rare.
@@ -164,12 +170,12 @@ pub struct ItemStackData {
 }
 
 impl ItemStackData {
-    /// Create a new [`ItemStackData`] with the given number of [`Item`]s.
-    pub fn new(item: Item, count: i32) -> Self {
+    /// Create a new [`ItemStackData`] with the given number of [`ItemKind`]s.
+    pub fn new(item: ItemKind, count: i32) -> Self {
         ItemStackData {
             count,
             kind: item,
-            component_patch: DataComponentPatch::default(),
+            component_patch: Default::default(),
         }
     }
 
@@ -184,19 +190,19 @@ impl ItemStackData {
 
     /// Check if the count of the item is <= 0 or if the item is air.
     pub fn is_empty(&self) -> bool {
-        self.count <= 0 || self.kind == azalea_registry::Item::Air
+        self.count <= 0 || self.kind == ItemKind::Air
     }
 
     /// Whether this item is the same as another item, ignoring the count.
     ///
     /// ```
     /// # use azalea_inventory::ItemStackData;
-    /// # use azalea_registry::Item;
-    /// let mut a = ItemStackData::from(Item::Stone);
-    /// let mut b = ItemStackData::new(Item::Stone, 2);
+    /// # use azalea_registry::builtin::ItemKind;
+    /// let mut a = ItemStackData::from(ItemKind::Stone);
+    /// let mut b = ItemStackData::new(ItemKind::Stone, 2);
     /// assert!(a.is_same_item_and_components(&b));
     ///
-    /// b.kind = Item::Dirt;
+    /// b.kind = ItemKind::Dirt;
     /// assert!(!a.is_same_item_and_components(&b));
     /// ```
     pub fn is_same_item_and_components(&self, other: &ItemStackData) -> bool {
@@ -216,24 +222,21 @@ impl ItemStackData {
     }
 }
 
-impl AzaleaRead for ItemStack {
+impl AzBuf for ItemStack {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let count = i32::azalea_read_var(buf)?;
         if count <= 0 {
             Ok(ItemStack::Empty)
         } else {
-            let kind = azalea_registry::Item::azalea_read(buf)?;
+            let kind = ItemKind::azalea_read(buf)?;
             let component_patch = DataComponentPatch::azalea_read(buf)?;
-            Ok(ItemStack::Present(ItemStackData {
+            Ok(ItemStack::from(ItemStackData {
                 count,
                 kind,
                 component_patch,
             }))
         }
     }
-}
-
-impl AzaleaWrite for ItemStack {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         match self {
             ItemStack::Empty => 0_i32.azalea_write_var(buf)?,
@@ -256,23 +259,23 @@ impl From<ItemStackData> for ItemStack {
         }
     }
 }
-impl From<Item> for ItemStack {
-    fn from(item: Item) -> Self {
+impl From<ItemKind> for ItemStack {
+    fn from(item: ItemKind) -> Self {
         ItemStack::new(item, 1)
     }
 }
-impl From<(Item, i32)> for ItemStack {
-    fn from(item: (Item, i32)) -> Self {
+impl From<(ItemKind, i32)> for ItemStack {
+    fn from(item: (ItemKind, i32)) -> Self {
         ItemStack::new(item.0, item.1)
     }
 }
-impl From<Item> for ItemStackData {
-    fn from(item: Item) -> Self {
+impl From<ItemKind> for ItemStackData {
+    fn from(item: ItemKind) -> Self {
         ItemStackData::new(item, 1)
     }
 }
-impl From<(Item, i32)> for ItemStackData {
-    fn from(item: (Item, i32)) -> Self {
+impl From<(ItemKind, i32)> for ItemStackData {
+    fn from(item: (ItemKind, i32)) -> Self {
         ItemStackData::new(item.0, item.1)
     }
 }
@@ -283,8 +286,11 @@ impl From<(Item, i32)> for ItemStackData {
 /// and Azalea does not implement that yet.
 #[derive(Default)]
 pub struct DataComponentPatch {
-    components: IndexMap<DataComponentKind, Option<DataComponentUnion>>,
+    components: Box<IndexMap<DataComponentKind, Option<DataComponentUnion>>>,
 }
+
+static EMPTY_DATA_COMPONENT_PATCH: LazyLock<DataComponentPatch> =
+    LazyLock::new(DataComponentPatch::default);
 
 impl DataComponentPatch {
     /// Returns the value of the component in the generic argument for this
@@ -292,7 +298,7 @@ impl DataComponentPatch {
     ///
     /// ```
     /// # use azalea_inventory::{ItemStackData, DataComponentPatch, components};
-    /// # use azalea_registry::Item;
+    /// # use azalea_registry::builtin::ItemKind;
     /// # fn example(item: &ItemStackData) -> Option<()> {
     /// let item_nutrition = item.component_patch.get::<components::Food>()?.nutrition;
     /// # Some(())
@@ -322,8 +328,8 @@ impl DataComponentPatch {
     ///
     /// ```
     /// # use azalea_inventory::{ItemStackData, DataComponentPatch, components};
-    /// # use azalea_registry::Item;
-    /// # let item = ItemStackData::from(Item::Stone);
+    /// # use azalea_registry::builtin::ItemKind;
+    /// # let item = ItemStackData::from(ItemKind::Stone);
     /// let is_edible = item.component_patch.has::<components::Food>();
     /// # assert!(!is_edible);
     /// ```
@@ -359,14 +365,19 @@ impl DataComponentPatch {
         kind: DataComponentKind,
         value: Option<DataComponentUnion>,
     ) {
-        self.components.insert(kind, value);
+        let existing = self.components.insert(kind, value);
+        if let Some(Some(mut existing)) = existing {
+            // SAFETY: we just got it from self.components, so it must already be the
+            // correct type
+            unsafe { existing.drop_as(kind) };
+        }
     }
 }
 
 impl Drop for DataComponentPatch {
     fn drop(&mut self) {
         // the component values are ManuallyDrop since they're in a union
-        for (kind, component) in &mut self.components {
+        for (kind, component) in self.components.iter_mut() {
             if let Some(component) = component {
                 // SAFETY: we got the kind and component from the map
                 unsafe { component.drop_as(*kind) };
@@ -375,7 +386,7 @@ impl Drop for DataComponentPatch {
     }
 }
 
-impl AzaleaRead for DataComponentPatch {
+impl AzBuf for DataComponentPatch {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let components_with_data_count = u32::azalea_read_var(buf)?;
         let components_without_data_count = u32::azalea_read_var(buf)?;
@@ -384,23 +395,24 @@ impl AzaleaRead for DataComponentPatch {
             return Ok(DataComponentPatch::default());
         }
 
-        let mut components = IndexMap::new();
+        let mut components = DataComponentPatch::default();
+
         for _ in 0..components_with_data_count {
             let component_kind = DataComponentKind::azalea_read(buf)?;
             let component_data = DataComponentUnion::azalea_read_as(component_kind, buf)?;
-            components.insert(component_kind, Some(component_data));
+            // SAFETY: it must be of the correct type because we just read using
+            // azalea_read_as
+            unsafe { components.unchecked_insert_component(component_kind, Some(component_data)) };
         }
 
         for _ in 0..components_without_data_count {
             let component_kind = DataComponentKind::azalea_read(buf)?;
-            components.insert(component_kind, None);
+            // SAFETY: the value is None so the kind doesn't matter anyways
+            unsafe { components.unchecked_insert_component(component_kind, None) };
         }
 
-        Ok(DataComponentPatch { components })
+        Ok(components)
     }
-}
-
-impl AzaleaWrite for DataComponentPatch {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         let mut components_with_data_count: u32 = 0;
         let mut components_without_data_count: u32 = 0;
@@ -416,7 +428,7 @@ impl AzaleaWrite for DataComponentPatch {
         components_without_data_count.azalea_write_var(buf)?;
 
         let mut component_buf = Vec::new();
-        for (kind, component) in &self.components {
+        for (kind, component) in self.components.iter() {
             if let Some(component) = component {
                 kind.azalea_write(buf)?;
 
@@ -427,7 +439,7 @@ impl AzaleaWrite for DataComponentPatch {
             }
         }
 
-        for (kind, component) in &self.components {
+        for (kind, component) in self.components.iter() {
             if component.is_none() {
                 kind.azalea_write(buf)?;
             }
@@ -440,16 +452,18 @@ impl AzaleaWrite for DataComponentPatch {
 impl Clone for DataComponentPatch {
     fn clone(&self) -> Self {
         let mut components = IndexMap::with_capacity(self.components.len());
-        for (kind, component) in &self.components {
+        for (kind, component) in self.components.iter() {
             components.insert(
                 *kind,
                 component.as_ref().map(|c| unsafe { c.clone_as(*kind) }),
             );
         }
-        DataComponentPatch { components }
+        DataComponentPatch {
+            components: Box::new(components),
+        }
     }
 }
-impl fmt::Debug for DataComponentPatch {
+impl Debug for DataComponentPatch {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_set().entries(self.components.keys()).finish()
     }
@@ -459,7 +473,7 @@ impl PartialEq for DataComponentPatch {
         if self.components.len() != other.components.len() {
             return false;
         }
-        for (kind, component) in &self.components {
+        for (kind, component) in self.components.iter() {
             let Some(other_component) = other.components.get(kind) else {
                 return false;
             };
@@ -487,7 +501,7 @@ impl Serialize for DataComponentPatch {
         S: serde::Serializer,
     {
         let mut s = serializer.serialize_map(Some(self.components.len()))?;
-        for (kind, component) in &self.components {
+        for (kind, component) in self.components.iter() {
             if let Some(component) = component {
                 unsafe { component.serialize_entry_as(&mut s, *kind) }?;
             } else {
@@ -507,7 +521,7 @@ mod tests {
 
     #[test]
     fn test_get_component() {
-        let item = ItemStack::from(Item::Map).with_component(MapId { id: 1 });
+        let item = ItemStack::from(ItemKind::Map).with_component(MapId { id: 1 });
         let map_id = item.get_component::<MapId>().unwrap();
         assert_eq!(map_id.id, 1);
     }

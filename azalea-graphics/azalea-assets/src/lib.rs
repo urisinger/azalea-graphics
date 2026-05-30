@@ -3,7 +3,6 @@ mod raw;
 use std::{collections::HashMap, fs, path::PathBuf, sync::Arc, time::Instant};
 
 use azalea_block::BlockState;
-use log::*;
 use raw::{
     block_state::{BlockRenderState, Variant},
     model::BlockModel as RawBlockModel,
@@ -114,7 +113,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
         let s = fs::read_to_string(path).unwrap();
         raw_models.insert(name, RawBlockModel::from_str(&s).unwrap());
     }
-    info!(
+    tracing::info!(
         "Loaded {} raw block models in {:?}",
         raw_models.len(),
         start.elapsed()
@@ -126,7 +125,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
         let resolved = model::BlockModel::resolve(raw, &raw_models);
         block_models.insert(name.clone(), Arc::new(resolved));
     }
-    info!(
+    tracing::info!(
         "Resolved {} block models in {:?}",
         block_models.len(),
         start.elapsed()
@@ -149,7 +148,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
         let state = BlockRenderState::from_str(&s).unwrap();
         blockstate_defs.insert(name, state);
     }
-    info!(
+    tracing::info!(
         "Loaded {} blockstate definitions in {:?}",
         blockstate_defs.len(),
         start.elapsed()
@@ -232,7 +231,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
             }
         })
         .collect();
-    info!("Mapped blockstates to models in {:?}", start.elapsed());
+    tracing::info!("Mapped blockstates to models in {:?}", start.elapsed());
 
     let entity_models_path = path.join("entity_models.json");
     let raw_entity_models: HashMap<String, raw::entity_model::ModelPart> = serde_json::from_str(
@@ -260,7 +259,7 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     let (max_w, max_h) = (max_tex, max_tex);
     let block_atlas = stitch_sprites(&block_textures, max_w, max_h).expect("stitch sprites");
 
-    info!(
+    tracing::info!(
         "Built blocks atlas {}x{} in {:?}",
         block_atlas.width,
         block_atlas.height,
@@ -272,20 +271,20 @@ pub fn load_assets(path: impl Into<PathBuf>, max_tex: u32) -> Assets {
     let foliage_colormap = load_colormap(&textures_root, "colormap/foliage.png");
 
     if grass_colormap.is_some() {
-        info!("Loaded grass colormap");
+        tracing::info!("Loaded grass colormap");
     } else {
-        warn!("Failed to load grass colormap");
+        tracing::warn!("Failed to load grass colormap");
     }
 
     if foliage_colormap.is_some() {
-        info!("Loaded foliage colormap");
+        tracing::info!("Loaded foliage colormap");
     } else {
-        warn!("Failed to load foliage colormap");
+        tracing::warn!("Failed to load foliage colormap");
     }
 
-    info!("Loaded colormaps in {:?}", start.elapsed());
+    tracing::info!("Loaded colormaps in {:?}", start.elapsed());
 
-    info!("Total asset load time: {:?}", start_total.elapsed());
+    tracing::info!("Total asset load time: {:?}", start_total.elapsed());
 
     Assets {
         path,
@@ -307,7 +306,7 @@ fn load_colormap(textures_root: &PathBuf, relative_path: &str) -> Option<image::
     match image::open(&colormap_path) {
         Ok(img) => {
             let rgba_img = img.to_rgba8();
-            info!(
+            tracing::info!(
                 "Loaded colormap: {} ({}x{})",
                 relative_path,
                 rgba_img.width(),
@@ -316,7 +315,7 @@ fn load_colormap(textures_root: &PathBuf, relative_path: &str) -> Option<image::
             Some(rgba_img)
         }
         Err(e) => {
-            warn!("Failed to load colormap {}: {}", colormap_path.display(), e);
+            tracing::warn!("Failed to load colormap {}: {}", colormap_path.display(), e);
             None
         }
     }

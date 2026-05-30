@@ -18,7 +18,7 @@ impl BlockModel {
             if let Some(mapped) = self.textures.get(ref_name) {
                 self.resolve_texture(mapped)
             } else {
-                log::warn!(
+                tracing::warn!(
                     "Texture reference '{}' not found in {:?}",
                     ref_name,
                     self.textures.keys()
@@ -58,7 +58,7 @@ impl BlockModel {
                     ambient = parent.ambient_occlusion;
                 }
             } else {
-                log::warn!("parent {} is empty", name);
+                tracing::warn!("parent {} is empty", name);
             }
         }
 

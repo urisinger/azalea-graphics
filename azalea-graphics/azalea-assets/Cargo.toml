@@ -11,9 +11,10 @@ glam.workspace = true
 azalea-block.workspace = true
 azalea-core.workspace = true
 serde.workspace = true
-log.workspace = true
+tracing.workspace = true
 image = "0.25.8"
 serde_json.workspace = true
 serde-tuple-vec-map = "1"
 regex.workspace = true
 thiserror.workspace = true
+

@@ -1,16 +1,15 @@
 use azalea_block::BlockState;
 use azalea_buf::AzBuf;
-use azalea_core::{color::RgbColor, position::BlockPos};
+use azalea_core::{color::RgbColor, entity_id::MinecraftEntityId, position::BlockPos};
 use azalea_inventory::ItemStack;
-use azalea_registry::ParticleKind;
-use azalea_world::MinecraftEntityId;
-use bevy_ecs::component::Component;
+use azalea_registry::builtin::ParticleKind;
 
 // the order of this enum must be kept in sync with ParticleKind, otherwise
 // we get errors parsing particles.
 
 /// A [`ParticleKind`] with data potentially attached to it.
-#[derive(Component, Clone, Debug, AzBuf, PartialEq)]
+#[cfg_attr(feature = "bevy_ecs", derive(bevy_ecs::component::Component))]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub enum Particle {
     AngryVillager,
     Block(BlockParticle),
@@ -60,8 +59,10 @@ pub enum Particle {
     Heart,
     InstantEffect,
     Item(ItemParticle),
-    Vibration(VibrationParticle),
+    Vibration(Box<VibrationParticle>),
     Trail,
+    PauseMobGrowth,
+    ResetMobGrowth,
     ItemSlime,
     ItemCobweb,
     ItemSnowball,
@@ -183,7 +184,7 @@ impl From<ParticleKind> for Particle {
             ParticleKind::Heart => Self::Heart,
             ParticleKind::InstantEffect => Self::InstantEffect,
             ParticleKind::Item => Self::Item(ItemParticle::default()),
-            ParticleKind::Vibration => Self::Vibration(VibrationParticle::default()),
+            ParticleKind::Vibration => Self::Vibration(Default::default()),
             ParticleKind::ItemSlime => Self::ItemSlime,
             ParticleKind::ItemSnowball => Self::ItemSnowball,
             ParticleKind::LargeSmoke => Self::LargeSmoke,
@@ -255,6 +256,8 @@ impl From<ParticleKind> for Particle {
             ParticleKind::BlockCrumble => Self::BlockCrumble,
             ParticleKind::Firefly => Self::Firefly,
             ParticleKind::CopperFireFlame => Self::CopperFireFlame,
+            ParticleKind::PauseMobGrowth => Self::PauseMobGrowth,
+            ParticleKind::ResetMobGrowth => Self::ResetMobGrowth,
         }
     }
 }
@@ -265,18 +268,18 @@ impl Default for Particle {
     }
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct BlockParticle {
     pub block_state: BlockState,
 }
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct DustParticle {
     pub color: RgbColor,
     /// The scale, will be clamped between 0.01 and 4.
     pub scale: f32,
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct DustColorTransitionParticle {
     pub from: RgbColor,
     pub to: RgbColor,
@@ -284,24 +287,24 @@ pub struct DustColorTransitionParticle {
     pub scale: f32,
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct ColorParticle {
     pub color: RgbColor,
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct ItemParticle {
     pub item: ItemStack,
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct VibrationParticle {
     pub position: PositionSource,
     #[var]
     pub ticks: u32,
 }
 
-#[derive(Debug, Clone, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub enum PositionSource {
     Block(BlockPos),
     Entity {
@@ -317,12 +320,12 @@ impl Default for PositionSource {
     }
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct SculkChargeParticle {
     pub roll: f32,
 }
 
-#[derive(Debug, Clone, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Debug, Default, PartialEq)]
 pub struct ShriekParticle {
     #[var]
     pub delay: i32, // The time in ticks before the particle is displayed

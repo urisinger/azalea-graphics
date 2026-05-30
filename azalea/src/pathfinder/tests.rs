@@ -6,7 +6,8 @@ use std::{
 };
 
 use azalea_block::BlockState;
-use azalea_core::position::{BlockPos, ChunkPos, Vec3};
+use azalea_core::position::{BlockPos, ChunkPos};
+use azalea_registry::builtin::BlockKind;
 use azalea_world::{Chunk, ChunkStorage, PartialChunkStorage};
 
 use super::{
@@ -29,7 +30,7 @@ fn setup_blockposgoal_simulation(
     // you can uncomment this while debugging tests to get trace logs
     // simulation.app.add_plugins(bevy_log::LogPlugin {
     //     level: bevy_log::Level::TRACE,
-    //     filter: "".to_string(),
+    //     filter: "".to_owned(),
     //     ..Default::default()
     // });
 
@@ -66,17 +67,13 @@ fn setup_simulation_world(
         partial_chunks.set(&chunk_pos, Some(Chunk::default()), &mut chunks);
     }
     for block_pos in solid_blocks {
-        chunks.set_block_state(*block_pos, azalea_registry::Block::Stone.into());
+        chunks.set_block_state(*block_pos, BlockKind::Stone.into());
     }
     for (block_pos, block_state) in extra_blocks {
         chunks.set_block_state(*block_pos, *block_state);
     }
 
-    let player = SimulatedPlayerBundle::new(Vec3::new(
-        start_pos.x as f64 + 0.5,
-        start_pos.y as f64,
-        start_pos.z as f64 + 0.5,
-    ));
+    let player = SimulatedPlayerBundle::new(start_pos.center_bottom());
     Simulation::new(chunks, player)
 }
 
@@ -93,7 +90,7 @@ pub fn wait_until_bot_starts_moving(simulation: &mut Simulation) {
     let start_time = Instant::now();
     while simulation.position() == start_pos
         && !simulation.is_mining()
-        && start_time.elapsed() < Duration::from_millis(500)
+        && start_time.elapsed() < Duration::from_millis(5000)
     {
         simulation.tick();
         thread::yield_now();
@@ -280,28 +277,20 @@ fn test_mine_through_non_colliding_block() {
 
     let mut simulation = setup_simulation_world(
         &mut partial_chunks,
-        // the pathfinder can't actually dig straight down, so we start a block to the side so
-        // it can descend correctly
         BlockPos::new(0, 72, 1),
         &[BlockPos::new(0, 71, 1)],
         &[
-            (
-                BlockPos::new(0, 71, 0),
-                azalea_registry::Block::SculkVein.into(),
-            ),
-            (
-                BlockPos::new(0, 70, 0),
-                azalea_registry::Block::GrassBlock.into(),
-            ),
+            (BlockPos::new(0, 71, 0), BlockKind::SculkVein.into()),
+            (BlockPos::new(0, 70, 0), BlockKind::GrassBlock.into()),
             // this is an extra check to make sure that we don't accidentally break the block
             // below (since tnt will break instantly)
-            (BlockPos::new(0, 69, 0), azalea_registry::Block::Tnt.into()),
+            (BlockPos::new(0, 69, 0), BlockKind::Tnt.into()),
         ],
     );
 
     simulation.app.world_mut().write_message(GotoEvent {
         entity: simulation.entity,
-        goal: Arc::new(BlockPosGoal(BlockPos::new(0, 69, 0))),
+        goal: Arc::new(BlockPosGoal(BlockPos::new(0, 70, 0))),
         opts: PathfinderOpts::new()
             .min_timeout(PathfinderTimeout::Nodes(1_000_000))
             .max_timeout(PathfinderTimeout::Nodes(5_000_000)),

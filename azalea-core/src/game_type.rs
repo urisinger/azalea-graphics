@@ -1,11 +1,11 @@
 use std::io::{self, Cursor, Write};
 
-use azalea_buf::{AzaleaRead, AzaleaReadVar, AzaleaWrite, BufReadError};
+use azalea_buf::{AzBuf, AzBufVar, BufReadError};
 use azalea_chat::translatable_component::TranslatableComponent;
 use tracing::debug;
 
 /// A Minecraft gamemode, like survival or creative.
-#[derive(Hash, Copy, Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub enum GameMode {
     #[default]
     Survival,
@@ -87,13 +87,13 @@ impl GameMode {
 impl GameMode {
     /// Whether the player can't interact with blocks while in this game mode.
     ///
-    /// (Returns true if you're in adventure or spectator.)
+    /// Returns true if you're in adventure or spectator.
     pub fn is_block_placing_restricted(&self) -> bool {
         matches!(self, GameMode::Adventure | GameMode::Spectator)
     }
 }
 
-impl AzaleaRead for GameMode {
+impl AzBuf for GameMode {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let id = u32::azalea_read_var(buf)?;
         let id = id.try_into().unwrap_or_else(|_| {
@@ -105,17 +105,14 @@ impl AzaleaRead for GameMode {
             GameMode::Survival
         }))
     }
-}
-
-impl AzaleaWrite for GameMode {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         u8::azalea_write(&self.to_id(), buf)
     }
 }
 
-/// Rust doesn't let us `impl AzaleaRead for Option<GameType>` so we have to
+/// Rust doesn't let us `impl AzBuf for Option<GameType>` so we have to
 /// make a new type :(
-#[derive(Hash, Copy, Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq)]
 pub struct OptionalGameType(pub Option<GameMode>);
 
 impl From<Option<GameMode>> for OptionalGameType {
@@ -130,14 +127,11 @@ impl From<OptionalGameType> for Option<GameMode> {
     }
 }
 
-impl AzaleaRead for OptionalGameType {
+impl AzBuf for OptionalGameType {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let id = i8::azalea_read(buf)?;
         GameMode::from_optional_id(id).ok_or(BufReadError::UnexpectedEnumVariant { id: id as i32 })
     }
-}
-
-impl AzaleaWrite for OptionalGameType {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         GameMode::to_optional_id(*self).azalea_write(buf)
     }

@@ -7,14 +7,14 @@ pub mod status;
 
 use std::io::{self, Cursor, Write};
 
-use azalea_buf::{AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
+use azalea_buf::{AzBuf, AzBufVar, BufReadError};
 
 use crate::read::ReadPacketError;
 
-pub const PROTOCOL_VERSION: i32 = 773;
-pub const VERSION_NAME: &str = "1.21.10";
+pub const PROTOCOL_VERSION: i32 = 775;
+pub const VERSION_NAME: &str = "26.1.2";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ConnectionProtocol {
     Handshake = -1,
     Game = 0,
@@ -60,7 +60,7 @@ pub trait Packet<Protocol> {
     fn into_variant(self) -> Protocol;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ClientIntention {
     Status = 1,
     Login = 2,
@@ -89,15 +89,12 @@ impl From<ClientIntention> for ConnectionProtocol {
     }
 }
 
-impl azalea_buf::AzaleaRead for ClientIntention {
+impl AzBuf for ClientIntention {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let id = i32::azalea_read_var(buf)?;
         id.try_into()
             .map_err(|_| BufReadError::UnexpectedEnumVariant { id })
     }
-}
-
-impl AzaleaWrite for ClientIntention {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         (*self as i32).azalea_write_var(buf)
     }

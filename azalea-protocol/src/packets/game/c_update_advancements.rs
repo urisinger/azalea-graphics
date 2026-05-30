@@ -5,12 +5,12 @@ use std::{
 
 use azalea_buf::AzBuf;
 use azalea_chat::FormattedText;
-use azalea_core::identifier::Identifier;
 use azalea_inventory::ItemStack;
 use azalea_protocol_macros::ClientboundGamePacket;
+use azalea_registry::identifier::Identifier;
 use indexmap::IndexMap;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundUpdateAdvancements {
     pub reset: bool,
     pub added: Vec<AdvancementHolder>,
@@ -19,10 +19,10 @@ pub struct ClientboundUpdateAdvancements {
     pub show_advancements: bool,
 }
 
-#[derive(Clone, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct Advancement {
     pub parent_id: Option<Identifier>,
-    pub display: Option<DisplayInfo>,
+    pub display: Option<Box<DisplayInfo>>,
     pub requirements: Vec<Vec<String>>,
     pub sends_telemetry_event: bool,
 }
@@ -40,7 +40,37 @@ pub struct DisplayInfo {
     pub y: f32,
 }
 
-impl azalea_buf::AzaleaWrite for DisplayInfo {
+impl AzBuf for DisplayInfo {
+    fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, azalea_buf::BufReadError> {
+        let title = AzBuf::azalea_read(buf)?;
+        let description = AzBuf::azalea_read(buf)?;
+        let icon = AzBuf::azalea_read(buf)?;
+        let frame = AzBuf::azalea_read(buf)?;
+
+        let data = u32::azalea_read(buf)?;
+        let has_background = (data & 0b1) != 0;
+        let show_toast = (data & 0b10) != 0;
+        let hidden = (data & 0b100) != 0;
+
+        let background = if has_background {
+            Some(Identifier::azalea_read(buf)?)
+        } else {
+            None
+        };
+        let x = AzBuf::azalea_read(buf)?;
+        let y = AzBuf::azalea_read(buf)?;
+        Ok(DisplayInfo {
+            title,
+            description,
+            icon,
+            frame,
+            show_toast,
+            hidden,
+            background,
+            x,
+            y,
+        })
+    }
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         self.title.azalea_write(buf)?;
         self.description.azalea_write(buf)?;
@@ -67,40 +97,8 @@ impl azalea_buf::AzaleaWrite for DisplayInfo {
         Ok(())
     }
 }
-impl azalea_buf::AzaleaRead for DisplayInfo {
-    fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, azalea_buf::BufReadError> {
-        let title = azalea_buf::AzaleaRead::azalea_read(buf)?;
-        let description = azalea_buf::AzaleaRead::azalea_read(buf)?;
-        let icon = azalea_buf::AzaleaRead::azalea_read(buf)?;
-        let frame = azalea_buf::AzaleaRead::azalea_read(buf)?;
 
-        let data = u32::azalea_read(buf)?;
-        let has_background = (data & 0b1) != 0;
-        let show_toast = (data & 0b10) != 0;
-        let hidden = (data & 0b100) != 0;
-
-        let background = if has_background {
-            Some(Identifier::azalea_read(buf)?)
-        } else {
-            None
-        };
-        let x = azalea_buf::AzaleaRead::azalea_read(buf)?;
-        let y = azalea_buf::AzaleaRead::azalea_read(buf)?;
-        Ok(DisplayInfo {
-            title,
-            description,
-            icon,
-            frame,
-            show_toast,
-            hidden,
-            background,
-            x,
-            y,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Copy, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Copy, Debug, PartialEq)]
 pub enum FrameType {
     Task = 0,
     Challenge = 1,
@@ -109,12 +107,12 @@ pub enum FrameType {
 
 pub type AdvancementProgress = HashMap<String, CriterionProgress>;
 
-#[derive(Clone, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct CriterionProgress {
     pub date: Option<u64>,
 }
 
-#[derive(Clone, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct AdvancementHolder {
     pub id: Identifier,
     pub value: Advancement,
@@ -122,7 +120,7 @@ pub struct AdvancementHolder {
 
 #[cfg(test)]
 mod tests {
-    use azalea_buf::{AzaleaRead, AzaleaWrite};
+    use azalea_buf::AzBuf;
 
     use super::*;
 
@@ -134,9 +132,9 @@ mod tests {
                 id: Identifier::new("minecraft:test"),
                 value: Advancement {
                     parent_id: None,
-                    display: Some(DisplayInfo {
-                        title: FormattedText::from("title".to_string()),
-                        description: FormattedText::from("description".to_string()),
+                    display: Some(Box::new(DisplayInfo {
+                        title: FormattedText::from("title".to_owned()),
+                        description: FormattedText::from("description".to_owned()),
                         icon: ItemStack::Empty,
                         frame: FrameType::Task,
                         show_toast: true,
@@ -144,7 +142,7 @@ mod tests {
                         background: None,
                         x: 0.0,
                         y: 0.0,
-                    }),
+                    })),
                     requirements: Vec::new(),
                     sends_telemetry_event: false,
                 },
@@ -155,7 +153,7 @@ mod tests {
             progress: [(
                 Identifier::new("minecraft:test3"),
                 [(
-                    "minecraft:test4".to_string(),
+                    "minecraft:test4".to_owned(),
                     CriterionProgress {
                         date: Some(123456789),
                     },

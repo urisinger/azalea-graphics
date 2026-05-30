@@ -12,7 +12,6 @@ raw-window-handle = "0.6"
 vk-mem = "0.5"
 ash-window = "0.13"
 winit = "0.30.12"
-log.workspace = true
 
 egui = "0.32"
 egui-winit = "0.32"
@@ -35,12 +34,14 @@ clap = {version = "4.5.48", features=["derive"]}
 num_cpus = "1.17.0"
 tracing.workspace = true
 azalea-assets.workspace = true
+spirv-std = { version = "0.10.0-alpha.1" }
 
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 env_logger = "0.11"
-anyhow = "1"
+anyhow.workspace = true
 
 [build-dependencies]
-cargo-gpu = {git = "https://github.com/rust-gpu/cargo-gpu"}
+cargo-gpu-install = { version = "0.10.0-alpha.1" }
+anyhow.workspace = true

@@ -2,18 +2,12 @@ mod suggestion_provider;
 mod suggestions;
 mod suggestions_builder;
 
-#[cfg(feature = "azalea-buf")]
-use std::io::{self, Write};
 use std::{
     cmp::Ordering,
     fmt::{self, Display},
     hash::Hash,
 };
 
-#[cfg(feature = "azalea-buf")]
-use azalea_buf::AzaleaWrite;
-#[cfg(feature = "azalea-buf")]
-use azalea_chat::FormattedText;
 pub use suggestion_provider::SuggestionProvider;
 pub use suggestions::Suggestions;
 pub use suggestions_builder::SuggestionsBuilder;
@@ -24,14 +18,14 @@ use crate::context::StringRange;
 ///
 /// The `M` generic is the type of the tooltip, so for example a `String` or
 /// just `()` if you don't care about it.
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Suggestion {
     pub range: StringRange,
     value: SuggestionValue,
     pub tooltip: Option<String>,
 }
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum SuggestionValue {
     Integer(i32),
     Text(String),
@@ -41,7 +35,7 @@ impl Suggestion {
     pub fn new(range: StringRange, text: &str) -> Suggestion {
         Suggestion {
             range,
-            value: SuggestionValue::Text(text.to_string()),
+            value: SuggestionValue::Text(text.to_owned()),
             tooltip: None,
         }
     }
@@ -49,7 +43,7 @@ impl Suggestion {
     pub fn new_with_tooltip(range: StringRange, text: &str, tooltip: String) -> Self {
         Self {
             range,
-            value: SuggestionValue::Text(text.to_string()),
+            value: SuggestionValue::Text(text.to_owned()),
             tooltip: Some(tooltip),
         }
     }
@@ -136,17 +130,5 @@ impl Ord for SuggestionValue {
 impl PartialOrd for SuggestionValue {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-#[cfg(feature = "azalea-buf")]
-impl AzaleaWrite for Suggestion {
-    fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
-        self.value.to_string().azalea_write(buf)?;
-        self.tooltip
-            .clone()
-            .map(FormattedText::from)
-            .azalea_write(buf)?;
-        Ok(())
     }
 }

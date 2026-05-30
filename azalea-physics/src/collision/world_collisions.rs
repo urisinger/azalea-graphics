@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, sync::Arc};
 
 use azalea_block::{BlockState, fluid_state::FluidState};
 use azalea_core::{
@@ -7,14 +7,14 @@ use azalea_core::{
     position::{BlockPos, ChunkBlockPos, ChunkPos, ChunkSectionBlockPos, ChunkSectionPos, Vec3},
 };
 use azalea_inventory::ItemStack;
-use azalea_world::{Chunk, Instance};
+use azalea_world::{Chunk, World};
 use bevy_ecs::entity::Entity;
 use parking_lot::RwLock;
 
 use super::{BLOCK_SHAPE, Shapes};
 use crate::collision::{Aabb, BlockWithShape, VoxelShape};
 
-pub fn get_block_collisions(world: &Instance, aabb: &Aabb) -> Vec<VoxelShape> {
+pub fn get_block_collisions(world: &World, aabb: &Aabb) -> Vec<VoxelShape> {
     let mut state = BlockCollisionsState::new(world, aabb, EntityCollisionContext::of(None));
     let mut block_collisions = Vec::new();
 
@@ -34,7 +34,7 @@ pub fn get_block_collisions(world: &Instance, aabb: &Aabb) -> Vec<VoxelShape> {
     block_collisions
 }
 
-pub fn get_block_and_liquid_collisions(world: &Instance, aabb: &Aabb) -> Vec<VoxelShape> {
+pub fn get_block_and_liquid_collisions(world: &World, aabb: &Aabb) -> Vec<VoxelShape> {
     let mut state = BlockCollisionsState::new(
         world,
         aabb,
@@ -59,7 +59,7 @@ pub fn get_block_and_liquid_collisions(world: &Instance, aabb: &Aabb) -> Vec<Vox
 }
 
 pub struct BlockCollisionsState<'a> {
-    pub world: &'a Instance,
+    pub world: &'a World,
     pub aabb: &'a Aabb,
     pub entity_shape: VoxelShape,
     pub cursor: Cursor3d,
@@ -84,12 +84,11 @@ impl<'a> BlockCollisionsState<'a> {
 
         let item_chunk_pos = ChunkPos::from(item.pos);
         let block_state: BlockState = if item_chunk_pos == initial_chunk_pos {
-            match &initial_chunk {
-                Some(initial_chunk) => initial_chunk
-                    .get_block_state(&ChunkBlockPos::from(item.pos), self.world.chunks.min_y)
-                    .unwrap_or(BlockState::AIR),
-                _ => BlockState::AIR,
-            }
+            initial_chunk
+                .and_then(|chunk| {
+                    chunk.get_block_state(&ChunkBlockPos::from(item.pos), self.world.chunks.min_y())
+                })
+                .unwrap_or(BlockState::AIR)
         } else {
             self.get_block_state(item.pos)
         };
@@ -99,8 +98,7 @@ impl<'a> BlockCollisionsState<'a> {
             return;
         }
 
-        // TODO: continue if self.only_suffocating_blocks and the block is not
-        // suffocating
+        // TODO: if self.only_suffocating_blocks, return if the block isn't suffocating
 
         // if it's a full block do a faster collision check
         if block_state.is_collision_shape_full() {
@@ -115,7 +113,7 @@ impl<'a> BlockCollisionsState<'a> {
             return;
         }
 
-        let block_shape = self.get_block_shape(block_state);
+        let block_shape = self.get_block_shape(block_state, item.pos);
 
         let block_shape = block_shape.move_relative(item.pos.to_vec3_floored());
         // if the entity shape and block shape don't collide, continue
@@ -126,7 +124,7 @@ impl<'a> BlockCollisionsState<'a> {
         block_collisions.push(block_shape);
     }
 
-    pub fn new(world: &'a Instance, aabb: &'a Aabb, context: EntityCollisionContext) -> Self {
+    pub fn new(world: &'a World, aabb: &'a Aabb, context: EntityCollisionContext) -> Self {
         let origin = BlockPos {
             x: (aabb.min.x - EPSILON).floor() as i32 - 1,
             y: (aabb.min.y - EPSILON).floor() as i32 - 1,
@@ -176,7 +174,7 @@ impl<'a> BlockCollisionsState<'a> {
     }
 
     fn get_block_state(&mut self, block_pos: BlockPos) -> BlockState {
-        if block_pos.y < self.world.chunks.min_y {
+        if block_pos.y < self.world.chunks.min_y() {
             // below the world
             return BlockState::AIR;
         }
@@ -198,8 +196,7 @@ impl<'a> BlockCollisionsState<'a> {
 
         let sections = &chunk.sections;
         let section_index =
-            azalea_world::chunk_storage::section_index(block_pos.y, self.world.chunks.min_y)
-                as usize;
+            azalea_world::chunk::section_index(block_pos.y, self.world.chunks.min_y()) as usize;
 
         let Some(section) = sections.get(section_index) else {
             return BlockState::AIR;
@@ -207,22 +204,27 @@ impl<'a> BlockCollisionsState<'a> {
 
         self.cached_sections.push((section_pos, section.clone()));
 
-        // println!("chunk section palette: {:?}", section.states.palette);
-        // println!("chunk section data: {:?}", section.states.storage.data);
-        // println!("biome length: {}", section.biomes.storage.data.len());
-
         section.get_block_state(section_block_pos)
     }
 
-    fn get_block_shape(&mut self, block_state: BlockState) -> &'static VoxelShape {
+    fn get_block_shape(
+        &mut self,
+        block_state: BlockState,
+        pos: BlockPos,
+    ) -> Cow<'static, VoxelShape> {
+        // TODO (2026-05-06): does this cache still help? i'm pretty sure getting shapes
+        // has been optimized since this cache was implemented
         for (cached_block_state, cached_shape) in &self.cached_block_shapes {
             if block_state == *cached_block_state {
-                return cached_shape;
+                return Cow::Borrowed(cached_shape);
             }
         }
 
-        let shape = block_state.collision_shape();
-        self.cached_block_shapes.push((block_state, shape));
+        let shape = block_state.collision_shape(pos);
+        // if it has a random offset then we can't cache them, and it'll be a Cow::Owned
+        if let Cow::Borrowed(shape) = shape {
+            self.cached_block_shapes.push((block_state, shape));
+        }
 
         shape
     }
@@ -283,7 +285,7 @@ impl CanStandOnFluidPredicate {
 /// a performance loss for Azalea. If this ever turns out to be a bottleneck,
 /// then maybe you should try having it do that instead.
 pub fn for_entities_in_chunks_colliding_with(
-    world: &Instance,
+    world: &World,
     aabb: &Aabb,
     mut consumer: impl FnMut(ChunkPos, &HashSet<Entity>),
 ) {

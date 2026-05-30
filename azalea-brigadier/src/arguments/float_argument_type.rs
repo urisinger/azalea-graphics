@@ -43,7 +43,7 @@ impl ArgumentType for Float {
     fn examples(&self) -> Vec<String> {
         vec!["0", "1.2", ".5", "-1", "-.5", "-1234.56"]
             .into_iter()
-            .map(|s| s.to_string())
+            .map(|s| s.to_owned())
             .collect()
     }
 }
@@ -51,7 +51,7 @@ impl ArgumentType for Float {
 pub fn float() -> impl ArgumentType {
     Float::default()
 }
-pub fn get_float<S>(context: &CommandContext<S>, name: &str) -> Option<f32> {
+pub fn get_float<S, R>(context: &CommandContext<S, R>, name: &str) -> Option<f32> {
     context
         .argument(name)
         .unwrap()

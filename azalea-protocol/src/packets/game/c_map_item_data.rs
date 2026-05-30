@@ -1,10 +1,10 @@
 use std::io::{self, Cursor, Write};
 
-use azalea_buf::{AzBuf, AzaleaRead, AzaleaWrite};
+use azalea_buf::AzBuf;
 use azalea_chat::FormattedText;
 use azalea_protocol_macros::ClientboundGamePacket;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundMapItemData {
     #[var]
     pub map_id: u32,
@@ -14,7 +14,7 @@ pub struct ClientboundMapItemData {
     pub color_patch: OptionalMapPatch,
 }
 
-#[derive(Clone, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct MapDecoration {
     pub decoration_type: DecorationType,
     pub x: i8,
@@ -25,10 +25,10 @@ pub struct MapDecoration {
     pub name: Option<FormattedText>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OptionalMapPatch(pub Option<MapPatch>);
 
-impl AzaleaRead for OptionalMapPatch {
+impl AzBuf for OptionalMapPatch {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, azalea_buf::BufReadError> {
         let pos = buf.position();
         Ok(Self(if u8::azalea_read(buf)? == 0 {
@@ -38,9 +38,6 @@ impl AzaleaRead for OptionalMapPatch {
             Some(MapPatch::azalea_read(buf)?)
         }))
     }
-}
-
-impl AzaleaWrite for OptionalMapPatch {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         match &self.0 {
             None => 0u8.azalea_write(buf),
@@ -49,7 +46,7 @@ impl AzaleaWrite for OptionalMapPatch {
     }
 }
 
-#[derive(Debug, Clone, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct MapPatch {
     pub width: u8,
     pub height: u8,
@@ -58,7 +55,7 @@ pub struct MapPatch {
     pub map_colors: Vec<u8>,
 }
 
-#[derive(Clone, Copy, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Copy, Debug, PartialEq)]
 pub enum DecorationType {
     Player,
     Frame,

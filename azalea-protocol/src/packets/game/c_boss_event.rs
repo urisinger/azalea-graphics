@@ -3,13 +3,13 @@ use std::{
     io::{Cursor, Write},
 };
 
-use azalea_buf::{AzBuf, AzaleaRead, AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
+use azalea_buf::{AzBuf, AzBufVar, BufReadError};
 use azalea_chat::FormattedText;
 use azalea_core::bitset::FixedBitSet;
 use azalea_protocol_macros::ClientboundGamePacket;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundBossEvent {
     pub id: Uuid,
     pub operation: Operation,
@@ -25,7 +25,7 @@ pub enum Operation {
     UpdateProperties(Properties),
 }
 
-impl AzaleaRead for Operation {
+impl AzBuf for Operation {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let operation_id = u32::azalea_read_var(buf)?;
         Ok(match operation_id {
@@ -42,9 +42,6 @@ impl AzaleaRead for Operation {
             }
         })
     }
-}
-
-impl AzaleaWrite for Operation {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         match self {
             Operation::Add(add) => {
@@ -75,7 +72,7 @@ impl AzaleaWrite for Operation {
     }
 }
 
-#[derive(Clone, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct AddOperation {
     pub name: FormattedText,
     pub progress: f32,
@@ -83,7 +80,7 @@ pub struct AddOperation {
     pub properties: Properties,
 }
 
-#[derive(Clone, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub struct Style {
     pub color: BossBarColor,
     pub overlay: BossBarOverlay,
@@ -116,7 +113,7 @@ pub struct Properties {
     pub create_world_fog: bool,
 }
 
-impl AzaleaRead for Properties {
+impl AzBuf for Properties {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let set = FixedBitSet::<3>::azalea_read(buf)?;
         Ok(Self {
@@ -125,9 +122,6 @@ impl AzaleaRead for Properties {
             create_world_fog: set.index(2),
         })
     }
-}
-
-impl AzaleaWrite for Properties {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         let mut set = FixedBitSet::<3>::new();
         if self.darken_screen {

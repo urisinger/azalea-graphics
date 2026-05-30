@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use azalea_block::BlockState;
 use azalea_core::{
+    delta::LpVec3,
     direction::Direction,
     game_type::GameMode,
     hit_result::{BlockHitResult, HitResult},
@@ -17,29 +18,27 @@ use azalea_entity::{
     },
     clamp_look_direction,
     indexing::EntityIdIndex,
+    inventory::Inventory,
 };
 use azalea_inventory::{ItemStack, ItemStackData, components};
 use azalea_physics::{
-    PhysicsSystems, collision::entity_collisions::update_last_bounding_box,
-    local_player::PhysicsState,
+    PhysicsSystems, client_movement::ClientMovementState,
+    collision::entity_collisions::update_last_bounding_box,
 };
 use azalea_protocol::packets::game::{
-    ServerboundInteract, ServerboundUseItem,
-    s_interact::{self, InteractionHand},
-    s_swing::ServerboundSwing,
-    s_use_item_on::ServerboundUseItemOn,
+    ServerboundInteract, ServerboundUseItem, s_interact::InteractionHand,
+    s_swing::ServerboundSwing, s_use_item_on::ServerboundUseItemOn,
 };
-use azalea_world::Instance;
+use azalea_world::World;
 use bevy_app::{App, Plugin, Update};
 use bevy_ecs::prelude::*;
 use tracing::warn;
 
 use super::mining::Mining;
 use crate::{
-    Client,
     attack::handle_attack_event,
     interact::pick::{HitResultComponent, update_hit_result_component},
-    inventory::{Inventory, InventorySystems},
+    inventory::InventorySystems,
     local_player::{LocalGameMode, PermissionLevel},
     movement::MoveEventsSystems,
     packet::game::SendGamePacketEvent,
@@ -54,12 +53,7 @@ impl Plugin for InteractPlugin {
             .add_systems(
                 Update,
                 (
-                    (
-                        update_attributes_for_held_item,
-                        update_attributes_for_gamemode,
-                    )
-                        .in_set(UpdateAttributesSystems)
-                        .chain(),
+                    update_attributes_for_gamemode,
                     handle_start_use_item_event,
                     update_hit_result_component
                         .after(clamp_look_direction)
@@ -80,58 +74,9 @@ impl Plugin for InteractPlugin {
     }
 }
 
-#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone)]
-pub struct UpdateAttributesSystems;
-
-impl Client {
-    /// Right-click a block.
-    ///
-    /// The behavior of this depends on the target block,
-    /// and it'll either place the block you're holding in your hand or use the
-    /// block you clicked (like toggling a lever).
-    ///
-    /// Note that this may trigger anticheats as it doesn't take into account
-    /// whether you're actually looking at the block.
-    pub fn block_interact(&self, position: BlockPos) {
-        self.ecs.lock().write_message(StartUseItemEvent {
-            entity: self.entity,
-            hand: InteractionHand::MainHand,
-            force_block: Some(position),
-        });
-    }
-
-    /// Right-click an entity.
-    ///
-    /// This can click through walls, which may trigger anticheats. If that
-    /// behavior isn't desired, consider using [`Client::start_use_item`]
-    /// instead.
-    pub fn entity_interact(&self, entity: Entity) {
-        self.ecs.lock().trigger(EntityInteractEvent {
-            client: self.entity,
-            target: entity,
-            location: None,
-        });
-    }
-
-    /// Right-click the currently held item.
-    ///
-    /// If the item is consumable, then it'll act as if right-click was held
-    /// until the item finishes being consumed. You can use this to eat food.
-    ///
-    /// If we're looking at a block or entity, then it will be clicked. Also see
-    /// [`Client::block_interact`] and [`Client::entity_interact`].
-    pub fn start_use_item(&self) {
-        self.ecs.lock().write_message(StartUseItemEvent {
-            entity: self.entity,
-            hand: InteractionHand::MainHand,
-            force_block: None,
-        });
-    }
-}
-
 /// A component that contains information about our local block state
 /// predictions.
-#[derive(Component, Clone, Debug, Default)]
+#[derive(Clone, Component, Debug, Default)]
 pub struct BlockStatePredictionHandler {
     /// The total number of changes that this client has made to blocks.
     seq: u32,
@@ -194,7 +139,7 @@ impl BlockStatePredictionHandler {
         }
     }
 
-    pub fn end_prediction_up_to(&mut self, seq: u32, world: &Instance) {
+    pub fn end_prediction_up_to(&mut self, seq: u32, world: &World) {
         let mut to_remove = Vec::new();
         for (pos, state) in &self.server_state {
             if state.seq > seq {
@@ -349,7 +294,7 @@ pub fn handle_start_use_item_queued(
 
 /// An ECS `Event` that makes the client tell the server that we right-clicked
 /// an entity.
-#[derive(EntityEvent, Clone, Debug)]
+#[derive(Clone, Debug, EntityEvent)]
 pub struct EntityInteractEvent {
     #[event_target]
     pub client: Entity,
@@ -367,7 +312,7 @@ pub struct EntityInteractEvent {
 pub fn handle_entity_interact(
     trigger: On<EntityInteractEvent>,
     mut commands: Commands,
-    client_query: Query<(&PhysicsState, &EntityIdIndex, &HitResultComponent)>,
+    client_query: Query<(&ClientMovementState, &EntityIdIndex, &HitResultComponent)>,
     target_query: Query<&Position>,
 ) {
     let Some((physics_state, entity_id_index, hit_result)) = client_query.get(trigger.client).ok()
@@ -404,12 +349,10 @@ pub fn handle_entity_interact(
         }
     };
 
-    let mut interact = ServerboundInteract {
+    let interact = ServerboundInteract {
         entity_id,
-        action: s_interact::ActionType::InteractAt {
-            location,
-            hand: InteractionHand::MainHand,
-        },
+        hand: InteractionHand::MainHand,
+        location: LpVec3::from(location),
         using_secondary_action: physics_state.trying_to_crouch,
     };
     commands.trigger(SendGamePacketEvent::new(trigger.client, interact.clone()));
@@ -418,11 +361,8 @@ pub fn handle_entity_interact(
     // in certain cases when interacting with armor stands
     let consumes_action = false;
     if !consumes_action {
-        // but yes, most of the time vanilla really does send two interact packets like
-        // this
-        interact.action = s_interact::ActionType::Interact {
-            hand: InteractionHand::MainHand,
-        };
+        // but yes, most of the time vanilla really does send two identical interact
+        // packets like this
         commands.trigger(SendGamePacketEvent::new(trigger.client, interact));
     }
 }
@@ -431,10 +371,10 @@ pub fn handle_entity_interact(
 ///
 /// If this is false, then we can interact with the block.
 ///
-/// Passing the inventory, block position, and instance is necessary for the
-/// adventure mode check.
+/// The world, block position, and inventory are used for the adventure mode
+/// check.
 pub fn check_is_interaction_restricted(
-    instance: &Instance,
+    world: &World,
     block_pos: BlockPos,
     game_mode: &GameMode,
     inventory: &Inventory,
@@ -447,7 +387,7 @@ pub fn check_is_interaction_restricted(
             let held_item = inventory.held_item();
             match &held_item {
                 ItemStack::Present(item) => {
-                    let block = instance.chunks.get_block_state(block_pos);
+                    let block = world.chunks.get_block_state(block_pos);
                     let Some(block) = block else {
                         // block isn't loaded so just say that it is restricted
                         return true;
@@ -496,7 +436,7 @@ pub fn can_use_game_master_blocks(
 ///
 /// This is purely a visual effect and won't interact with anything in the
 /// world.
-#[derive(EntityEvent, Clone, Debug)]
+#[derive(Clone, Debug, EntityEvent)]
 pub struct SwingArmEvent {
     pub entity: Entity,
 }
@@ -507,62 +447,6 @@ pub fn handle_swing_arm_trigger(swing_arm: On<SwingArmEvent>, mut commands: Comm
             hand: InteractionHand::MainHand,
         },
     ));
-}
-
-#[allow(clippy::type_complexity)]
-fn update_attributes_for_held_item(
-    mut query: Query<(&mut Attributes, &Inventory), (With<LocalEntity>, Changed<Inventory>)>,
-) {
-    for (mut attributes, inventory) in &mut query {
-        let held_item = inventory.held_item();
-
-        use azalea_registry::Item;
-        let added_attack_speed = match held_item.kind() {
-            Item::WoodenSword => -2.4,
-            Item::WoodenShovel => -3.0,
-            Item::WoodenPickaxe => -2.8,
-            Item::WoodenAxe => -3.2,
-            Item::WoodenHoe => -3.0,
-
-            Item::StoneSword => -2.4,
-            Item::StoneShovel => -3.0,
-            Item::StonePickaxe => -2.8,
-            Item::StoneAxe => -3.2,
-            Item::StoneHoe => -2.0,
-
-            Item::GoldenSword => -2.4,
-            Item::GoldenShovel => -3.0,
-            Item::GoldenPickaxe => -2.8,
-            Item::GoldenAxe => -3.0,
-            Item::GoldenHoe => -3.0,
-
-            Item::IronSword => -2.4,
-            Item::IronShovel => -3.0,
-            Item::IronPickaxe => -2.8,
-            Item::IronAxe => -3.1,
-            Item::IronHoe => -1.0,
-
-            Item::DiamondSword => -2.4,
-            Item::DiamondShovel => -3.0,
-            Item::DiamondPickaxe => -2.8,
-            Item::DiamondAxe => -3.0,
-            Item::DiamondHoe => 0.0,
-
-            Item::NetheriteSword => -2.4,
-            Item::NetheriteShovel => -3.0,
-            Item::NetheritePickaxe => -2.8,
-            Item::NetheriteAxe => -3.0,
-            Item::NetheriteHoe => 0.0,
-
-            Item::Trident => -2.9,
-            _ => 0.,
-        };
-        attributes
-            .attack_speed
-            .insert(azalea_entity::attributes::base_attack_speed_modifier(
-                added_attack_speed,
-            ));
-    }
 }
 
 #[allow(clippy::type_complexity)]

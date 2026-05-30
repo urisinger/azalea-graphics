@@ -9,17 +9,16 @@ use std::{
 };
 
 use azalea::{
-    blocks::BlockState,
+    block::BlockState,
     core::{
         position::{ChunkPos, ChunkSectionPos},
-        registry_holder::{BiomeData, RegistryHolder},
+        registry_holder::RegistryHolder,
     },
-    registry::{Biome, Block, DataRegistry},
+    registry::{ DataRegistry, builtin::BlockKind},
 };
 use azalea_assets::Assets;
 use crossbeam::channel::{Receiver, Sender, unbounded};
 use glam::IVec3;
-use log::error;
 use parking_lot::{Mutex, RwLock};
 use simdnbt::Deserialize;
 
@@ -44,7 +43,7 @@ pub struct MeshData {
 }
 
 struct WorkerContext {
-    world: Arc<RwLock<azalea::world::Instance>>,
+    world: Arc<RwLock<azalea::world::World>>,
     dirty: Arc<Mutex<HashSet<ChunkSectionPos>>>,
     assets: Arc<Assets>,
     biome_cache: BiomeCache,
@@ -61,7 +60,7 @@ pub struct Mesher {
     result_rx: Receiver<MeshResult>,
     visibility_tx: Sender<VisibilitySnapshot>,
 
-    pub world: Arc<RwLock<azalea::world::Instance>>,
+    pub world: Arc<RwLock<azalea::world::World>>,
     dirty: Arc<Mutex<HashSet<ChunkSectionPos>>>,
     assets: Arc<Assets>,
 
@@ -455,10 +454,19 @@ impl<'a> MeshBuilder<'a> {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct BiomeData {
+    pub temperature: f32,
+    pub downfall: f32,
+    pub has_precipitation: bool,
+    pub effects: BiomeEffects,
+}
+
 #[derive(Clone, Debug)]
 pub struct BiomeCache {
     pub biomes: Vec<BiomeData>,
 }
+
 
 impl BiomeCache {
     fn from_registries(registries: &RegistryHolder) -> Self {
@@ -520,7 +528,7 @@ pub fn mesh_section(
                     .unwrap_or(BlockState::AIR);
 
                 if !block.is_air() {
-                    if Block::from(block) == Block::Water {
+                    if BlockKind::from(block) == BlockKind::Water {
                         mesh_water(block, local, &mut builder);
                     }
 

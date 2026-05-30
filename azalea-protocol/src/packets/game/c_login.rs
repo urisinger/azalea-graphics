@@ -1,7 +1,7 @@
 use azalea_buf::AzBuf;
-use azalea_core::identifier::Identifier;
+use azalea_registry::identifier::Identifier;
 use azalea_protocol_macros::ClientboundGamePacket;
-use azalea_world::MinecraftEntityId;
+use azalea_core::entity_id::MinecraftEntityId;
 
 use crate::packets::common::CommonPlayerSpawnInfo;
 
@@ -9,7 +9,7 @@ use crate::packets::common::CommonPlayerSpawnInfo;
 ///
 /// This packet contains information about the state of the player, the
 /// world, and the registry.
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundLogin {
     pub player_id: MinecraftEntityId,
     pub hardcore: bool,

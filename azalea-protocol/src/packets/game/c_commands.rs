@@ -1,18 +1,19 @@
 use std::io::{self, Cursor, Write};
 
-use azalea_buf::{AzBuf, AzaleaRead, AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
-use azalea_core::{bitset::FixedBitSet, identifier::Identifier};
+use azalea_buf::{AzBuf, AzBufVar, BufReadError};
+use azalea_core::bitset::FixedBitSet;
 use azalea_protocol_macros::ClientboundGamePacket;
+use azalea_registry::identifier::Identifier;
 use tracing::warn;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundCommands {
     pub entries: Vec<BrigadierNodeStub>,
     #[var]
     pub root_index: u32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct BrigadierNodeStub {
     pub is_executable: bool,
     pub children: Vec<u32>,
@@ -21,7 +22,7 @@ pub struct BrigadierNodeStub {
     pub is_restricted: bool,
 }
 
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Debug, Eq)]
 pub struct BrigadierNumber<T> {
     pub min: Option<T>,
     pub max: Option<T>,
@@ -45,7 +46,7 @@ impl<T: PartialEq> PartialEq for BrigadierNumber<T> {
     }
 }
 
-impl<T: AzaleaRead> AzaleaRead for BrigadierNumber<T> {
+impl<T: AzBuf> AzBuf for BrigadierNumber<T> {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let flags = FixedBitSet::<2>::azalea_read(buf)?;
         let min = if flags.index(0) {
@@ -60,8 +61,6 @@ impl<T: AzaleaRead> AzaleaRead for BrigadierNumber<T> {
         };
         Ok(BrigadierNumber { min, max })
     }
-}
-impl<T: AzaleaWrite> AzaleaWrite for BrigadierNumber<T> {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         let mut flags = FixedBitSet::<2>::new();
         if self.min.is_some() {
@@ -81,7 +80,7 @@ impl<T: AzaleaWrite> AzaleaWrite for BrigadierNumber<T> {
     }
 }
 
-#[derive(Debug, Clone, Copy, AzBuf, PartialEq, Eq)]
+#[derive(AzBuf, Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BrigadierString {
     /// Reads a single word
     SingleWord = 0,
@@ -93,7 +92,7 @@ pub enum BrigadierString {
 }
 
 // see ArgumentTypeInfos.java
-#[derive(Debug, Clone, PartialEq, AzBuf)]
+#[derive(AzBuf, Clone, Debug, PartialEq)]
 pub enum BrigadierParser {
     Bool,
     Float(BrigadierNumber<f32>),
@@ -154,12 +153,12 @@ pub enum BrigadierParser {
     Uuid,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EntityParser {
     pub single: bool,
     pub players_only: bool,
 }
-impl AzaleaRead for EntityParser {
+impl AzBuf for EntityParser {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let flags = FixedBitSet::<2>::azalea_read(buf)?;
         Ok(EntityParser {
@@ -167,8 +166,6 @@ impl AzaleaRead for EntityParser {
             players_only: flags.index(1),
         })
     }
-}
-impl AzaleaWrite for EntityParser {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         let mut flags = FixedBitSet::<2>::new();
         if self.single {
@@ -183,7 +180,7 @@ impl AzaleaWrite for EntityParser {
 }
 
 // TODO: BrigadierNodeStub should have more stuff
-impl AzaleaRead for BrigadierNodeStub {
+impl AzBuf for BrigadierNodeStub {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let flags = FixedBitSet::<8>::azalea_read(buf)?;
         if flags.index(6) || flags.index(7) {
@@ -246,9 +243,6 @@ impl AzaleaRead for BrigadierNodeStub {
             })
         }
     }
-}
-
-impl AzaleaWrite for BrigadierNodeStub {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         let mut flags = FixedBitSet::<4>::new();
         if self.is_executable {
@@ -309,7 +303,7 @@ impl AzaleaWrite for BrigadierNodeStub {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum NodeType {
     Root,
     Literal {
@@ -359,7 +353,7 @@ mod tests {
             children: vec![],
             redirect_node: None,
             node_type: NodeType::Literal {
-                name: "String".to_string(),
+                name: "String".to_owned(),
             },
             is_restricted: false,
         };
@@ -377,7 +371,7 @@ mod tests {
             children: vec![6, 9],
             redirect_node: Some(5),
             node_type: NodeType::Argument {
-                name: "position".to_string(),
+                name: "position".to_owned(),
                 parser: BrigadierParser::Vec3,
                 suggestions_type: Some(Identifier::new("minecraft:test_suggestion")),
             },

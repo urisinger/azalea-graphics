@@ -16,10 +16,10 @@ pub enum StringArgument {
 impl ArgumentType for StringArgument {
     fn parse(&self, reader: &mut StringReader) -> Result<Arc<dyn Any>, CommandSyntaxError> {
         let result = match self {
-            StringArgument::SingleWord => reader.read_unquoted_string().to_string(),
+            StringArgument::SingleWord => reader.read_unquoted_string().to_owned(),
             StringArgument::QuotablePhrase => reader.read_string()?,
             StringArgument::GreedyPhrase => {
-                let text = reader.remaining().to_string();
+                let text = reader.remaining().to_owned();
                 reader.cursor = reader.total_length();
                 text
             }
@@ -34,7 +34,7 @@ impl ArgumentType for StringArgument {
             StringArgument::GreedyPhrase => vec!["word", "words with spaces", "\"and symbols\""],
         }
         .into_iter()
-        .map(|s| s.to_string())
+        .map(|s| s.to_owned())
         .collect()
     }
 }
@@ -52,7 +52,7 @@ pub fn string() -> impl ArgumentType {
 pub fn greedy_string() -> impl ArgumentType {
     StringArgument::GreedyPhrase
 }
-pub fn get_string<S>(context: &CommandContext<S>, name: &str) -> Option<String> {
+pub fn get_string<S, R>(context: &CommandContext<S, R>, name: &str) -> Option<String> {
     context
         .argument(name)
         .unwrap()

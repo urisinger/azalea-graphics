@@ -3,15 +3,13 @@ use std::{
     sync::Arc,
 };
 
-use azalea_buf::{
-    AzBuf, AzaleaRead, AzaleaReadLimited, AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError,
-};
+use azalea_buf::{AzBuf, AzBufLimited, AzBufVar, BufReadError};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
 /// Information about the player that's usually stored on Mojang's servers.
-#[derive(Debug, Clone, Default, Eq, PartialEq, AzBuf)]
+#[derive(AzBuf, Clone, Debug, Default, Eq, PartialEq)]
 pub struct GameProfile {
     /// The UUID of the player.
     ///
@@ -49,11 +47,11 @@ impl From<SerializableGameProfile> for GameProfile {
 }
 
 /// The properties of the player, including their in-game skin and cape.
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct GameProfileProperties {
     pub map: IndexMap<String, ProfilePropertyValue>,
 }
-impl AzaleaRead for GameProfileProperties {
+impl AzBuf for GameProfileProperties {
     fn azalea_read(buf: &mut io::Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let mut properties = IndexMap::new();
         let properties_len = u32::azalea_read_var(buf)?;
@@ -70,8 +68,6 @@ impl AzaleaRead for GameProfileProperties {
         }
         Ok(GameProfileProperties { map: properties })
     }
-}
-impl AzaleaWrite for GameProfileProperties {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         (self.map.len() as u64).azalea_write_var(buf)?;
         for (key, value) in &self.map {
@@ -82,19 +78,17 @@ impl AzaleaWrite for GameProfileProperties {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfilePropertyValue {
     pub value: String,
     pub signature: Option<String>,
 }
-impl AzaleaRead for ProfilePropertyValue {
+impl AzBuf for ProfilePropertyValue {
     fn azalea_read(buf: &mut io::Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let value = String::azalea_read_limited(buf, 32767)?;
         let signature = Option::<String>::azalea_read_limited(buf, 1024)?;
         Ok(ProfilePropertyValue { value, signature })
     }
-}
-impl AzaleaWrite for ProfilePropertyValue {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         self.value.azalea_write(buf)?;
         self.signature.azalea_write(buf)?;
@@ -102,7 +96,7 @@ impl AzaleaWrite for ProfilePropertyValue {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SerializableGameProfile {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -125,7 +119,7 @@ impl From<GameProfile> for SerializableGameProfile {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct SerializableProfileProperties {
     pub list: Vec<SerializableProfilePropertyValue>,
@@ -135,7 +129,7 @@ impl SerializableProfileProperties {
         self.list.is_empty()
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SerializableProfilePropertyValue {
     pub name: String,
     pub value: String,
@@ -202,14 +196,14 @@ mod tests {
             profile,
             GameProfile {
                 uuid: Uuid::parse_str("f1a2b3c4-d5e6-f7a8-b9c0-d1e2f3a4b5c6").unwrap(),
-                name: "Notch".to_string(),
+                name: "Notch".to_owned(),
                 properties: {
                     let mut map = IndexMap::new();
                     map.insert(
-                        "qwer".to_string(),
+                        "qwer".to_owned(),
                         ProfilePropertyValue {
-                            value: "asdf".to_string(),
-                            signature: Some("zxcv".to_string()),
+                            value: "asdf".to_owned(),
+                            signature: Some("zxcv".to_owned()),
                         },
                     );
                     GameProfileProperties { map }.into()

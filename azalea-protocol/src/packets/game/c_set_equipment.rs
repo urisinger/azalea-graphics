@@ -1,11 +1,11 @@
 use std::io::{self, Cursor, Write};
 
-use azalea_buf::{AzBuf, AzaleaRead, AzaleaWrite, BufReadError};
-use azalea_inventory::ItemStack;
+use azalea_buf::{AzBuf, BufReadError};
+use azalea_core::entity_id::MinecraftEntityId;
+use azalea_inventory::{ItemStack, components::EquipmentSlot};
 use azalea_protocol_macros::ClientboundGamePacket;
-use azalea_world::MinecraftEntityId;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundSetEquipment {
     #[var]
     pub entity_id: MinecraftEntityId,
@@ -17,7 +17,7 @@ pub struct EquipmentSlots {
     pub slots: Vec<(EquipmentSlot, ItemStack)>,
 }
 
-impl AzaleaRead for EquipmentSlots {
+impl AzBuf for EquipmentSlots {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let mut slots = vec![];
 
@@ -38,8 +38,6 @@ impl AzaleaRead for EquipmentSlots {
 
         Ok(EquipmentSlots { slots })
     }
-}
-impl AzaleaWrite for EquipmentSlots {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         for i in 0..self.slots.len() {
             let (equipment_slot, item) = &self.slots[i];
@@ -55,27 +53,21 @@ impl AzaleaWrite for EquipmentSlots {
     }
 }
 
-#[derive(Clone, Debug, Copy, AzBuf, PartialEq)]
-pub enum EquipmentSlot {
-    MainHand = 0,
-    OffHand = 1,
-    Feet = 2,
-    Legs = 3,
-    Chest = 4,
-    Head = 5,
-}
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
 
-impl EquipmentSlot {
-    #[must_use]
-    pub fn from_byte(byte: u8) -> Option<Self> {
-        match byte {
-            0 => Some(EquipmentSlot::MainHand),
-            1 => Some(EquipmentSlot::OffHand),
-            2 => Some(EquipmentSlot::Feet),
-            3 => Some(EquipmentSlot::Legs),
-            4 => Some(EquipmentSlot::Chest),
-            5 => Some(EquipmentSlot::Head),
-            _ => None,
-        }
+    use azalea_buf::AzBuf;
+
+    use super::*;
+
+    #[test]
+    fn test_read_lifesteal_net_set_equipment() {
+        let contents = [1, 128, 0, 129, 0, 130, 0, 131, 0, 132, 0, 133, 0, 7, 0];
+        let mut buf = Cursor::new(contents.as_slice());
+        let packet = ClientboundSetEquipment::azalea_read(&mut buf).unwrap();
+        println!("{packet:?}");
+
+        assert_eq!(buf.position(), contents.len() as u64);
     }
 }

@@ -36,6 +36,7 @@ nohash-hasher.workspace = true
 num-format.workspace = true
 num-traits.workspace = true
 parking_lot.workspace = true
+radix-heap.workspace = true
 rustc-hash.workspace = true
 serde = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -46,9 +47,9 @@ uuid.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
+eyre.workspace = true
 parking_lot = { workspace = true, features = ["deadlock_detection"] }
 rand.workspace = true
-anyhow.workspace = true
 bevy_log.workspace = true
 
 [features]
@@ -58,6 +59,12 @@ log = ["azalea-client/log"]
 serde = ["dep:serde", "azalea-registry/serde", "azalea-world/serde"]
 packet-event = ["azalea-client/packet-event"]
 online-mode = ["azalea-client/online-mode"]
+
+[[example]]
+name = "testbot"
+# setting this to true for one example makes it work for all of them.
+# see https://doc.rust-lang.org/nightly/cargo/reference/unstable.html#scrape-examples
+doc-scrape-examples = true
 
 [[bench]]
 name = "pathfinder"

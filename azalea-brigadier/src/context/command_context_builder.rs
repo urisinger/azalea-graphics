@@ -17,20 +17,20 @@ use crate::{
     tree::{Command, CommandNode},
 };
 
-pub struct CommandContextBuilder<'a, S> {
+pub struct CommandContextBuilder<'a, S, R> {
     pub arguments: HashMap<String, ParsedArgument>,
-    pub root: Arc<RwLock<CommandNode<S>>>,
-    pub nodes: Vec<ParsedCommandNode<S>>,
-    pub dispatcher: &'a CommandDispatcher<S>,
+    pub root: Arc<RwLock<CommandNode<S, R>>>,
+    pub nodes: Vec<ParsedCommandNode<S, R>>,
+    pub dispatcher: &'a CommandDispatcher<S, R>,
     pub source: Arc<S>,
-    pub command: Command<S>,
-    pub child: Option<Rc<CommandContextBuilder<'a, S>>>,
+    pub command: Command<S, R>,
+    pub child: Option<Rc<CommandContextBuilder<'a, S, R>>>,
     pub range: StringRange,
-    pub modifier: Option<Arc<RedirectModifier<S>>>,
+    pub modifier: Option<Arc<RedirectModifier<S, R>>>,
     pub forks: bool,
 }
 
-impl<S> Clone for CommandContextBuilder<'_, S> {
+impl<S, R> Clone for CommandContextBuilder<'_, S, R> {
     fn clone(&self) -> Self {
         Self {
             arguments: self.arguments.clone(),
@@ -47,11 +47,11 @@ impl<S> Clone for CommandContextBuilder<'_, S> {
     }
 }
 
-impl<'a, S> CommandContextBuilder<'a, S> {
+impl<'a, S, R> CommandContextBuilder<'a, S, R> {
     pub fn new(
-        dispatcher: &'a CommandDispatcher<S>,
+        dispatcher: &'a CommandDispatcher<S, R>,
         source: Arc<S>,
-        root_node: Arc<RwLock<CommandNode<S>>>,
+        root_node: Arc<RwLock<CommandNode<S, R>>>,
         start: usize,
     ) -> Self {
         Self {
@@ -68,19 +68,19 @@ impl<'a, S> CommandContextBuilder<'a, S> {
         }
     }
 
-    pub fn with_command(&mut self, command: &Command<S>) -> &Self {
+    pub fn with_command(&mut self, command: &Command<S, R>) -> &Self {
         self.command.clone_from(command);
         self
     }
-    pub fn with_child(&mut self, child: Rc<CommandContextBuilder<'a, S>>) -> &Self {
+    pub fn with_child(&mut self, child: Rc<CommandContextBuilder<'a, S, R>>) -> &Self {
         self.child = Some(child);
         self
     }
     pub fn with_argument(&mut self, name: &str, argument: ParsedArgument) -> &Self {
-        self.arguments.insert(name.to_string(), argument);
+        self.arguments.insert(name.to_owned(), argument);
         self
     }
-    pub fn with_node(&mut self, node: Arc<RwLock<CommandNode<S>>>, range: StringRange) -> &Self {
+    pub fn with_node(&mut self, node: Arc<RwLock<CommandNode<S, R>>>, range: StringRange) -> &Self {
         self.nodes.push(ParsedCommandNode {
             node: node.clone(),
             range,
@@ -91,7 +91,7 @@ impl<'a, S> CommandContextBuilder<'a, S> {
         self
     }
 
-    pub fn build(&self, input: &str) -> CommandContext<S> {
+    pub fn build(&self, input: &str) -> CommandContext<S, R> {
         CommandContext {
             arguments: self.arguments.clone(),
             root_node: self.root.clone(),
@@ -102,11 +102,11 @@ impl<'a, S> CommandContextBuilder<'a, S> {
             range: self.range,
             forks: self.forks,
             modifier: self.modifier.clone(),
-            input: input.to_string(),
+            input: input.to_owned(),
         }
     }
 
-    pub fn find_suggestion_context(&self, cursor: usize) -> SuggestionContext<S> {
+    pub fn find_suggestion_context(&self, cursor: usize) -> SuggestionContext<S, R> {
         if self.range.start() > cursor {
             panic!("Can't find node before cursor");
         }
@@ -144,7 +144,7 @@ impl<'a, S> CommandContextBuilder<'a, S> {
     }
 }
 
-impl<S> Debug for CommandContextBuilder<'_, S> {
+impl<S, R> Debug for CommandContextBuilder<'_, S, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CommandContextBuilder")
             // .field("arguments", &self.arguments)

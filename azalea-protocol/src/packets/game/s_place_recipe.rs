@@ -1,8 +1,8 @@
 use azalea_buf::AzBuf;
-use azalea_core::identifier::Identifier;
+use azalea_registry::identifier::Identifier;
 use azalea_protocol_macros::ServerboundGamePacket;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ServerboundGamePacket)]
+#[derive(AzBuf, Clone, Debug, PartialEq, ServerboundGamePacket)]
 pub struct ServerboundPlaceRecipe {
     #[var]
     pub container_id: i32,

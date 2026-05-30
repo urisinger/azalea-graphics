@@ -1,7 +1,7 @@
 use std::io::{self, Cursor, Write};
 
 pub use azalea_buf::AzBuf;
-use azalea_buf::{AzaleaRead, AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
+use azalea_buf::{AzBufVar, BufReadError};
 
 use crate::{math, position::Vec3};
 
@@ -12,7 +12,7 @@ pub trait PositionDeltaTrait {
 }
 
 /// Only works for up to 8 blocks
-#[derive(Clone, Debug, AzBuf, Default, PartialEq)]
+#[derive(AzBuf, Clone, Copy, Debug, Default, PartialEq)]
 pub struct PositionDelta8 {
     pub xa: i16,
     pub ya: i16,
@@ -74,7 +74,7 @@ impl Vec3 {
 ///
 /// Can be freely converted to and from a [`Vec3`], but some precision will be
 /// lost.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum LpVec3 {
     #[default]
     Zero,
@@ -91,7 +91,7 @@ pub enum LpVec3 {
     },
 }
 
-impl AzaleaRead for LpVec3 {
+impl AzBuf for LpVec3 {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let a = u8::azalea_read(buf)?;
         if a == 0 {
@@ -106,8 +106,6 @@ impl AzaleaRead for LpVec3 {
             Ok(LpVec3::Normal { a, b, c })
         }
     }
-}
-impl AzaleaWrite for LpVec3 {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         match self {
             LpVec3::Zero => {
@@ -218,8 +216,6 @@ impl From<Vec3> for LpVec3 {
 }
 #[cfg(test)]
 mod tests {
-    use azalea_buf::AzaleaWrite;
-
     use super::*;
 
     static TEST_VALUES: [Vec3; 3] = [

@@ -1,23 +1,27 @@
 use std::path::PathBuf;
 
-use cargo_gpu::spirv_builder::{Capability, MetadataPrintout, SpirvMetadata};
+use cargo_gpu_install::{
+    install::Install,
+    spirv_builder::{Capability, ShaderPanicStrategy, SpirvMetadata},
+};
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let shader_crate = PathBuf::from("./shaders");
+pub fn main() -> anyhow::Result<()> {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let crate_path = PathBuf::from("./shaders");
 
-    let backend = cargo_gpu::Install::from_shader_crate(shader_crate.clone()).run()?;
-
-    let builder = backend
-        .to_spirv_builder(shader_crate, "spirv-unknown-vulkan1.2")
+    let install = Install::from_shader_crate(crate_path.clone())
+        .within_build_script()
+        .run()?;
+    let mut builder = install
+        .to_spirv_builder(crate_path, "spirv-unknown-vulkan1.3")
         .capability(Capability::ImageQuery)
-        .capability(Capability::RuntimeDescriptorArray)
-        .print_metadata(MetadataPrintout::DependencyOnly)
-        .spirv_metadata(SpirvMetadata::Full);
+        .capability(Capability::RuntimeDescriptorArray);
+    builder.build_script.defaults = true;
+    builder.shader_panic_strategy = ShaderPanicStrategy::SilentExit;
+    builder.spirv_metadata = SpirvMetadata::Full;
 
-    let spv_result = builder.build()?;
-    let path_to_spv = spv_result.module.unwrap_single();
-
-    println!("cargo::rustc-env=SHADERS={}", path_to_spv.display());
-
+    let compile_result = builder.build()?;
+    let spv_path = compile_result.module.unwrap_single();
+    println!("cargo::rustc-env=SHADERS={}", spv_path.display());
     Ok(())
 }

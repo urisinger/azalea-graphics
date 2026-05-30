@@ -4,15 +4,15 @@ use std::{
 };
 
 use azalea_block::BlockState;
-use azalea_buf::{AzaleaRead, AzaleaWrite, BufReadError};
+use azalea_buf::{AzBuf, BufReadError};
 use azalea_core::position::{ChunkSectionBiomePos, ChunkSectionBlockPos};
-use azalea_registry::Biome;
+use azalea_registry::data::Biome;
 use tracing::{debug, warn};
 
 use super::{Palette, PaletteKind};
 use crate::BitStorage;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PalettedContainer<S: PalletedContainerKind> {
     pub bits_per_entry: u8,
     /// This is usually a list of unique values that appear in the container so
@@ -25,7 +25,9 @@ pub struct PalettedContainer<S: PalletedContainerKind> {
     pub storage: BitStorage,
 }
 
-pub trait PalletedContainerKind: Copy + Clone + Debug + Default + TryFrom<u32> + Into<u32> {
+pub trait PalletedContainerKind:
+    Copy + Clone + Debug + Default + PartialEq + TryFrom<u32> + Into<u32>
+{
     type SectionPos: SectionPos;
 
     fn size_bits() -> usize;
@@ -134,7 +136,7 @@ impl<S: PalletedContainerKind> PalettedContainer<S> {
             Err(e) => {
                 warn!("Failed to create bit storage: {:?}", e);
                 return Err(BufReadError::Custom(
-                    "Failed to create bit storage".to_string(),
+                    "Failed to create bit storage".to_owned(),
                 ));
             }
         };
@@ -175,6 +177,7 @@ impl<S: PalletedContainerKind> PalettedContainer<S> {
     /// This function panics if the index is greater than or equal to the number
     /// of things in the storage. For example, for block states, it must be less
     /// than 4096.
+    #[inline]
     pub fn get_at_index(&self, index: usize) -> S {
         // first get the palette id
         let paletted_value = self.storage.get(index);
@@ -291,11 +294,14 @@ impl<S: PalletedContainerKind> PalettedContainer<S> {
     }
 }
 
-impl<S: PalletedContainerKind> AzaleaWrite for PalettedContainer<S> {
-    fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
+impl<S: PalletedContainerKind> PalettedContainer<S> {
+    pub fn write(&self, buf: &mut impl Write) -> io::Result<()> {
         self.bits_per_entry.azalea_write(buf)?;
-        self.palette.azalea_write(buf)?;
-        self.storage.data.azalea_write(buf)?;
+        self.palette.write(buf)?;
+        for word in &self.storage.data {
+            word.azalea_write(buf)?;
+        }
+
         Ok(())
     }
 }

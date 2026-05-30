@@ -1,17 +1,17 @@
 use std::io::{self, Cursor, Write};
 
-use azalea_buf::{AzBuf, AzaleaRead, AzaleaWrite};
+use azalea_buf::AzBuf;
 use azalea_chat::{FormattedText, numbers::NumberFormat};
 use azalea_core::objectives::ObjectiveCriteria;
 use azalea_protocol_macros::ClientboundGamePacket;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundSetObjective {
     pub objective_name: String,
     pub method: Method,
 }
 
-#[derive(Clone, Copy, Debug, AzBuf, PartialEq)]
+#[derive(AzBuf, Clone, Copy, Debug, PartialEq)]
 pub enum MethodKind {
     Add,
     Remove,
@@ -33,7 +33,7 @@ pub enum Method {
     },
 }
 
-impl AzaleaRead for Method {
+impl AzBuf for Method {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, azalea_buf::BufReadError> {
         let kind = MethodKind::azalea_read(buf)?;
         match kind {
@@ -50,9 +50,6 @@ impl AzaleaRead for Method {
             }),
         }
     }
-}
-
-impl AzaleaWrite for Method {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         match self {
             Method::Add {

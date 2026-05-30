@@ -1,9 +1,11 @@
 use std::{
     fmt::{self, Debug},
+    hint::assert_unchecked,
     io::{self, Cursor, Write},
 };
 
-use azalea_buf::{AzaleaRead, AzaleaReadVar, AzaleaWrite, AzaleaWriteVar, BufReadError};
+use azalea_buf::{AzBuf, AzBufVar, BufReadError};
+use azalea_registry::builtin::BlockKind;
 
 use crate::BlockTrait;
 
@@ -23,7 +25,7 @@ pub type BlockStateIntegerRepr = u16;
 ///
 /// Note that this type is internally either a `u16` or `u32`, depending on
 /// [`BlockStateIntegerRepr`].
-#[derive(Copy, Clone, PartialEq, Eq, Default, Hash)]
+#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
 pub struct BlockState {
     id: BlockStateIntegerRepr,
 }
@@ -62,7 +64,7 @@ impl BlockState {
     /// This only checks for normal air, not other types like cave air.
     #[inline]
     pub fn is_air(&self) -> bool {
-        self == &Self::AIR
+        *self == Self::AIR
     }
 
     /// Returns the protocol ID for the block state.
@@ -71,6 +73,12 @@ impl BlockState {
     /// hard-code them or store them in databases.
     #[inline]
     pub const fn id(&self) -> BlockStateIntegerRepr {
+        // this unsafe assert allows us to skip bounds checks if the array has at least
+        // MAX_STATE items.
+        // SAFETY: BlockState::id is private and is always checked with is_valid_state
+        // before being constructed.
+        unsafe { assert_unchecked(Self::is_valid_state(self.id)) };
+
         self.id
     }
 }
@@ -88,17 +96,24 @@ impl TryFrom<u32> for BlockState {
         }
     }
 }
+impl TryFrom<i32> for BlockState {
+    type Error = ();
+
+    fn try_from(state_id: i32) -> Result<Self, Self::Error> {
+        Self::try_from(state_id as u32)
+    }
+}
+
 impl TryFrom<u16> for BlockState {
     type Error = ();
 
     /// Safely converts a u16 state ID to a block state.
-    fn try_from(state_id: u16) -> Result<Self, Self::Error> {
-        let state_id = state_id as BlockStateIntegerRepr;
-        if Self::is_valid_state(state_id) {
-            Ok(BlockState { id: state_id })
-        } else {
-            Err(())
+    fn try_from(id: u16) -> Result<Self, Self::Error> {
+        let id = id as BlockStateIntegerRepr;
+        if !Self::is_valid_state(id) {
+            return Err(());
         }
+        Ok(BlockState { id })
     }
 }
 impl From<BlockState> for u32 {
@@ -108,15 +123,13 @@ impl From<BlockState> for u32 {
     }
 }
 
-impl AzaleaRead for BlockState {
+impl AzBuf for BlockState {
     fn azalea_read(buf: &mut Cursor<&[u8]>) -> Result<Self, BufReadError> {
         let state_id = u32::azalea_read_var(buf)?;
         Self::try_from(state_id).map_err(|_| BufReadError::UnexpectedEnumVariant {
             id: state_id as i32,
         })
     }
-}
-impl AzaleaWrite for BlockState {
     fn azalea_write(&self, buf: &mut impl Write) -> io::Result<()> {
         u32::azalea_write_var(&(self.id as u32), buf)
     }
@@ -128,9 +141,9 @@ impl Debug for BlockState {
     }
 }
 
-impl From<BlockState> for azalea_registry::Block {
-    fn from(value: BlockState) -> Self {
-        value.to_trait().as_registry_block()
+impl From<BlockState> for BlockKind {
+    fn from(block_state: BlockState) -> Self {
+        block_state.as_block_kind()
     }
 }
 
@@ -155,21 +168,16 @@ mod tests {
         assert_eq!(block.id(), "air");
 
         let block = BlockState::from(azalea_registry::Block::FloweringAzalea).to_trait();
+
         assert_eq!(block.id(), "flowering_azalea");
     }
 
     #[test]
     fn test_debug_blockstate() {
-        let formatted = format!(
-            "{:?}",
-            BlockState::from(azalea_registry::Block::FloweringAzalea)
-        );
+        let formatted = format!("{:?}", BlockState::from(BlockKind::FloweringAzalea));
         assert!(formatted.ends_with(", FloweringAzalea)"), "{}", formatted);
 
-        let formatted = format!(
-            "{:?}",
-            BlockState::from(azalea_registry::Block::BigDripleafStem)
-        );
+        let formatted = format!("{:?}", BlockState::from(BlockKind::BigDripleafStem));
         assert!(
             formatted.ends_with(", BigDripleafStem { facing: North, waterlogged: false })"),
             "{}",

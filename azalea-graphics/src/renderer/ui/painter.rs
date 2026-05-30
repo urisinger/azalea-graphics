@@ -508,7 +508,7 @@ impl Painter {
 impl Drop for Painter {
     fn drop(&mut self) {
         if !self.destroyed {
-            log::warn!("You forgot to call destroy() on the egui painter. Resources will leak!");
+            tracing::warn!("You forgot to call destroy() on the egui painter. Resources will leak!");
         }
     }
 }

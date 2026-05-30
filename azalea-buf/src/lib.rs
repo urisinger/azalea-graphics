@@ -4,18 +4,16 @@
 #![feature(error_generic_member_access)]
 
 mod definitions;
-mod read;
+pub mod impls;
 mod serializable_uuid;
-mod write;
 
 pub use azalea_buf_macros::*;
 pub use definitions::*;
-pub use read::{AzaleaRead, AzaleaReadLimited, AzaleaReadVar, BufReadError};
+pub use impls::*;
 pub use serializable_uuid::*;
-pub use write::{AzaleaWrite, AzaleaWriteVar};
 
 // const DEFAULT_NBT_QUOTA: u32 = 2097152;
-const MAX_STRING_LENGTH: u16 = 32767;
+const MAX_STRING_LENGTH: u32 = 32767;
 // const MAX_COMPONENT_STRING_LENGTH: u32 = 262144;
 
 #[cfg(test)]
@@ -161,7 +159,7 @@ mod tests {
 
     #[test]
     fn test_list() {
-        let original_vec = vec!["a".to_string(), "bc".to_string(), "def".to_string()];
+        let original_vec = vec!["a".to_owned(), "bc".to_owned(), "def".to_owned()];
 
         let mut buf = Vec::new();
         original_vec.azalea_write(&mut buf).unwrap();
@@ -183,9 +181,9 @@ mod tests {
     #[test]
     fn test_map() {
         let original_map = HashMap::from([
-            ("a".to_string(), 1),
-            ("bc".to_string(), 23),
-            ("def".to_string(), 456),
+            ("a".to_owned(), 1),
+            ("bc".to_owned(), 23),
+            ("def".to_owned(), 456),
         ]);
         let mut buf = Vec::new();
         original_map.azalea_write_var(&mut buf).unwrap();

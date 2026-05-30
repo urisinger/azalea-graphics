@@ -1,3 +1,5 @@
+cargo-features = ["codegen-backend"]
+
 [workspace]
 members = [
     "azalea",
@@ -14,6 +16,7 @@ members = [
     "azalea-language",
     "azalea-physics",
     "azalea-protocol",
+    "azalea-protocol/fuzz",
     "azalea-registry",
     "azalea-world",
     "azalea-graphics",
@@ -25,101 +28,118 @@ resolver = "3"
 # --- Workspace Settings ---
 
 [workspace.package]
-version = "0.14.0+mc1.21.10"
+version = "0.16.0+mc26.1.2"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/azalea-rs/azalea"
 # homepage = "https://github.com/azalea-rs/azalea"
 
 [workspace.dependencies]
-aes = "0.8.4"
-anyhow = "1.0.100"
+aes = "0.9.0"
 async-compat = "0.2.5"
 base64 = "0.22.1"
-bevy_app = "0.17.2"
-bevy_ecs = { version = "0.17.2", default-features = false }
-bevy_log = "0.17.2"
-bevy_tasks = "0.17.2"
-bevy_time = "0.17.2"
 
+bevy_app = "0.18.1"
+bevy_ecs = { version = "0.18.1", default-features = false, features = [
+    "multi_threaded",
+] }
+bevy_utils = { version = "0.18.1", default-features = false }
+bevy_log = "0.18.1"
+bevy_tasks = "0.18.1"
+bevy_time = "0.18.1"
 byteorder = "1.5.0"
-cfb8 = "0.8.1"
-chrono = { version = "0.4.42", default-features = false }
+cfb8 = "0.9.0"
+chrono = { version = "0.4.44", default-features = false }
 compact_str = "0.9.0"
 crc32c = "0.6.8"
-criterion = "0.7.0"
-# TODO: Remove when rsa is fixed.
-crypto-bigint = "=0.7.0-rc.10"
-# TODO: Remove when rsa is fixed.
-crypto-primes = "=0.7.0-pre.4"
-derive_more = "2.0.1"
-enum-as-inner = "0.6.1"
-env_logger = "0.11.8"
-flate2 = { version = "1.1.5", features = ["zlib-rs"] }
-futures = "0.3.31"
+criterion = "0.8.2"
+derive_more = "2.1.1"
+enum-as-inner = "0.7.0"
+env_logger = "0.11.10"
+eyre = "0.6.12"
+flate2 = { version = "1.1.9", features = ["zlib-rs"] }
+futures = "0.3.32"
 futures-lite = "2.6.1"
-hickory-resolver = "0.25.2"
-indexmap = "2.12.0"
-md-5 = "0.10.6"
+hickory-resolver = "0.26.1"
+indexmap = "2.14.0"
+md-5 = "0.11.0"
 minecraft_folder_path = "0.1.2"
 nohash-hasher = "0.2.0"
 num-bigint = "0.4.6"
 num-format = "0.4.4"
 num-traits = "0.2.19"
 parking_lot = "0.12.5"
-pastey = "0.1.1"
-proc-macro2 = "1.0.103"
-quote = "1.0.42"
-rand = "0.10.0-rc.5"
-regex = "1.12.2"
-reqwest = { version = "0.12.24", default-features = false }
-rsa = "0.10.0-rc.10"
+proc-macro2 = "1.0.106"
+quote = "1.0.45"
+rand = "0.10.1"
+rand_core = "0.10.1"
+regex = "1.12.3"
+reqwest = { version = "0.13.3", default-features = false }
+rsa = "0.10.0-rc.18"
 rsa_public_encrypt_pkcs1 = "0.4.0"
-rustc-hash = "2.1.1"
+rustc-hash = "2.1.2"
 serde = "1.0.228"
-serde_json = "1.0.145"
-sha1 = "0.11.0-rc.3"
-sha2 = "0.11.0-rc.3"
-# TODO: Remove when rsa is fixed.
-signature = "=3.0.0-rc.5"
-simdnbt = { version = "0.8.0", git = "https://github.com/azalea-rs/simdnbt" }
-socks5-impl = "0.7.2"
-syn = "2.0.110"
-thiserror = "2.0.17"
-tokio = "1.48.0"
-tokio-util = "0.7.17"
-tracing = "0.1.41"
-tracing-subscriber = "0.3.20"
-uuid = "1.18.1"
-glam = {version = "0.30", features = ["serde"]}
+serde_json = "1.0.149"
+sha1 = "0.11.0"
+sha2 = "0.11.0"
+simdnbt = "0.10.0"
+# simdnbt = { git = "https://github.com/azalea-rs/simdnbt" }
+socks5-impl = "0.8.2"
+syn = "2.0.117"
+thiserror = "2.0.18"
+tokio = "1.52.2"
+tokio-util = "0.7.18"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.23"
+uuid = "1.23.1"
+radix-heap = "0.4.2"
+anyhow = "1.0"
 
-log = "0.4"
-
-azalea-block-macros = { path = "azalea-block/azalea-block-macros", version = "0.14.0" }
-azalea-block = { path = "azalea-block", version = "0.14.0" }
-azalea-auth = { path = "azalea-auth", version = "0.14.0", default-features = false }
-azalea-brigadier = { path = "azalea-brigadier", version = "0.14.0" }
-azalea-buf-macros = { path = "azalea-buf/azalea-buf-macros", version = "0.14.0" }
-azalea-buf = { path = "azalea-buf", version = "0.14.0" }
-azalea-chat = { path = "azalea-chat", version = "0.14.0" }
-azalea-client = { path = "azalea-client", version = "0.14.0", default-features = false }
-azalea-core = { path = "azalea-core", version = "0.14.0" }
-azalea-crypto = { path = "azalea-crypto", version = "0.14.0" }
-azalea-entity = { path = "azalea-entity", version = "0.14.0" }
-azalea-inventory-macros = { path = "azalea-inventory/azalea-inventory-macros", version = "0.14.0" }
-azalea-inventory = { path = "azalea-inventory", version = "0.14.0" }
-azalea-language = { path = "azalea-language", version = "0.14.0" }
-azalea-physics = { path = "azalea-physics", version = "0.14.0" }
-azalea-protocol-macros = { path = "azalea-protocol/azalea-protocol-macros", version = "0.14.0" }
-azalea-protocol = { path = "azalea-protocol", version = "0.14.0", default-features = false }
-azalea-registry-macros = { path = "azalea-registry/azalea-registry-macros", version = "0.14.0" }
-azalea-registry = { path = "azalea-registry", version = "0.14.0" }
-azalea-world = { path = "azalea-world", version = "0.14.0" }
-azalea-assets = { path = "azalea-graphics/azalea-assets", version = "0.14.0" }
+azalea-block-macros = { path = "azalea-block/azalea-block-macros", version = "0.16.0", default-features = false }
+azalea-block = { path = "azalea-block", version = "0.16.0", default-features = false }
+azalea-assets = { path = "azalea-graphics/azalea-assets", version = "0.16.0", default-features = false }
+azalea-auth = { path = "azalea-auth", version = "0.16.0", default-features = false }
+azalea-brigadier = { path = "azalea-brigadier", version = "0.16.0", default-features = false }
+azalea-buf-macros = { path = "azalea-buf/azalea-buf-macros", version = "0.16.0", default-features = false }
+azalea-buf = { path = "azalea-buf", version = "0.16.0", default-features = false }
+azalea-chat = { path = "azalea-chat", version = "0.16.0", default-features = false }
+azalea-client = { path = "azalea-client", version = "0.16.0", default-features = false }
+azalea-core = { path = "azalea-core", version = "0.16.0", default-features = false }
+azalea-crypto = { path = "azalea-crypto", version = "0.16.0", default-features = false }
+azalea-entity = { path = "azalea-entity", version = "0.16.0", default-features = false }
+azalea-inventory-macros = { path = "azalea-inventory/azalea-inventory-macros", version = "0.16.0", default-features = false }
+azalea-inventory = { path = "azalea-inventory", version = "0.16.0", default-features = false }
+azalea-language = { path = "azalea-language", version = "0.16.0", default-features = false }
+azalea-physics = { path = "azalea-physics", version = "0.16.0", default-features = false }
+azalea-protocol-macros = { path = "azalea-protocol/azalea-protocol-macros", version = "0.16.0", default-features = false }
+azalea-protocol = { path = "azalea-protocol", version = "0.16.0", default-features = false }
+azalea-registry-macros = { path = "azalea-registry/azalea-registry-macros", version = "0.16.0", default-features = false }
+azalea-registry = { path = "azalea-registry", version = "0.16.0", default-features = false }
+azalea-world = { path = "azalea-world", version = "0.16.0", default-features = false }
+glam = { version = "0.32.0", features=["serde"] }
 
 [workspace.lints.clippy]
+# https://users.rust-lang.org/t/to-string-vs-to-owned-for-string-literals/1441
+str_to_string = "warn"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docsrs_dep)'] }
+
+[workspace.metadata.docs.rs]
+rustc-args = ["--cfg", "docsrs_dep"]
+rustdoc-args = [
+    "--cfg",
+    "docsrs_dep",
+    "--html-after-content",
+    "docs-rs/trait-tags.html",
+    "--html-after-content",
+    "docs-rs/arborium-header.html",
+]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
 
 # --- Profile Settings ---
+[profile.release]
+debug = "line-tables-only"
 
 # decoding packets takes forever if we don't do this
 [profile.dev.package.azalea-crypto]

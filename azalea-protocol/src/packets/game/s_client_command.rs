@@ -1,7 +1,7 @@
 use azalea_buf::AzBuf;
 use azalea_protocol_macros::ServerboundGamePacket;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ServerboundGamePacket)]
+#[derive(AzBuf, Clone, Debug, PartialEq, ServerboundGamePacket)]
 pub struct ServerboundClientCommand {
     pub action: Action,
 }
@@ -10,4 +10,5 @@ pub struct ServerboundClientCommand {
 pub enum Action {
     PerformRespawn = 0,
     RequestStats = 1,
+    RequestGameruleValues = 2,
 }

@@ -1,8 +1,8 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use azalea_entity::{LocalEntity, indexing::EntityUuidIndex};
 use azalea_protocol::{
-    ServerAddress,
+    address::ResolvedAddr,
     common::client_information::ClientInformation,
     connect::{Connection, ConnectionError, Proxy},
     packets::{
@@ -11,7 +11,7 @@ use azalea_protocol::{
         login::{ClientboundLoginPacket, ServerboundHello, ServerboundLoginPacket},
     },
 };
-use azalea_world::Instance;
+use azalea_world::World;
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_tasks::{IoTaskPool, Task, futures_lite::future};
@@ -19,10 +19,11 @@ use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tracing::{debug, warn};
 
-use super::events::LocalPlayerEvents;
 use crate::{
-    Account, LocalPlayerBundle,
+    LocalPlayerBundle,
+    account::Account,
     connection::RawConnection,
+    local_player::WorldHolder,
     packet::login::{InLoginState, SendLoginPacketEvent},
 };
 
@@ -47,11 +48,10 @@ impl Plugin for JoinPlugin {
 ///
 /// This won't do anything if a client with the Account UUID is already
 /// connected to the server.
-#[derive(Message, Debug)]
+#[derive(Debug, Message)]
 pub struct StartJoinServerEvent {
     pub account: Account,
     pub connect_opts: ConnectOpts,
-    pub event_sender: Option<mpsc::UnboundedSender<crate::Event>>,
 
     // this is mpsc instead of oneshot so it can be cloned (since it's sent in an event)
     pub start_join_callback_tx: Option<mpsc::UnboundedSender<Entity>>,
@@ -59,14 +59,22 @@ pub struct StartJoinServerEvent {
 
 /// Options for how the connection to the server will be made.
 ///
-/// These are persisted on reconnects.
-///
-/// This is inserted as a component on clients to make auto-reconnecting work.
-#[derive(Debug, Clone, Component)]
+/// These are persisted on reconnects. This is inserted as a component on
+/// clients to make auto-reconnecting work.
+#[derive(Clone, Component, Debug)]
 pub struct ConnectOpts {
-    pub address: ServerAddress,
-    pub resolved_address: SocketAddr,
-    pub proxy: Option<Proxy>,
+    pub address: ResolvedAddr,
+    /// The SOCKS5 proxy used for connecting to the Minecraft server.
+    pub server_proxy: Option<Proxy>,
+    /// The SOCKS5 proxy that will be used when authenticating our server join
+    /// with Mojang.
+    ///
+    /// This should typically be either the same as [`Self::server_proxy`], or
+    /// `None`.
+    ///
+    /// This is useful to set if a server has `prevent-proxy-connections`
+    /// enabled.
+    pub sessionserver_proxy: Option<Proxy>,
 }
 
 /// An event that's sent when creating the TCP connection and sending the first
@@ -78,7 +86,8 @@ pub struct ConnectOpts {
 #[derive(Message)]
 pub struct ConnectionFailedEvent {
     pub entity: Entity,
-    pub error: ConnectionError,
+    // wrap it in Arc so it can be cloned
+    pub error: Arc<ConnectionError>,
 }
 
 pub fn handle_start_join_server_event(
@@ -88,7 +97,7 @@ pub fn handle_start_join_server_event(
     connection_query: Query<&RawConnection>,
 ) {
     for event in events.read() {
-        let uuid = event.account.uuid_or_offline();
+        let uuid = event.account.uuid();
         let entity = if let Some(entity) = entity_uuid_index.get(&uuid) {
             debug!("Reusing entity {entity:?} for client");
 
@@ -139,12 +148,6 @@ pub fn handle_start_join_server_event(
             // immediately when the connection is created
         ));
 
-        if let Some(event_sender) = &event.event_sender {
-            // this is optional so we don't leak memory in case the user doesn't want to
-            // handle receiving packets
-            entity_mut.insert(LocalPlayerEvents(event_sender.clone()));
-        }
-
         let task_pool = IoTaskPool::get();
         let connect_opts = event.connect_opts.clone();
         let task = task_pool.spawn(async_compat::Compat::new(
@@ -158,16 +161,16 @@ pub fn handle_start_join_server_event(
 async fn create_conn_and_send_intention_packet(
     opts: ConnectOpts,
 ) -> Result<LoginConn, ConnectionError> {
-    let mut conn = if let Some(proxy) = opts.proxy {
-        Connection::new_with_proxy(&opts.resolved_address, proxy).await?
+    let mut conn = if let Some(proxy) = opts.server_proxy {
+        Connection::new_with_proxy(&opts.address.socket, proxy).await?
     } else {
-        Connection::new(&opts.resolved_address).await?
+        Connection::new(&opts.address.socket).await?
     };
 
     conn.write(ServerboundIntention {
         protocol_version: PROTOCOL_VERSION,
-        hostname: opts.address.host.clone(),
-        port: opts.address.port,
+        hostname: opts.address.server.host.clone(),
+        port: opts.address.server.port,
         intention: ClientIntention::Login,
     })
     .await?;
@@ -195,7 +198,10 @@ pub fn poll_create_connection_task(
                 Ok(conn) => conn,
                 Err(error) => {
                     warn!("failed to create connection: {error}");
-                    connection_failed_events.write(ConnectionFailedEvent { entity, error });
+                    connection_failed_events.write(ConnectionFailedEvent {
+                        entity,
+                        error: Arc::new(error),
+                    });
                     return;
                 }
             };
@@ -203,12 +209,12 @@ pub fn poll_create_connection_task(
             let (read_conn, write_conn) = conn.into_split();
             let (read_conn, write_conn) = (read_conn.raw, write_conn.raw);
 
-            let instance = Instance::default();
-            let instance_holder = crate::local_player::InstanceHolder::new(
+            let world = World::default();
+            let world_holder = WorldHolder::new(
                 entity,
                 // default to an empty world, it'll be set correctly later when we
                 // get the login packet
-                Arc::new(RwLock::new(instance)),
+                Arc::new(RwLock::new(world)),
             );
 
             entity_mut.insert((
@@ -219,7 +225,7 @@ pub fn poll_create_connection_task(
                         write_conn,
                         ConnectionProtocol::Login,
                     ),
-                    instance_holder,
+                    world_holder,
                     metadata: azalea_entity::metadata::PlayerMetadataBundle::default(),
                 },
                 InLoginState,
@@ -228,8 +234,8 @@ pub fn poll_create_connection_task(
             commands.trigger(SendLoginPacketEvent::new(
                 entity,
                 ServerboundHello {
-                    name: account.username.clone(),
-                    profile_id: account.uuid_or_offline(),
+                    name: account.username().to_owned(),
+                    profile_id: account.uuid(),
                 },
             ));
         }

@@ -1,16 +1,22 @@
 use std::{rc::Rc, sync::Arc};
 
 use super::CommandContext;
-use crate::{errors::CommandSyntaxError, result_consumer::ResultConsumer};
+use crate::{
+    errors::{CommandResultTrait, CommandSyntaxError},
+    result_consumer::ResultConsumer,
+};
 
-pub struct ContextChain<S> {
-    modifiers: Vec<Rc<CommandContext<S>>>,
-    executable: Rc<CommandContext<S>>,
-    next_stage_cache: Option<Rc<ContextChain<S>>>,
+pub struct ContextChain<S, R> {
+    modifiers: Vec<Rc<CommandContext<S, R>>>,
+    executable: Rc<CommandContext<S, R>>,
+    next_stage_cache: Option<Rc<ContextChain<S, R>>>,
 }
 
-impl<S> ContextChain<S> {
-    pub fn new(modifiers: Vec<Rc<CommandContext<S>>>, executable: Rc<CommandContext<S>>) -> Self {
+impl<S, R: CommandResultTrait> ContextChain<S, R> {
+    pub fn new(
+        modifiers: Vec<Rc<CommandContext<S, R>>>,
+        executable: Rc<CommandContext<S, R>>,
+    ) -> Self {
         if executable.command.is_none() {
             panic!("Last command in chain must be executable");
         }
@@ -21,7 +27,7 @@ impl<S> ContextChain<S> {
         }
     }
 
-    pub fn try_flatten(root_context: Rc<CommandContext<S>>) -> Option<Self> {
+    pub fn try_flatten(root_context: Rc<CommandContext<S, R>>) -> Option<Self> {
         let mut modifiers = Vec::new();
         let mut current = root_context;
         loop {
@@ -39,9 +45,9 @@ impl<S> ContextChain<S> {
     }
 
     pub fn run_modifier(
-        modifier: Rc<CommandContext<S>>,
+        modifier: Rc<CommandContext<S, R>>,
         source: Arc<S>,
-        result_consumer: &dyn ResultConsumer<S>,
+        result_consumer: &dyn ResultConsumer<S, R>,
         forked_mode: bool,
     ) -> Result<Vec<Arc<S>>, CommandSyntaxError> {
         let source_modifier = modifier.redirect_modifier();
@@ -64,33 +70,43 @@ impl<S> ContextChain<S> {
 
     pub fn run_executable(
         &self,
-        executable: Rc<CommandContext<S>>,
+        executable: Rc<CommandContext<S, R>>,
         source: Arc<S>,
-        result_consumer: &dyn ResultConsumer<S>,
+        result_consumer: &dyn ResultConsumer<S, R>,
         forked_mode: bool,
-    ) -> Result<i32, CommandSyntaxError> {
+    ) -> Result<R, CommandSyntaxError> {
         let context_to_use = Rc::new(executable.copy_for(source));
         let Some(command) = &executable.command else {
             unimplemented!();
         };
 
-        let err = match (command)(&context_to_use) {
-            Ok(result) => {
-                result_consumer.on_command_complete(context_to_use, true, result);
-                return if forked_mode { Ok(1) } else { Ok(result) };
+        let res = (command)(&context_to_use);
+        let err = match res {
+            Ok(res) => {
+                let Some(res) = res.as_i32() else {
+                    // these are treated as exceptions, so they can bubble up without doing anything
+                    // else
+                    return Ok(res);
+                };
+                result_consumer.on_command_complete(context_to_use, true, res);
+                return if forked_mode {
+                    Ok(R::new(1))
+                } else {
+                    Ok(R::new(res))
+                };
             }
             Err(err) => err,
         };
 
         result_consumer.on_command_complete(context_to_use, false, 0);
-        if forked_mode { Ok(0) } else { Err(err) }
+        if forked_mode { Ok(R::new(0)) } else { Err(err) }
     }
 
     pub fn execute_all(
         &self,
         source: Arc<S>,
-        result_consumer: &dyn ResultConsumer<S>,
-    ) -> Result<i32, CommandSyntaxError> {
+        result_consumer: &dyn ResultConsumer<S, R>,
+    ) -> Result<R, CommandSyntaxError> {
         if self.modifiers.is_empty() {
             return self.run_executable(self.executable.clone(), source, result_consumer, false);
         }
@@ -103,30 +119,37 @@ impl<S> ContextChain<S> {
 
             let mut next_sources = Vec::new();
             for source_to_run in current_sources {
-                next_sources.extend(Self::run_modifier(
+                match Self::run_modifier(
                     modifier.clone(),
                     source_to_run.clone(),
                     result_consumer,
                     forked_mode,
-                )?);
+                ) {
+                    Ok(res) => next_sources.extend(res),
+                    Err(err) => return Err(err),
+                }
             }
             if next_sources.is_empty() {
-                return Ok(0);
+                return Ok(R::new(0));
             }
             current_sources = next_sources;
         }
 
-        let mut result = 0;
+        let mut summed = 0;
         for execution_source in current_sources {
-            result += self.run_executable(
+            let res = self.run_executable(
                 self.executable.clone(),
                 execution_source,
                 result_consumer,
                 forked_mode,
             )?;
+            match res.as_i32() {
+                Some(res) => summed += res,
+                None => return Ok(res),
+            }
         }
 
-        Ok(result)
+        Ok(R::new(summed))
     }
 
     pub fn stage(&self) -> Stage {
@@ -137,14 +160,14 @@ impl<S> ContextChain<S> {
         }
     }
 
-    pub fn top_context(&self) -> Rc<CommandContext<S>> {
+    pub fn top_context(&self) -> Rc<CommandContext<S, R>> {
         self.modifiers
             .first()
             .cloned()
             .unwrap_or_else(|| self.executable.clone())
     }
 
-    pub fn next_stage(&mut self) -> Option<Rc<ContextChain<S>>> {
+    pub fn next_stage(&mut self) -> Option<Rc<ContextChain<S, R>>> {
         let modifier_count = self.modifiers.len();
         if modifier_count == 0 {
             return None;

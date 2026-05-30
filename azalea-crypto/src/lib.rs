@@ -1,18 +1,36 @@
 #![doc = include_str!("../README.md")]
 
-mod signing;
+pub mod offline;
+#[cfg(feature = "signing")]
+pub mod signing;
 
 use aes::{
     Aes128,
-    cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit, inout::InOutBuf},
+    cipher::{BlockModeDecrypt, BlockModeEncrypt, KeyIvInit, inout::InOutBuf},
 };
-use rand::{TryRngCore, rngs::OsRng};
+use rand::{TryRng, rngs::SysRng};
 use sha1::{Digest, Sha1};
-pub use signing::*;
+
+#[cfg(feature = "signing")]
+#[doc(hidden)]
+#[deprecated = "moved to `signing::MessageSignature`."]
+pub type MessageSignature = signing::MessageSignature;
+
+#[cfg(feature = "signing")]
+#[doc(hidden)]
+#[deprecated = "moved to `signing::SignChatMessageOptions`."]
+pub type SignChatMessageOptions = signing::SignChatMessageOptions;
+
+#[cfg(feature = "signing")]
+#[doc(hidden)]
+#[deprecated = "moved to `signing::make_salt`."]
+pub fn make_salt() -> u64 {
+    signing::make_salt()
+}
 
 fn generate_secret_key() -> [u8; 16] {
     let mut key = [0u8; 16];
-    OsRng.try_fill_bytes(&mut key).unwrap();
+    SysRng.try_fill_bytes(&mut key).unwrap();
     key
 }
 
@@ -74,12 +92,12 @@ pub fn create_cipher(key: &[u8]) -> (Aes128CfbEnc, Aes128CfbDec) {
 pub fn encrypt_packet(cipher: &mut Aes128CfbEnc, packet: &mut [u8]) {
     let (chunks, rest) = InOutBuf::from(packet).into_chunks();
     assert!(rest.is_empty());
-    cipher.encrypt_blocks_inout_mut(chunks);
+    cipher.encrypt_blocks_inout(chunks);
 }
 pub fn decrypt_packet(cipher: &mut Aes128CfbDec, packet: &mut [u8]) {
     let (chunks, rest) = InOutBuf::from(packet).into_chunks();
     assert!(rest.is_empty());
-    cipher.decrypt_blocks_inout_mut(chunks);
+    cipher.decrypt_blocks_inout(chunks);
 }
 
 #[cfg(test)]

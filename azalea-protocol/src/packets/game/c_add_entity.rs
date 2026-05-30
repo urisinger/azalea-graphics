@@ -1,17 +1,18 @@
 use azalea_buf::AzBuf;
-use azalea_core::{delta::LpVec3, identifier::Identifier, position::Vec3};
-use azalea_entity::{EntityBundle, metadata::apply_default_metadata};
+use azalea_core::{delta::LpVec3, entity_id::MinecraftEntityId, position::Vec3};
 use azalea_protocol_macros::ClientboundGamePacket;
-use azalea_world::MinecraftEntityId;
+use azalea_registry::builtin::EntityKind;
+#[cfg(feature = "bevy_ecs")]
+use azalea_world::WorldName;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, AzBuf, PartialEq, ClientboundGamePacket)]
+#[derive(AzBuf, ClientboundGamePacket, Clone, Debug, PartialEq)]
 pub struct ClientboundAddEntity {
     /// The numeric ID of the entity being added to the world.
     #[var]
     pub id: MinecraftEntityId,
     pub uuid: Uuid,
-    pub entity_type: azalea_registry::EntityKind,
+    pub entity_type: EntityKind,
     pub position: Vec3,
     pub movement: LpVec3,
     pub x_rot: i8,
@@ -19,14 +20,14 @@ pub struct ClientboundAddEntity {
     pub y_head_rot: i8,
     /// The entity's "object data". This is unused for most entities.
     ///
-    /// Projectiles and fishing hooks treat this as an entity ID, which you're
-    /// encouraged to use [`MinecraftEntityId::from`] for. Other entities may
-    /// treat it as a block state or enum variant.
+    /// Projectiles and fishing hooks treat this like a [`MinecraftEntityId`].
+    /// Falling blocks treat it as a [`BlockState`](azalea_block::BlockState).
+    /// Other entities may treat it as another enum variant.
     ///
     /// See [the wiki](https://minecraft.wiki/w/Java_Edition_protocol/Object_data)
     /// for more information about this field.
     #[var]
-    pub data: u32,
+    pub data: i32,
 }
 
 impl ClientboundAddEntity {
@@ -34,12 +35,14 @@ impl ClientboundAddEntity {
     ///
     /// You must apply the metadata after inserting the bundle with
     /// [`Self::apply_metadata`].
-    pub fn as_entity_bundle(&self, world_name: Identifier) -> EntityBundle {
-        EntityBundle::new(self.uuid, self.position, self.entity_type, world_name)
+    #[cfg(feature = "bevy_ecs")]
+    pub fn as_entity_bundle(&self, world_name: WorldName) -> azalea_entity::EntityBundle {
+        azalea_entity::EntityBundle::new(self.uuid, self.position, self.entity_type, world_name)
     }
 
     /// Apply the default metadata for the given entity.
+    #[cfg(feature = "bevy_ecs")]
     pub fn apply_metadata(&self, entity: &mut bevy_ecs::system::EntityCommands) {
-        apply_default_metadata(entity, self.entity_type);
+        azalea_entity::metadata::apply_default_metadata(entity, self.entity_type);
     }
 }
