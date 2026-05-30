@@ -97,6 +97,7 @@ impl TextureManager {
             Some(texture_id)
         } else {
             let path = self.assets.get_path(id);
+
             let image = if let Ok(image) = image::open(path) {
                 image
             } else {
@@ -116,7 +117,9 @@ impl TextureManager {
                 vk::Filter::NEAREST,
                 vk::Filter::NEAREST,
             );
-            texture.upload_data(ctx, image.as_raw(), width, height);
+            // we have to find out how to fix this.
+            texture.upload_data_one_time(ctx.ctx, image.as_raw(), width, height);
+            //texture.upload_data(ctx, image.as_raw(), width, height);
 
             let texture_id = self.textures.len() as u32;
             

@@ -265,13 +265,6 @@ impl EntityRenderer {
         let mut all_transforms = Vec::new();
         let mut pending: Vec<PendingDraw> = Vec::new();
 
-        let zombie_model_data = self
-            .assets
-            .entity_models
-            .get("minecraft:zombie#main")
-            .expect("Zombie model not found");
-        let zombie_model = ZombieModel::new(zombie_model_data);
-
         let states = self.entities.lock();
         if states.is_empty() {
             return;
@@ -279,12 +272,18 @@ impl EntityRenderer {
         for state in states.iter() {
             match state {
                 RenderState::Zombie(s) => {
+                    let zombie_model_data = self
+                        .assets
+                        .entity_models
+                        .get("minecraft:zombie#main")
+                        .expect("Zombie model not found");
+                    let zombie_model = ZombieModel::new(zombie_model_data);
                     let transform_offset = all_transforms.len() as u32;
 
                     // Create transforms and animate
                     let mut model_transforms = ModelTransforms::new(zombie_model_data);
                     zombie_model.set_angles(&mut model_transforms, s);
-                    
+
                     let mut world_transform = Mat4::from_scale(Vec3::splat(s.base_scale));
 
                     // Apply rotation (180 - bodyYaw)
@@ -310,6 +309,7 @@ impl EntityRenderer {
                     {
                         tex
                     } else {
+                        println!("no tex found");
                         0
                     };
                     let model = self.loaded_models["minecraft:zombie#main"];
