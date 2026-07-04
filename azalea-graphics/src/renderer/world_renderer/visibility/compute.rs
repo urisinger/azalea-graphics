@@ -226,7 +226,15 @@ impl VisibilityCompute {
                 &sets,
                 &[],
             );
-            d.cmd_dispatch(*cmd, side, h, side);
+            const WG_X: u32 = 8;
+            const WG_Y: u32 = 8;
+            const WG_Z: u32 = 4;
+
+            let groups_x = (side + WG_X - 1) / WG_X;
+            let groups_y = (h + WG_Y - 1) / WG_Y;
+            let groups_z = (side + WG_Z - 1) / WG_Z;
+
+            d.cmd_dispatch(*cmd, groups_x, groups_y, groups_z);
 
             // Barrier to make sure compute writes are visible to transfer
             d.cmd_pipeline_barrier(

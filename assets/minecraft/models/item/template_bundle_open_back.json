@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:item/generated",
-  "display": {
-    "gui": {
-      "translation": [ 0, 0, -16 ]
-    }
-  }
-}

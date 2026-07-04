@@ -1,7 +1,0 @@
-{
-  "parent": "minecraft:block/template_shelf_unconnected",
-  "textures": {
-    "all": "minecraft:block/crimson_shelf",
-    "particle": "minecraft:block/stripped_crimson_stem"
-  }
-}

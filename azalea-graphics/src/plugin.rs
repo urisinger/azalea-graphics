@@ -90,7 +90,7 @@ fn get_entities(
 ) {
     let mut entites = Vec::new();
 
-    let (renderer, entity_kinds) = params.get(world);
+    let (renderer, entity_kinds) = params.get(world).unwrap();
     let entities_mutex = renderer.handle.entities.clone();
     let entity_kinds = entity_kinds
         .iter()

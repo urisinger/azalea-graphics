@@ -694,7 +694,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simdnbt",
- "spirv-std",
+ "spirv-std 0.10.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -825,7 +825,7 @@ dependencies = [
 name = "azalea-shaders"
 version = "0.1.0"
 dependencies = [
- "spirv-std",
+ "spirv-std 0.10.0-alpha.1 (git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114)",
 ]
 
 [[package]]
@@ -1297,8 +1297,7 @@ dependencies = [
 [[package]]
 name = "cargo-gpu-install"
 version = "0.10.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82bad075de69e455c338955b4a7d58c0ced253185ef7703a3c6a3846e2d5ee66"
+source = "git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114#25efe1209e2dfbfc14cedeaff1a7e77c79b58114"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -4657,9 +4656,9 @@ dependencies = [
 
 [[package]]
 name = "rspirv"
-version = "0.12.0+sdk-1.3.268.0"
+version = "0.13.0+sdk-1.4.341.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69cf3a93856b6e5946537278df0d3075596371b1950ccff012f02b0f7eafec8d"
+checksum = "091dca2e1d6fd3098417b5ec88e77e80d1ba5945750943419dc976858082c296"
 dependencies = [
  "rustc-hash 1.1.0",
  "spirv",
@@ -4686,8 +4685,7 @@ checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 [[package]]
 name = "rustc_codegen_spirv-types"
 version = "0.10.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ac3a589ac4bf0931b69299679803063986f280a2b82ace70e7f8b2d0db0dec2"
+source = "git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114#25efe1209e2dfbfc14cedeaff1a7e77c79b58114"
 dependencies = [
  "rspirv",
  "semver",
@@ -5253,9 +5251,9 @@ dependencies = [
 
 [[package]]
 name = "spirv"
-version = "0.3.0+sdk-1.3.268.0"
+version = "0.4.0+sdk-1.4.341.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eda41003dc44290527a59b13432d4a0379379fa074b70174882adfbdfd917844"
+checksum = "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f"
 dependencies = [
  "bitflags 2.13.0",
  "serde",
@@ -5264,8 +5262,7 @@ dependencies = [
 [[package]]
 name = "spirv-builder"
 version = "0.10.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b721e6d7d7bc999126e838d16b070c8beada89ff8251c3f8a9e5292102827d86"
+source = "git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114#25efe1209e2dfbfc14cedeaff1a7e77c79b58114"
 dependencies = [
  "cargo_metadata",
  "log",
@@ -5288,8 +5285,21 @@ dependencies = [
  "glam 0.33.2",
  "libm",
  "num-traits",
- "spirv-std-macros",
- "spirv-std-types",
+ "spirv-std-macros 0.10.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spirv-std-types 0.10.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "spirv-std"
+version = "0.10.0-alpha.1"
+source = "git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114#25efe1209e2dfbfc14cedeaff1a7e77c79b58114"
+dependencies = [
+ "bitflags 1.3.2",
+ "glam 0.33.2",
+ "libm",
+ "num-traits",
+ "spirv-std-macros 0.10.0-alpha.1 (git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114)",
+ "spirv-std-types 0.10.0-alpha.1 (git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114)",
 ]
 
 [[package]]
@@ -5300,7 +5310,18 @@ checksum = "23b8538ad79b81964125710a912c46f3ea71c4f5732bab5d24d506b86ea8fde0"
 dependencies = [
  "proc-macro2",
  "quote",
- "spirv-std-types",
+ "spirv-std-types 0.10.0-alpha.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "syn",
+]
+
+[[package]]
+name = "spirv-std-macros"
+version = "0.10.0-alpha.1"
+source = "git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114#25efe1209e2dfbfc14cedeaff1a7e77c79b58114"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "spirv-std-types 0.10.0-alpha.1 (git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114)",
  "syn",
 ]
 
@@ -5309,6 +5330,11 @@ name = "spirv-std-types"
 version = "0.10.0-alpha.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28b7ffce7843c3a9f5d5d2b9c21402d4cd026c26780b2f16a3cd6de3e6436230"
+
+[[package]]
+name = "spirv-std-types"
+version = "0.10.0-alpha.1"
+source = "git+https://github.com/rust-gpu/rust-gpu.git?rev=25efe1209e2dfbfc14cedeaff1a7e77c79b58114#25efe1209e2dfbfc14cedeaff1a7e77c79b58114"
 
 [[package]]
 name = "spki"

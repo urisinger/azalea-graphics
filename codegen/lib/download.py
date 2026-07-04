@@ -5,7 +5,7 @@ import json
 import os
 
 PUMPKIN_EXTRACTOR_COMMIT = "d990a7427c0f0bb57e8f266d504405406d063c78"
-BURGER_COMMIT = "2d8fddb95c3e1ae1d8642f546e062e986148bb8d"
+BURGER_COMMIT = "7e051e945e93f21c9d47f292dae3f583b1ba1531"
 
 # make sure the cache directory exists
 print("Making __cache__")

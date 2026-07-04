@@ -13,7 +13,7 @@ pub struct Uniform {
     pub height: i32,
 }
 
-#[spirv(compute(threads(1, 1, 1)))]
+#[spirv(compute(threads(8, 8, 4)))]
 pub fn cull_chunks(
     #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] visible: &mut [f32],
 

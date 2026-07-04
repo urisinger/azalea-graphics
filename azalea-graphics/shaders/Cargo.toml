@@ -7,4 +7,4 @@ edition = "2024"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-spirv-std = { version = "0.10.0-alpha.1" }
+spirv-std = { git = "https://github.com/rust-gpu/rust-gpu.git" , rev = "25efe1209e2dfbfc14cedeaff1a7e77c79b58114"}
