@@ -1,6 +1,9 @@
 use ash::vk;
 
-use crate::renderer::{entity_renderer::types::{EntityPushConstants, EntityVertex}, vulkan::context::VkContext};
+use crate::renderer::{
+    entity_renderer::types::{EntityPushConstants, EntityVertex},
+    vulkan::context::VkContext,
+};
 
 pub fn create_entity_pipeline(
     ctx: &VkContext,
@@ -19,7 +22,7 @@ pub fn create_entity_pipeline(
                     .push_constant_ranges(&[vk::PushConstantRange {
                         stage_flags: vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT,
                         offset: 0,
-                        size: size_of::<EntityPushConstants>() as u32
+                        size: size_of::<EntityPushConstants>() as u32,
                     }]),
                 None,
             )

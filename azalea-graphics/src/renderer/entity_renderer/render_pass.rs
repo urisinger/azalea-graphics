@@ -2,7 +2,10 @@ use ash::vk;
 
 use crate::renderer::{render_targets::RenderTargets, vulkan::context::VkContext};
 
-pub fn create_entity_render_pass(ctx: &VkContext, render_targets: &RenderTargets) -> vk::RenderPass {
+pub fn create_entity_render_pass(
+    ctx: &VkContext,
+    render_targets: &RenderTargets,
+) -> vk::RenderPass {
     let color_attachment = vk::AttachmentDescription::default()
         .format(render_targets.swapchain.format)
         .samples(vk::SampleCountFlags::TYPE_1)

@@ -30,7 +30,6 @@ fn motion_blocking(block_state: BlockState) -> bool {
             .unwrap_or_default()
 }
 
-
 pub fn is_heightmap_opaque(heightmap: HeightmapKind_, block_state: BlockState) -> bool {
     let registry_block = block_state.as_block_kind();
     type K = HeightmapKind_;

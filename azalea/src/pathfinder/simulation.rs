@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use azalea_client::{
-    ClientMovementState, interact::BlockStatePredictionHandler, local_player::LocalGameMode,
+    ClientMovementState, interact::BlockStatePredictionHandler, local_player::PreviousGameMode,
     mining::MineBundle,
 };
 use azalea_core::{
@@ -16,7 +16,7 @@ use azalea_entity::{
 use azalea_registry::builtin::EntityKind;
 use azalea_world::{ChunkStorage, PartialWorld, World, WorldName, Worlds};
 use bevy_app::App;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, schedule::SingleThreadedExecutor};
 use parking_lot::RwLock;
 use uuid::Uuid;
 
@@ -80,7 +80,7 @@ fn create_simulation_world(chunks: ChunkStorage) -> (App, Arc<RwLock<World>>) {
     });
 
     app.edit_schedule(bevy_app::Main, |schedule| {
-        schedule.set_executor_kind(bevy_ecs::schedule::ExecutorKind::SingleThreaded);
+        schedule.set_executor(SingleThreadedExecutor::new());
     });
 
     app.finish();
@@ -110,7 +110,8 @@ fn create_simulation_player_complete_bundle(
             shared: world.clone(),
         },
         Inventory::default(),
-        LocalGameMode::from(GameMode::Survival),
+        GameMode::Survival,
+        PreviousGameMode(None),
         MineBundle::default(),
         BlockStatePredictionHandler::default(),
         azalea_client::local_player::PermissionLevel::default(),

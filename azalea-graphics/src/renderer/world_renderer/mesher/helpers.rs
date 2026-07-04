@@ -1,8 +1,4 @@
-use azalea::{
-    block::BlockState,
-    core::direction::Direction,
-    physics::collision::BlockWithShape,
-};
+use azalea::{block::BlockState, core::direction::Direction, physics::collision::BlockWithShape};
 use azalea_assets::processed::{atlas::PlacedSprite, model::Cube};
 use glam::IVec3;
 

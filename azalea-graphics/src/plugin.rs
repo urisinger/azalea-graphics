@@ -14,12 +14,15 @@ use azalea::{
         world::World,
     },
     entity::EntityKindComponent,
-    local_player::{WorldHolder},
+    local_player::WorldHolder,
     prelude::*,
 };
 use crossbeam::channel::TryRecvError;
 
-use crate::{app::{RendererEvent, RendererHandle}, renderer::RenderState};
+use crate::{
+    app::{RendererEvent, RendererHandle},
+    renderer::RenderState,
+};
 
 #[derive(Resource, Clone)]
 pub struct RendererResource {
@@ -74,10 +77,7 @@ fn forward_chunk_updates(
     }
 }
 
-fn add_world(
-    renderer: Res<RendererResource>,
-    added: Query<&WorldHolder, Changed<WorldHolder>>,
-) {
+fn add_world(renderer: Res<RendererResource>, added: Query<&WorldHolder, Changed<WorldHolder>>) {
     for holder in added {
         println!("added");
         renderer.handle.add_world(holder.shared.clone());

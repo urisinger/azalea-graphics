@@ -1,11 +1,13 @@
 use azalea::{
-    block::{BlockState, properties::WaterLevel}, registry::builtin::BlockKind,
+    block::{BlockState, properties::WaterLevel},
+    registry::builtin::BlockKind,
 };
 use azalea_assets::processed::atlas::PlacedSprite;
 use glam::{IVec3, Vec3};
 
 use crate::renderer::world_renderer::{
-    mesher::{MeshBuilder, helpers::quad_uvs}, types::BlockVertex,
+    mesher::{MeshBuilder, helpers::quad_uvs},
+    types::BlockVertex,
 };
 
 pub fn mesh_water(block: BlockState, local: IVec3, builder: &mut MeshBuilder) {

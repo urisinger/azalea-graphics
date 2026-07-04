@@ -1,9 +1,6 @@
 use std::thread;
 
-use azalea::{
-    ClientInformation,
-    prelude::*,
-};
+use azalea::{ClientInformation, prelude::*};
 use azalea_graphics::{
     app::{App, RendererArgs, RendererHandle},
     plugin::RendererPlugin,
@@ -47,7 +44,6 @@ fn main() {
     });
 
     app.run();
-
 }
 
 #[derive(Component, Default, Clone)]

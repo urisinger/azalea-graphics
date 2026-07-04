@@ -33,21 +33,14 @@ pub struct WorldHolder {
 #[deprecated = "renamed to `WorldHolder`."]
 pub type InstanceHolder = WorldHolder;
 
-/// The gamemode of a local player. For a non-local player, you can look up the
-/// player in the [`TabList`].
+/// A local player's previous game mode.
+///
+/// This component is not present on non-local players. This is `None` if the
+/// server specifically told us that the player has no previous gamemode.
+///
+/// Also see [`GameMode`].
 #[derive(Clone, Component, Copy, Debug)]
-pub struct LocalGameMode {
-    pub current: GameMode,
-    pub previous: Option<GameMode>,
-}
-impl From<GameMode> for LocalGameMode {
-    fn from(current: GameMode) -> Self {
-        LocalGameMode {
-            current,
-            previous: None,
-        }
-    }
-}
+pub struct PreviousGameMode(pub Option<GameMode>);
 
 /// Level must be 0..=4
 #[derive(Clone, Component, Default, Deref, DerefMut)]
@@ -66,13 +59,30 @@ pub struct PermissionLevel(pub u8);
 /// }
 /// ```
 ///
-/// For convenience, `TabList` is also a resource in the ECS.
+/// For convenience, `TabList` is also a resource in the ECS as
+/// [`TabListResource`].
+///
 /// It's set to be the same as the tab list for the last client whose tab list
 /// was updated.
 /// This means you should avoid using `TabList` as a resource unless you know
 /// all of your clients will have the same tab list.
-#[derive(Clone, Component, Debug, Default, Deref, DerefMut, Resource)]
+#[derive(Clone, Debug, Default, Deref, DerefMut, Component)]
 pub struct TabList(HashMap<Uuid, PlayerInfo>);
+
+/// The `Resource` version of [`TabList`] (which is a `Component`).
+#[derive(Clone, Debug, Default, Deref, DerefMut, Resource)]
+pub struct TabListResource(HashMap<Uuid, PlayerInfo>);
+
+impl From<TabList> for TabListResource {
+    fn from(t: TabList) -> Self {
+        TabListResource(t.0)
+    }
+}
+impl From<TabListResource> for TabList {
+    fn from(t: TabListResource) -> Self {
+        TabList(t.0)
+    }
+}
 
 #[derive(Clone, Component, Debug)]
 pub struct Hunger {

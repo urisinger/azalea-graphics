@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use ash::{vk, Device};
+use ash::{Device, vk};
 use azalea_assets::Assets;
 
 use crate::renderer::{
@@ -93,7 +93,6 @@ impl TextureManager {
 
     pub fn get_texture(&mut self, ctx: &mut FrameCtx, id: &str) -> Option<u32> {
         if let Some(&texture_id) = self.name_to_index.get(id) {
-            
             Some(texture_id)
         } else {
             let path = self.assets.get_path(id);
@@ -122,14 +121,14 @@ impl TextureManager {
             //texture.upload_data(ctx, image.as_raw(), width, height);
 
             let texture_id = self.textures.len() as u32;
-            
+
             self.textures.push(texture);
             self.name_to_index.insert(id.to_string(), texture_id);
-            
+
             for dirty in &mut self.dirty_descriptor_sets {
                 *dirty = true;
             }
-            
+
             Some(texture_id)
         }
     }
@@ -165,7 +164,7 @@ impl TextureManager {
         for texture in &mut self.textures {
             texture.destroy(ctx);
         }
-        
+
         // Destroy descriptor resources
         let device = ctx.device();
         unsafe {

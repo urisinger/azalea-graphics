@@ -164,7 +164,6 @@ mod tests {
         let mut buf = Vec::new();
         original_vec.azalea_write(&mut buf).unwrap();
 
-
         let result = Vec::<String>::azalea_read(&mut Cursor::new(&buf)).unwrap();
         assert_eq!(result, original_vec);
     }

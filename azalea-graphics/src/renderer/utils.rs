@@ -26,5 +26,3 @@ pub fn create_framebuffers(
     }
     fbs
 }
-
-

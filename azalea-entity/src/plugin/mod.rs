@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use azalea_block::{BlockState, BlockTrait, fluid_state::FluidKind, properties};
 use azalea_core::{
     entity_id::MinecraftEntityId,
+    game_type::GameMode,
     position::{BlockPos, ChunkPos},
     tick::GameTick,
 };
@@ -127,17 +128,13 @@ pub fn update_fluid_on_eyes(
 }
 
 pub fn update_on_climbable(
-    mut query: Query<(&mut OnClimbable, &Position, &WorldName), With<LocalEntity>>,
+    mut query: Query<(&mut OnClimbable, &Position, &WorldName, &GameMode), With<LocalEntity>>,
     worlds: Res<Worlds>,
 ) {
-    for (mut on_climbable, position, world_name) in query.iter_mut() {
-        // TODO: there's currently no gamemode component that can be accessed from here,
-        // maybe LocalGameMode should be replaced with two components, maybe called
-        // EntityGameMode and PreviousGameMode?
-
-        // if game_mode == GameMode::Spectator {
-        //     continue;
-        // }
+    for (mut on_climbable, position, world_name, &game_mode) in query.iter_mut() {
+        if game_mode == GameMode::Spectator {
+            continue;
+        }
 
         let Some(world) = worlds.get(world_name) else {
             continue;
@@ -169,9 +166,7 @@ fn is_trapdoor_usable_as_ladder(
     }
 
     // block below must be a ladder
-    let block_below = world
-        .get_block_state(block_pos.down(1))
-        .unwrap_or_default();
+    let block_below = world.get_block_state(block_pos.down(1)).unwrap_or_default();
     let registry_block_below = block_below.as_block_kind();
     if registry_block_below != BlockKind::Ladder {
         return false;

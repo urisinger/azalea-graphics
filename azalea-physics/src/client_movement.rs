@@ -91,6 +91,32 @@ impl WalkDirection {
         d.right = value;
         *self = d.into();
     }
+
+    /// Inverts the walk direction.
+    ///
+    /// ```
+    /// # use azalea_physics::client_movement::WalkDirection;
+    ///
+    /// assert_eq!(WalkDirection::Forward.opposite(), WalkDirection::Backward);
+    /// assert_eq!(
+    ///     WalkDirection::BackwardRight.opposite(),
+    ///     WalkDirection::ForwardLeft
+    /// );
+    /// assert_eq!(WalkDirection::None.opposite(), WalkDirection::None);
+    /// ```
+    pub fn opposite(self) -> Self {
+        match self {
+            Self::None => Self::None,
+            Self::Forward => Self::Backward,
+            Self::Backward => Self::Forward,
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+            Self::ForwardRight => Self::BackwardLeft,
+            Self::ForwardLeft => Self::BackwardRight,
+            Self::BackwardRight => Self::ForwardLeft,
+            Self::BackwardLeft => Self::ForwardRight,
+        }
+    }
 }
 /// A struct containing fields for each direction.
 ///
@@ -125,7 +151,7 @@ impl From<WalkDirection> for DirectionStates {
                 s.right = true
             }
             WalkDirection::BackwardLeft => {
-                s.forward = true;
+                s.backward = true;
                 s.left = true
             }
         };
@@ -138,26 +164,29 @@ impl From<DirectionStates> for WalkDirection {
         let right = d.right && !d.left;
 
         if d.forward && !d.backward {
-            if right {
-                return Self::ForwardRight;
+            return if right {
+                Self::ForwardRight
             } else if left {
-                return Self::ForwardLeft;
-            }
-            return Self::Forward;
+                Self::ForwardLeft
+            } else {
+                Self::Forward
+            };
         } else if d.backward && !d.forward {
             if right {
-                return Self::BackwardRight;
+                Self::BackwardRight
             } else if left {
-                return Self::BackwardLeft;
-            }
-            return Self::Backward;
+                Self::BackwardLeft
+            } else {
+                Self::Backward
+            };
         }
         if right {
-            return Self::Right;
+            Self::Right
         } else if left {
-            return Self::Left;
+            Self::Left
+        } else {
+            Self::None
         }
-        Self::None
     }
 }
 

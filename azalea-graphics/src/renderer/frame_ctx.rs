@@ -76,10 +76,7 @@ impl FrameCtx<'_> {
         regions: &[vk::BufferImageCopy],
     ) {
         let size = (std::mem::size_of::<T>() * data.len()) as vk::DeviceSize;
-        let mut staging = Buffer::new_staging(
-            self.ctx,
-            size,
-        );
+        let mut staging = Buffer::new_staging(self.ctx, size);
         staging.upload_data(self.ctx, 0, data);
 
         unsafe {

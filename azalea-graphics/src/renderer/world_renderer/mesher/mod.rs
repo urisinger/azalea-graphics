@@ -11,9 +11,9 @@ use azalea::{
     block::BlockState,
     core::{
         position::{ChunkPos, ChunkSectionPos},
-        registry_holder::{dimension_type::WorldTypeElement},
+        registry_holder::dimension_type::WorldTypeElement,
     },
-    registry::{builtin::BlockKind},
+    registry::builtin::BlockKind,
 };
 use azalea_assets::Assets;
 use crossbeam::channel::{Receiver, Sender, unbounded};
@@ -23,7 +23,9 @@ use parking_lot::{Mutex, RwLock};
 use crate::renderer::{
     chunk::{LocalChunk, LocalSection},
     world_renderer::{
-        mesher::{block::mesh_block, water::mesh_water}, types::BlockVertex, visibility::buffers::VisibilitySnapshot
+        mesher::{block::mesh_block, water::mesh_water},
+        types::BlockVertex,
+        visibility::buffers::VisibilitySnapshot,
     },
 };
 

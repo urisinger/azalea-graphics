@@ -61,7 +61,7 @@ impl BipedRenderState {
 // Deref chains automatically through all ancestors!
 impl Deref for BipedRenderState {
     type Target = ArmedEntityRenderState;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.parent
     }

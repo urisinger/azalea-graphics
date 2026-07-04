@@ -16,7 +16,11 @@ pub mod value;
 
 use std::{collections::HashMap, io::Cursor};
 
-use azalea_registry::{DataRegistry, data::{Biome, DimensionKind, Enchantment}, identifier::Identifier};
+use azalea_registry::{
+    DataRegistry,
+    data::{Biome, DimensionKind, Enchantment},
+    identifier::Identifier,
+};
 use indexmap::IndexMap;
 use simdnbt::{DeserializeError, FromNbtTag, borrow, owned::NbtCompound};
 use thiserror::Error;

@@ -1,8 +1,4 @@
-use azalea::{
-    block::{BlockState},
-    core::direction::Direction,
-    physics::collision::BlockWithShape,
-};
+use azalea::{block::BlockState, core::direction::Direction, physics::collision::BlockWithShape};
 use azalea_assets::processed::{
     VariantDesc,
     model::{self, Cube},
@@ -15,7 +11,8 @@ use crate::renderer::{
         mesher::{
             MeshBuilder,
             helpers::{FACES, compute_ao, generate_uv, offset_to_coord, remap_uv_to_atlas},
-        }, types::BlockVertex,
+        },
+        types::BlockVertex,
     },
 };
 

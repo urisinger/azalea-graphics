@@ -80,7 +80,7 @@ For a lot more details on how to make Azalea faster, see the [Azalea performance
 
 # Documentation
 
-The documentation for the latest Azalea crates.io release is available at [docs.rs/azalea](https://docs.rs/azalea/latest/azalea/) and the docs for the latest bleeding-edge (git) version are at [azalea.matdoes.dev](https://azalea.matdoes.dev/azalea/).
+The documentation for the latest Azalea crates.io release is available at [docs.rs/azalea](https://docs.rs/azalea/latest/azalea/) and the docs for the latest bleeding-edge (git) version are at [azalea.rs](https://azalea.rs/azalea/).
 
 # Swarms
 
@@ -121,6 +121,8 @@ Backtraces are also useful, though they're sometimes hard to read and don't alwa
 ## Using `tokio::task::spawn_local` instead of `tokio::spawn`
 
 If you spawn a task with `tokio::spawn` and move your bot into it, it's possible for Tokio to run the handler function or schedule a Minecraft tick at an unexpected moment. For instance, `bot.ticks_connected() == bot.ticks_connected()` is not guaranteed to be true inside of a `tokio::spawn`. Azalea already mitigates this in the handler function by using a Tokio [LocalSet](https://docs.rs/tokio/latest/tokio/task/struct.LocalSet.html), but that mitigation does not apply if you call `tokio::spawn` yourself. To avoid this, you must call `tokio::task::spawn_local` in place of `tokio::spawn`. Alternatively, you could also mark your main function with `#[tokio::main(flavor = "current_thread")]`.
+
+This won't work if you want to spawn tasks inside of ECS systems. For that, see [`TokioRuntimeHandle`].
 
 ## Disabling log messages
 

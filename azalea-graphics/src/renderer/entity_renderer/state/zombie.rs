@@ -1,6 +1,9 @@
 use std::ops::Deref;
 
-use azalea::{ecs::{entity::Entity, world::World}, entity::metadata::{Aggressive, DrownedConversion}};
+use azalea::{
+    ecs::{entity::Entity, world::World},
+    entity::metadata::{Aggressive, DrownedConversion},
+};
 
 use super::humanoid::BipedRenderState;
 
@@ -23,7 +26,7 @@ impl ZombieRenderState {
 // Deref chains through all ancestors
 impl Deref for ZombieRenderState {
     type Target = BipedRenderState;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.parent
     }

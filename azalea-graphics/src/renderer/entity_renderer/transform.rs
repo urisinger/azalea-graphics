@@ -113,4 +113,3 @@ impl<'a> PartAccessorMut<'a> {
         self.transforms[self.part.id].pivot = origin;
     }
 }
-

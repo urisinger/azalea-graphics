@@ -49,7 +49,6 @@ impl BlockVertex {
     }
 }
 
-
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct VisibilityUniform {

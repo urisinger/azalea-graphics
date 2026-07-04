@@ -1,6 +1,9 @@
 use std::ops::Deref;
 
-use azalea::{core::direction::Direction, ecs::{entity::Entity, world::World}};
+use azalea::{
+    core::direction::Direction,
+    ecs::{entity::Entity, world::World},
+};
 
 use crate::renderer::entity_renderer::{EntityPose, state::entity::EntityRenderState};
 
@@ -59,7 +62,7 @@ impl LivingEntityRenderState {
 // Deref allows accessing parent fields directly
 impl Deref for LivingEntityRenderState {
     type Target = EntityRenderState;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.parent
     }

@@ -10,19 +10,25 @@ use vk_mem::MemoryUsage;
 use crate::{
     app::WorldUpdate,
     renderer::{
-        frame_ctx::FrameCtx, hiz, render_targets::RenderTargets, timings, utils::create_framebuffers, vulkan::{
+        frame_ctx::FrameCtx,
+        hiz,
+        render_targets::RenderTargets,
+        timings,
+        utils::create_framebuffers,
+        vulkan::{
             buffer::Buffer,
             context::VkContext,
             frame_sync::{FrameSync, MAX_FRAMES_IN_FLIGHT},
             texture::Texture,
-        }, world_renderer::{
+        },
+        world_renderer::{
             aabb_renderer::AabbRenderer,
             animation::AnimationManager,
             mesher::Mesher,
             render_pass::create_world_render_pass,
-            types::{VisibilityUniform},
+            types::VisibilityUniform,
             visibility::{buffers::VisibilityBuffers, compute::VisibilityCompute},
-        }
+        },
     },
 };
 
@@ -107,8 +113,6 @@ impl WorldRenderer {
         let atlas_image =
             animation::create_initial_atlas(&assets.block_atlas, &assets.block_textures);
         let blocks_texture = Texture::from_image(ctx, atlas_image);
-
-
 
         let render_pass = create_world_render_pass(ctx, render_targets);
         let framebuffers = create_framebuffers(ctx, render_targets, render_pass);

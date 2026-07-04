@@ -1,5 +1,8 @@
 use spirv_std::{
-    glam::{IVec3, Mat4, UVec2, Vec2, Vec3, Vec4, Vec4Swizzles}, image::{Image, SampledImage}, num_traits::Float, spirv
+    glam::{IVec3, Mat4, UVec2, Vec2, Vec3, Vec4, Vec4Swizzles},
+    image::{Image, SampledImage},
+    num_traits::Float,
+    spirv,
 };
 
 #[repr(C)]
@@ -12,7 +15,6 @@ pub struct Uniform {
 
 #[spirv(compute(threads(1, 1, 1)))]
 pub fn cull_chunks(
-
     #[spirv(descriptor_set = 0, binding = 0, storage_buffer)] visible: &mut [f32],
 
     #[spirv(descriptor_set = 0, binding = 1, uniform)] uniform: &Uniform,
@@ -22,7 +24,13 @@ pub fn cull_chunks(
     const CHUNK_SIZE: f32 = 16.0;
     let side = uniform.radius * 2 + 1;
 
-    if gid.y < 0 || gid.y >= uniform.height || gid.x < 0 || gid.x >= side || gid.z < 0 || gid.z >= side {
+    if gid.y < 0
+        || gid.y >= uniform.height
+        || gid.x < 0
+        || gid.x >= side
+        || gid.z < 0
+        || gid.z >= side
+    {
         return;
     }
 

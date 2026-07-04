@@ -19,7 +19,7 @@ use tokio::{sync::mpsc, task};
 use tracing::{debug, error, warn};
 
 use crate::{
-    BoxHandleFn, HandleFn, JoinOpts, NoState,
+    BoxHandleFn, HandleFn, JoinOpts, NoState, TokioRuntimeHandle,
     auto_reconnect::{AutoReconnectDelay, DEFAULT_RECONNECT_DELAY},
     bot::DefaultBotPlugins,
     swarm::{
@@ -103,12 +103,14 @@ impl SwarmBuilder<NoState, NoSwarmState, (), ()> {
     ///             .disable::<azalea::chat_signing::ChatSigningPlugin>(),
     /// ));
     /// # swarm_builder.set_handler(handle).set_swarm_handler(swarm_handle);
-    /// # #[derive(Clone, Component, Default, Resource)]
+    /// # #[derive(Clone, Component, Default)]
     /// # pub struct State;
+    /// # #[derive(Clone, Resource, Default)]
+    /// # pub struct SwarmState;
     /// # async fn handle(mut bot: Client, event: Event, state: State) -> eyre::Result<()> {
     /// #     Ok(())
     /// # }
-    /// # async fn swarm_handle(swarm: Swarm, event: SwarmEvent, state: State) -> eyre::Result<()> {
+    /// # async fn swarm_handle(swarm: Swarm, event: SwarmEvent, state: SwarmState) -> eyre::Result<()> {
     /// #     Ok(())
     /// # }
     /// ```
@@ -468,6 +470,7 @@ where
             // run the main schedule so the startup systems run
             {
                 let mut ecs = ecs_lock.write();
+                ecs.insert_resource(TokioRuntimeHandle(tokio::runtime::Handle::current()));
                 ecs.insert_resource(swarm.clone());
                 ecs.insert_resource(self.swarm_state.clone());
                 if let Some(reconnect_after) = self.reconnect_after {

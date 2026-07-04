@@ -38,8 +38,8 @@ pub mod identifier {
     #[deprecated(note = "moved to `azalea_registry::identifier::Identifier`.")]
     pub type Identifier = azalea_registry::identifier::Identifier;
 }
+pub mod arm;
 pub mod sound;
 #[cfg(feature = "bevy_ecs")]
 pub mod tick;
 pub mod tier;
-pub mod arm;

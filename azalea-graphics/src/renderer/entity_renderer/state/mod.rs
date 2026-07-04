@@ -9,8 +9,8 @@ use zombie::ZombieRenderState;
 use crate::renderer::entity_renderer::state::entity::EntityRenderState;
 
 pub mod armed_entity;
-pub mod humanoid;
 pub mod entity;
+pub mod humanoid;
 pub mod living_entity;
 pub mod zombie;
 

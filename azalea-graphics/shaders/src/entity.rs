@@ -27,7 +27,9 @@ pub fn vert(
 
     #[spirv(position)] out_pos: &mut Vec4,
 ) {
-    *out_pos = uniform.view_proj * transforms[in_transform_id as usize + pc.transform_offset as usize] * in_pos.extend(1.0);
+    *out_pos = uniform.view_proj
+        * transforms[in_transform_id as usize + pc.transform_offset as usize]
+        * in_pos.extend(1.0);
     *out_uv = in_uv;
     *out_texture = pc.texture;
 }

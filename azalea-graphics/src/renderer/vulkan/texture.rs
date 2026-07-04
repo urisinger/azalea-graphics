@@ -140,7 +140,7 @@ impl Texture {
 
         ctx.end_one_time_commands(cmd);
 
-       staging_buf.destroy(ctx);
+        staging_buf.destroy(ctx);
     }
 
     pub fn upload_data(&mut self, frame: &mut FrameCtx, rgba_data: &[u8], width: u32, height: u32) {

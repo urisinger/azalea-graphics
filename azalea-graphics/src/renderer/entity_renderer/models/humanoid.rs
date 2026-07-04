@@ -1,10 +1,9 @@
-use azalea_assets::processed::entity_model::{Model, ModelPart};
 use std::f32::consts::PI;
 
+use azalea_assets::processed::entity_model::{Model, ModelPart};
+
 use crate::renderer::entity_renderer::{
-    ArmPose,
-    state::humanoid::BipedRenderState,
-    transform::ModelTransforms,
+    ArmPose, state::humanoid::BipedRenderState, transform::ModelTransforms,
 };
 
 pub struct HumanoidModel<'a> {
@@ -20,20 +19,34 @@ pub struct HumanoidModel<'a> {
 impl<'a> HumanoidModel<'a> {
     pub fn new(model: &'a Model) -> Self {
         let root = &model.part;
-        
-        let head = root.children.get("head")
+
+        let head = root
+            .children
+            .get("head")
             .expect("Biped model missing 'head' part");
-        let hat = head.children.get("hat")
+        let hat = head
+            .children
+            .get("hat")
             .expect("Biped model missing 'hat' part");
-        let body = root.children.get("body")
+        let body = root
+            .children
+            .get("body")
             .expect("Biped model missing 'body' part");
-        let right_arm = root.children.get("right_arm")
+        let right_arm = root
+            .children
+            .get("right_arm")
             .expect("Biped model missing 'right_arm' part");
-        let left_arm = root.children.get("left_arm")
+        let left_arm = root
+            .children
+            .get("left_arm")
             .expect("Biped model missing 'left_arm' part");
-        let right_leg = root.children.get("right_leg")
+        let right_leg = root
+            .children
+            .get("right_leg")
             .expect("Biped model missing 'right_leg' part");
-        let left_leg = root.children.get("left_leg")
+        let left_leg = root
+            .children
+            .get("left_leg")
             .expect("Biped model missing 'left_leg' part");
 
         Self {
@@ -57,7 +70,7 @@ impl<'a> HumanoidModel<'a> {
         let head = transforms.get_mut(self.head);
         head.rotation.x = state.pitch * (PI / 180.0);
         head.rotation.y = state.relative_head_yaw * (PI / 180.0);
-        
+
         if is_gliding {
             head.rotation.x = -PI / 4.0;
         } else if leaning_pitch > 0.0 {
@@ -70,18 +83,21 @@ impl<'a> HumanoidModel<'a> {
         let limb_inverse = state.limb_amplitude_inverse;
 
         let right_arm = transforms.get_mut(self.right_arm);
-        right_arm.rotation.x = (limb_swing * 0.6662 + PI).cos() * 2.0 * limb_amplitude * 0.5 / limb_inverse;
-        
+        right_arm.rotation.x =
+            (limb_swing * 0.6662 + PI).cos() * 2.0 * limb_amplitude * 0.5 / limb_inverse;
+
         let left_arm = transforms.get_mut(self.left_arm);
-        left_arm.rotation.x = (limb_swing * 0.6662).cos() * 2.0 * limb_amplitude * 0.5 / limb_inverse;
-        
+        left_arm.rotation.x =
+            (limb_swing * 0.6662).cos() * 2.0 * limb_amplitude * 0.5 / limb_inverse;
+
         let right_leg = transforms.get_mut(self.right_leg);
         right_leg.rotation.x = (limb_swing * 0.6662).cos() * 1.4 * limb_amplitude / limb_inverse;
         right_leg.rotation.y = 0.005;
         right_leg.rotation.z = 0.005;
-        
+
         let left_leg = transforms.get_mut(self.left_leg);
-        left_leg.rotation.x = (limb_swing * 0.6662 + PI).cos() * 1.4 * limb_amplitude / limb_inverse;
+        left_leg.rotation.x =
+            (limb_swing * 0.6662 + PI).cos() * 1.4 * limb_amplitude / limb_inverse;
         left_leg.rotation.y = -0.005;
         left_leg.rotation.z = -0.005;
 
@@ -89,15 +105,15 @@ impl<'a> HumanoidModel<'a> {
         if state.has_vehicle {
             let right_arm = transforms.get_mut(self.right_arm);
             right_arm.rotation.x += -PI / 5.0;
-            
+
             let left_arm = transforms.get_mut(self.left_arm);
             left_arm.rotation.x += -PI / 5.0;
-            
+
             let right_leg = transforms.get_mut(self.right_leg);
             right_leg.rotation.x = -1.4137167;
             right_leg.rotation.y = PI / 10.0;
             right_leg.rotation.z = 0.07853982;
-            
+
             let left_leg = transforms.get_mut(self.left_leg);
             left_leg.rotation.x = -1.4137167;
             left_leg.rotation.y = -PI / 10.0;
@@ -116,7 +132,7 @@ impl<'a> HumanoidModel<'a> {
             } else {
                 right_arm_pose.is_two_handed()
             };
-            
+
             if main_arm_right != two_handed {
                 self.position_left_arm(transforms, state, left_arm_pose);
                 self.position_right_arm(transforms, state, right_arm_pose);
@@ -133,28 +149,28 @@ impl<'a> HumanoidModel<'a> {
         if state.is_in_sneaking_pose {
             let body = transforms.get_mut(self.body);
             body.rotation.x = 0.5;
-            
+
             let right_arm = transforms.get_mut(self.right_arm);
             right_arm.rotation.x += 0.4;
-            
+
             let left_arm = transforms.get_mut(self.left_arm);
             left_arm.rotation.x += 0.4;
-            
+
             let right_leg = transforms.get_mut(self.right_leg);
             right_leg.pivot.z += 4.0;
-            
+
             let left_leg = transforms.get_mut(self.left_leg);
             left_leg.pivot.z += 4.0;
-            
+
             let head = transforms.get_mut(self.head);
             head.pivot.y += 4.2;
-            
+
             let body = transforms.get_mut(self.body);
             body.pivot.y += 3.2;
-            
+
             let left_arm = transforms.get_mut(self.left_arm);
             left_arm.pivot.y += 3.2;
-            
+
             let right_arm = transforms.get_mut(self.right_arm);
             right_arm.pivot.y += 3.2;
         }
@@ -162,34 +178,53 @@ impl<'a> HumanoidModel<'a> {
         // Swimming animation
         if leaning_pitch > 0.0 {
             let limb_pos = limb_swing % 26.0;
-            
+
             if !state.is_using_item {
                 if limb_pos < 14.0 {
                     let curve_value = self.swimming_curve(limb_pos) / self.swimming_curve(14.0);
-                    
+
                     let left_arm = transforms.get_mut(self.left_arm);
                     left_arm.rotation.x = lerp_angle(leaning_pitch, left_arm.rotation.x, 0.0);
                     left_arm.rotation.y = lerp_angle(leaning_pitch, left_arm.rotation.y, PI);
-                    left_arm.rotation.z = lerp_angle(leaning_pitch, left_arm.rotation.z, PI + 1.8707964 * curve_value);
-                    
+                    left_arm.rotation.z = lerp_angle(
+                        leaning_pitch,
+                        left_arm.rotation.z,
+                        PI + 1.8707964 * curve_value,
+                    );
+
                     let right_arm = transforms.get_mut(self.right_arm);
                     right_arm.rotation.x = lerp(leaning_pitch, right_arm.rotation.x, 0.0);
                     right_arm.rotation.y = lerp(leaning_pitch, right_arm.rotation.y, PI);
-                    right_arm.rotation.z = lerp(leaning_pitch, right_arm.rotation.z, PI - 1.8707964 * curve_value);
+                    right_arm.rotation.z = lerp(
+                        leaning_pitch,
+                        right_arm.rotation.z,
+                        PI - 1.8707964 * curve_value,
+                    );
                 }
             }
-            
+
             let left_leg = transforms.get_mut(self.left_leg);
-            left_leg.rotation.x = lerp(leaning_pitch, left_leg.rotation.x, 
-                0.3 * (limb_swing * 0.33333334 + PI).cos());
-            
+            left_leg.rotation.x = lerp(
+                leaning_pitch,
+                left_leg.rotation.x,
+                0.3 * (limb_swing * 0.33333334 + PI).cos(),
+            );
+
             let right_leg = transforms.get_mut(self.right_leg);
-            right_leg.rotation.x = lerp(leaning_pitch, right_leg.rotation.x, 
-                0.3 * (limb_swing * 0.33333334).cos());
+            right_leg.rotation.x = lerp(
+                leaning_pitch,
+                right_leg.rotation.x,
+                0.3 * (limb_swing * 0.33333334).cos(),
+            );
         }
     }
 
-    fn position_right_arm(&self, transforms: &mut ModelTransforms, state: &BipedRenderState, arm_pose: &ArmPose) {
+    fn position_right_arm(
+        &self,
+        transforms: &mut ModelTransforms,
+        state: &BipedRenderState,
+        arm_pose: &ArmPose,
+    ) {
         match arm_pose {
             ArmPose::Empty => {
                 transforms.get_mut(self.right_arm).rotation.y = 0.0;
@@ -215,7 +250,11 @@ impl<'a> HumanoidModel<'a> {
                 right_arm.rotation.y = 0.0;
             }
             ArmPose::Spyglass => {
-                let is_sneaking = if state.is_in_sneaking_pose { 0.2617994 } else { 0.0 };
+                let is_sneaking = if state.is_in_sneaking_pose {
+                    0.2617994
+                } else {
+                    0.0
+                };
                 // Read head values first
                 let head_rot = transforms.get(self.head).rotation;
                 let right_arm = transforms.get_mut(self.right_arm);
@@ -238,7 +277,12 @@ impl<'a> HumanoidModel<'a> {
         }
     }
 
-    fn position_left_arm(&self, transforms: &mut ModelTransforms, state: &BipedRenderState, arm_pose: &ArmPose) {
+    fn position_left_arm(
+        &self,
+        transforms: &mut ModelTransforms,
+        state: &BipedRenderState,
+        arm_pose: &ArmPose,
+    ) {
         match arm_pose {
             ArmPose::Empty => {
                 transforms.get_mut(self.left_arm).rotation.y = 0.0;
@@ -264,7 +308,11 @@ impl<'a> HumanoidModel<'a> {
                 left_arm.rotation.y = 0.0;
             }
             ArmPose::Spyglass => {
-                let is_sneaking = if state.is_in_sneaking_pose { 0.2617994 } else { 0.0 };
+                let is_sneaking = if state.is_in_sneaking_pose {
+                    0.2617994
+                } else {
+                    0.0
+                };
                 // Read head values first
                 let head_rot = transforms.get(self.head).rotation;
                 let left_arm = transforms.get_mut(self.left_arm);
@@ -287,15 +335,21 @@ impl<'a> HumanoidModel<'a> {
         }
     }
 
-    fn position_blocking_arm(&self, transforms: &mut ModelTransforms, arm: &ModelPart, is_right: bool, state: &BipedRenderState) {
+    fn position_blocking_arm(
+        &self,
+        transforms: &mut ModelTransforms,
+        arm: &ModelPart,
+        is_right: bool,
+        state: &BipedRenderState,
+    ) {
         // Read head rotation first
         let head_rot = transforms.get(self.head).rotation;
         let arm_transform = transforms.get_mut(arm);
-        
-        arm_transform.rotation.x = arm_transform.rotation.x * 0.5 - 0.9424779 + 
-            head_rot.x.clamp(-1.3962634, 0.43633232);
-        arm_transform.rotation.y = (if is_right { -30.0 } else { 30.0 }) * (PI / 180.0) + 
-            head_rot.y.clamp(-PI / 6.0, PI / 6.0);
+
+        arm_transform.rotation.x =
+            arm_transform.rotation.x * 0.5 - 0.9424779 + head_rot.x.clamp(-1.3962634, 0.43633232);
+        arm_transform.rotation.y = (if is_right { -30.0 } else { 30.0 }) * (PI / 180.0)
+            + head_rot.y.clamp(-PI / 6.0, PI / 6.0);
     }
 
     fn animate_arms(&self, transforms: &mut ModelTransforms, state: &BipedRenderState) {
@@ -306,19 +360,19 @@ impl<'a> HumanoidModel<'a> {
 
         let body = transforms.get_mut(self.body);
         body.rotation.y = (swing_progress.sqrt() * PI * 2.0).sin() * 0.2;
-        
+
         if state.preferred_arm == azalea::core::arm::Arm::Left {
             body.rotation.y *= -1.0;
         }
 
         let body_yaw = transforms.get(self.body).rotation.y;
         let age_scale = state.age_scale;
-        
+
         let right_arm = transforms.get_mut(self.right_arm);
         right_arm.pivot.z = body_yaw.sin() * 5.0 * age_scale;
         right_arm.pivot.x = -body_yaw.cos() * 5.0 * age_scale;
         right_arm.rotation.y += body_yaw;
-        
+
         let left_arm = transforms.get_mut(self.left_arm);
         left_arm.pivot.z = -body_yaw.sin() * 5.0 * age_scale;
         left_arm.pivot.x = body_yaw.cos() * 5.0 * age_scale;
@@ -335,11 +389,11 @@ impl<'a> HumanoidModel<'a> {
         g *= g;
         g *= g;
         g = 1.0 - g;
-        
+
         let i = (g * PI).sin();
         let head_pitch = transforms.get(self.head).rotation.x;
         let j = (swing_progress * PI).sin() * -(head_pitch - 0.7) * 0.75;
-        
+
         let arm = transforms.get_mut(swinging_arm);
         arm.rotation.x -= i * 1.2 + j;
         arm.rotation.y += body_yaw * 2.0;
@@ -376,4 +430,3 @@ fn wrap_degrees(degrees: f32) -> f32 {
     }
     value
 }
-

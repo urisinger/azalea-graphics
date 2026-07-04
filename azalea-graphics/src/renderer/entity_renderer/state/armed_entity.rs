@@ -1,6 +1,9 @@
 use std::ops::Deref;
 
-use azalea::{core::arm::Arm, ecs::{entity::Entity, world::World}};
+use azalea::{
+    core::arm::Arm,
+    ecs::{entity::Entity, world::World},
+};
 
 use crate::renderer::entity_renderer::{ArmPose, state::living_entity::LivingEntityRenderState};
 
@@ -28,7 +31,7 @@ impl ArmedEntityRenderState {
 // Deref chains automatically through all ancestors
 impl Deref for ArmedEntityRenderState {
     type Target = LivingEntityRenderState;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.parent
     }
