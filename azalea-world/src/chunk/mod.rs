@@ -28,7 +28,7 @@ const SECTION_HEIGHT: u32 = 16;
 /// minimum Y coordinate.
 ///
 /// [`ChunkStorage`]: crate::ChunkStorage
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Chunk {
     pub sections: Box<[Section]>,
     /// Heightmaps are used for identifying the surface blocks in a chunk.
